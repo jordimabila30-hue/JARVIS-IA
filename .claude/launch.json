@@ -1,0 +1,75 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jarvis-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8090",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/web"
+      ],
+      "port": 8090
+    },
+    {
+      "name": "banc-avant",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8091",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/banc_avant"
+      ],
+      "port": 8091
+    },
+    {
+      "name": "banc-apres",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8092",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/banc_apres"
+      ],
+      "port": 8092
+    },
+    {
+      "name": "banc-fond-anime",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8095",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/banc_fond_anime"
+      ],
+      "port": 8095
+    },
+    {
+      "name": "jarvis-profile",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8097",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/web_profile"
+      ],
+      "port": 8097
+    }
+  ]
+}

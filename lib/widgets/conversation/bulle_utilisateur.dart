@@ -1,0 +1,88 @@
+import 'package:flutter/material.dart';
+
+import '../../models/message_conversation.dart';
+import '../../theme/theme_jarvis.dart';
+import 'carte_conversation_externe.dart';
+import 'heure_message.dart';
+
+/// Message de l'utilisateur : bulle pastel lavande-bleu très douce, à
+/// droite, avec l'éventuelle conversation collée intégrée et l'heure en
+/// bas à droite.
+class BulleUtilisateur extends StatelessWidget {
+  const BulleUtilisateur({super.key, required this.message, this.taille = 15});
+
+  final MessageConversation message;
+  final double taille;
+
+  @override
+  Widget build(BuildContext context) {
+    final conversation = message.conversation;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: LayoutBuilder(
+        builder: (context, contraintes) => ConstrainedBox(
+          // Une conversation collée prend plus de place qu'une phrase.
+          constraints: BoxConstraints(
+            maxWidth:
+                contraintes.maxWidth * (conversation == null ? 0.82 : 0.92),
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 14, 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xE8ECE8FB), Color(0xDDE2E7FA)],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(6),
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0D3A3350),
+                  blurRadius: 14,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            // Contenu aligné à gauche ; l'heure, en dessous, à droite.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (conversation != null)
+                      CarteConversationExterne(
+                        conversation: conversation,
+                        taille: taille - 0.5,
+                      ),
+                    if (conversation != null && message.texte.isNotEmpty)
+                      const SizedBox(height: 10),
+                    if (message.texte.isNotEmpty)
+                      Text(
+                        message.texte,
+                        style: TextStyle(
+                          fontSize: taille,
+                          height: 1.5,
+                          color: CouleursJarvis.texte,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                HeureMessage(message.heure),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
