@@ -24,6 +24,7 @@ class AuthentificationPage extends StatefulWidget {
     this.surAccesDeveloppement,
     this.validation = const ValidationAuth(),
     this.ecranInitial = EcranAuth.connexion,
+    this.messageConnexion,
   });
 
   final AuthService service;
@@ -35,6 +36,9 @@ class AuthentificationPage extends StatefulWidget {
   final VoidCallback? surAccesDeveloppement;
   final ValidationAuth validation;
   final EcranAuth ecranInitial;
+
+  /// Message affiché d'emblée sur la connexion (session expirée…).
+  final String? messageConnexion;
 
   @override
   State<AuthentificationPage> createState() => _AuthentificationPageState();
@@ -73,6 +77,7 @@ class _AuthentificationPageState extends State<AuthentificationPage> {
         validation: v,
         surInscription: () => _aller(EcranAuth.inscription),
         surRecuperation: () => _aller(EcranAuth.recuperation),
+        messageInitial: widget.messageConnexion,
         surConnecte: (u) => _quitter(() => widget.surConnecte(u)),
         surAccesDeveloppement: switch (widget.surAccesDeveloppement) {
           final acces? => () => _quitter(acces),

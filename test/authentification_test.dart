@@ -84,8 +84,7 @@ class _Depot implements AuthRepository {
   bool get recuperationEnCours => false;
 
   @override
-  Future<ResultatAuth<ProfilCompte>> lireProfil() =>
-      _nonConfigure.lireProfil();
+  Future<ResultatAuth<ProfilCompte>> lireProfil() => _nonConfigure.lireProfil();
 
   @override
   Future<ResultatAuth<ProfilCompte>> modifierProfil({required String nom}) =>
@@ -93,6 +92,12 @@ class _Depot implements AuthRepository {
 
   @override
   Future<String?> jetonAcces() async => null;
+
+  @override
+  Future<String?> renouvelerJeton() async => null;
+
+  @override
+  Duration? get decalageHorloge => null;
 
   @override
   Stream<UtilisateurAuth?> get changements => const Stream.empty();

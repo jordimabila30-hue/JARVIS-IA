@@ -14,6 +14,7 @@ import 'package:ia_jarvis/services/api_jarvis.dart';
 import 'package:ia_jarvis/services/authentification/auth_repository.dart';
 import 'package:ia_jarvis/services/authentification/auth_repository_supabase.dart';
 import 'package:ia_jarvis/services/authentification/auth_service.dart';
+import 'package:ia_jarvis/services/authentification/horloge_jetons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const _url = 'https://projet-test.supabase.co';
@@ -31,12 +32,14 @@ Map<String, dynamic> _user({String email = 'ada@exemple.com', String? nom}) => {
 
 /// Jeton de la forme d'un JWT Supabase (non signé : seul le serveur
 /// vérifie la signature) ; [etiquette] permet de le reconnaître.
-String _jwt(String etiquette, int expireDans) {
+String _jwt(String etiquette, int expireDans, {int decalageServeur = 0}) {
   String b64(Object o) =>
       base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
-  final exp = DateTime.now().millisecondsSinceEpoch ~/ 1000 + expireDans;
+  // Heure du serveur qui émet le jeton (éventuellement différente de celle
+  // de l'appareil).
+  final iat = DateTime.now().millisecondsSinceEpoch ~/ 1000 + decalageServeur;
   return '${b64({'alg': 'ES256'})}.'
-      '${b64({'sub': _id, 'exp': exp, 'etiquette': etiquette})}.signature';
+      '${b64({'sub': _id, 'iat': iat, 'exp': iat + expireDans, 'etiquette': etiquette})}.signature';
 }
 
 /// Étiquette d'un jeton émis par [_jwt].
@@ -51,8 +54,9 @@ Map<String, dynamic> _session({
   String? nom,
   int expireDans = 3600,
   String etiquette = 'acces',
+  int decalageServeur = 0,
 }) => {
-  'access_token': _jwt(etiquette, expireDans),
+  'access_token': _jwt(etiquette, expireDans, decalageServeur: decalageServeur),
   'token_type': 'bearer',
   'expires_in': expireDans,
   'refresh_token': 'jeton-renouvellement',
@@ -107,7 +111,10 @@ void main() {
   late AuthRepositorySupabase depot;
   var cree = false;
 
-  AuthRepositorySupabase creer(http.Response Function(http.Request) rep) {
+  AuthRepositorySupabase creer(
+    http.Response Function(http.Request) rep, {
+    HorlogeJetons? horloge,
+  }) {
     serveur = _Serveur(rep);
     client = SupabaseClient(
       _url,
@@ -119,7 +126,7 @@ void main() {
       ),
     );
     cree = true;
-    return depot = AuthRepositorySupabase(client);
+    return depot = AuthRepositorySupabase(client, horloge: horloge);
   }
 
   tearDown(() async {
@@ -380,6 +387,91 @@ void main() {
     service.dispose();
   });
 
+  group('horloge de l’appareil fausse (Supabase réel simulé)', () {
+    bool renouvele(_Serveur s) => s.requetes.any(
+      (r) => r.url.queryParameters['grant_type'] == 'refresh_token',
+    );
+
+    for (final (nom, decalage) in const [
+      ('serveur en avance de 2 h sur l’appareil', 7200),
+      ('serveur en retard de 3 h sur l’appareil', -10800),
+    ]) {
+      test('$nom : jeton neuf utilisé tel quel, sans renouvellement', () async {
+        creer((r) => _json(_session(decalageServeur: decalage)));
+        await seConnecter();
+        expect(_etiquette(await depot.jetonAcces()), 'acces');
+        expect(renouvele(serveur), isFalse);
+        expect(depot.decalageHorloge!.inSeconds, closeTo(decalage, 2));
+      });
+    }
+
+    test('fin de vie mesurée au chronomètre : renouvelé', () async {
+      creer(
+        (r) => r.url.queryParameters['grant_type'] == 'refresh_token'
+            ? _json(_session(etiquette: 'neuf'))
+            : _json(_session(expireDans: 50)),
+      );
+      await seConnecter();
+      expect(_etiquette(await depot.jetonAcces()), 'neuf');
+    });
+
+    test('session restaurée, jeton refusé par Supabase : renouvelé, pas '
+        'déconnecté', () async {
+      var refuse = true;
+      creer((r) {
+        if (r.url.path == '/auth/v1/user') {
+          return refuse ? _erreur(403, 'bad_jwt') : _json(_user(nom: 'Ada'));
+        }
+        if (r.url.queryParameters['grant_type'] == 'refresh_token') {
+          refuse = false;
+          return _json(_session(etiquette: 'neuf'));
+        }
+        return _json(_session());
+      });
+      await seConnecter();
+      final r = await depot.restaurerSession();
+      expect((r as SuccesAuth<UtilisateurAuth?>).valeur!.identifiant, _id);
+      expect(renouvele(serveur), isTrue);
+      expect(_etiquette(await depot.jetonAcces()), 'neuf');
+    });
+
+    test(
+      'renouvellement refusé : session effacée, il faut se reconnecter',
+      () async {
+        creer(
+          (r) => r.url.queryParameters['grant_type'] == 'refresh_token'
+              ? _erreur(400, 'refresh_token_not_found')
+              : _json(_session()),
+        );
+        await seConnecter();
+        expect(await depot.renouvelerJeton(), isNull);
+        expect(await depot.jetonAcces(), isNull);
+      },
+    );
+
+    test('AuthService : session perdue distinguée d’une déconnexion '
+        'volontaire', () async {
+      creer(
+        (r) => switch ((r.url.path, r.url.queryParameters['grant_type'])) {
+          (_, 'refresh_token') => _erreur(400, 'refresh_token_not_found'),
+          ('/auth/v1/logout', _) => http.Response('', 204),
+          _ => _json(_session()),
+        },
+      );
+      final service = AuthService(depot);
+      await service.connecter(email: 'ada@exemple.com', motDePasse: 'x');
+      await service.deconnecter();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.sessionPerdue, isFalse);
+      await service.connecter(email: 'ada@exemple.com', motDePasse: 'x');
+      await service.renouvelerJeton();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.connecte, isFalse);
+      expect(service.sessionPerdue, isTrue);
+      service.dispose();
+    });
+  });
+
   group('ApiJarvis (backend FastAPI)', () {
     test('GET /me avec le jeton : compte reconnu', () async {
       final requetes = <http.Request>[];
@@ -418,6 +510,71 @@ void main() {
             .type,
         ErreurApi.injoignable,
       );
+    });
+
+    test(
+      '« Token expiré » : jeton renouvelé, une seule nouvelle tentative',
+      () async {
+        final jetons = <String>[];
+        var renouvellements = 0;
+        final api = ApiJarvis(
+          adresse: Uri.parse('http://localhost:8000'),
+          jeton: () async => 'ancien',
+          renouveler: () async {
+            renouvellements++;
+            return 'neuf';
+          },
+          client: MockClient((r) async {
+            jetons.add(r.headers['Authorization']!.substring(7));
+            return jetons.length == 1
+                ? _json({'detail': 'Token expiré'}, 401)
+                : _json({'id': _id, 'email': 'ada@exemple.com'});
+          }),
+        );
+        final r = await api.moi();
+        expect(r, isA<SuccesApi<CompteServeur>>());
+        expect(jetons, ['ancien', 'neuf']);
+        expect(renouvellements, 1);
+      },
+    );
+
+    test(
+      '« Token expiré » et renouvellement impossible : session expirée',
+      () async {
+        var appels = 0;
+        final api = ApiJarvis(
+          adresse: Uri.parse('http://localhost:8000'),
+          jeton: () async => 'ancien',
+          renouveler: () async => null,
+          client: MockClient((r) async {
+            appels++;
+            return _json({'detail': 'Token expiré'}, 401);
+          }),
+        );
+        expect((await api.moi() as EchecApi).type, ErreurApi.sessionExpiree);
+        expect(appels, 1);
+      },
+    );
+
+    test('« Token invalide » (horloge du serveur fausse) : pas de '
+        'renouvellement inutile, raison affichée', () async {
+      var renouvellements = 0;
+      final api = ApiJarvis(
+        adresse: Uri.parse('http://localhost:8000'),
+        jeton: () async => _jwt('acces', 3600),
+        renouveler: () async {
+          renouvellements++;
+          return 'neuf';
+        },
+        client: MockClient(
+          (r) async => _json({'detail': 'Token invalide'}, 401),
+        ),
+      );
+      final r = await api.moi() as EchecApi;
+      expect(r.type, ErreurApi.jetonRefuse);
+      expect(r.detail, contains('Token invalide'));
+      expect(r.detail, contains('ES256'));
+      expect(renouvellements, 0);
     });
   });
 }

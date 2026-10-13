@@ -237,3 +237,32 @@ async def test_partial_response_estimated_when_no_usage(env):
     assistant_row = env.supa.inserted[1]
     assert assistant_row["tokens_output"] == chat.estimate_tokens("Réponse sans usage")
     assert env.supa.increments[0][1] > 0
+
+
+async def test_insertion_groupee_colonnes_communes():
+    """Message utilisateur sans modèle ni tokens + message assistant :
+    PostgREST reçoit la liste de toutes les colonnes (pas de PGRST102)."""
+    import httpx
+
+    from app.supabase_client import SupabaseAdmin
+
+    requetes = []
+
+    def repondre(request):
+        requetes.append(request)
+        return httpx.Response(201)
+
+    admin = SupabaseAdmin("https://test-project.supabase.co", "sb_secret_test")
+    await admin.aclose()
+    admin._http = httpx.AsyncClient(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(repondre),
+    )
+    await admin.insert_messages([
+        {"id": "1", "role": "user", "content": "Bonjour"},
+        {"id": "2", "role": "assistant", "content": "Salut", "model": "m", "tokens_output": 3},
+    ])
+    r = requetes[0]
+    assert r.url.params["columns"] == "content,id,model,role,tokens_output"
+    assert "missing=default" in r.headers["prefer"]
+    await admin.aclose()

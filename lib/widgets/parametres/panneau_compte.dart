@@ -4,6 +4,7 @@ import '../../models/authentification/profil_compte.dart';
 import '../../models/authentification/resultat_auth.dart';
 import '../../services/api_jarvis.dart';
 import '../../services/authentification/auth_service.dart';
+import '../../services/authentification/horloge_jetons.dart';
 import '../../services/authentification/validation_auth.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../utils/local_date_time.dart';
@@ -30,6 +31,20 @@ class PanneauCompte extends StatefulWidget {
   static const serveurOk = 'Compte reconnu par le serveur JARVIS';
   static const serveurDifferent =
       'Le serveur JARVIS reconnaît un autre compte que celui-ci.';
+
+  /// L'heure de l'appareil est très éloignée de celle du serveur (null :
+  /// écart normal ou inconnu). Le fuseau horaire n'y est pour rien : seul
+  /// un réglage d'heure faux produit cet écart.
+  static String? messageDecalage(Duration? decalage) {
+    if (decalage == null || decalage.abs() <= HorlogeJetons.seuilDecalage) {
+      return null;
+    }
+    final minutes = (decalage.inSeconds.abs() / 60).round();
+    final sens = decalage.isNegative ? 'avance' : 'retarde';
+    return 'L’horloge de cet appareil $sens d’environ $minutes min sur le '
+        'serveur JARVIS. Activez la mise à l’heure automatique : sinon la '
+        'session risque d’expirer plus souvent.';
+  }
 
   /// Longueur maximale du nom (contrainte de `public.users`).
   static const longueurMaxNom = 80;
@@ -145,6 +160,11 @@ class _PanneauCompteState extends State<PanneauCompte> {
             const SizedBox(height: 22),
             if (_erreurProfil case final e?) ...[
               NoteReglage(e),
+              const SizedBox(height: 16),
+            ],
+            if (PanneauCompte.messageDecalage(c.decalageHorloge)
+                case final m?) ...[
+              NoteReglage(m),
               const SizedBox(height: 16),
             ],
             CarteReglages(

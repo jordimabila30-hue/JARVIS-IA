@@ -38,6 +38,17 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl ca-certificates iptables-persistent netfilter-persistent >/dev/null
 
+# --- 1 bis. Heure du serveur -------------------------------------------------------
+# Les jetons Supabase sont refusés si l'horloge dérive de plus de 10 s : la
+# synchronisation de l'hôte (pas des conteneurs) est indispensable.
+info "Synchronisation automatique de l'heure"
+timedatectl set-ntp true >/dev/null 2>&1 || warn "timedatectl indisponible : vérifiez chrony ou systemd-timesyncd."
+for _ in $(seq 1 10); do
+  [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ] && break
+  sleep 3
+done
+[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]   || warn "Horloge pas encore synchronisée : vérifiez 'timedatectl status' (la surveillance /health/clock le signalera)."
+
 # --- 2. Docker ------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   info "Installation de Docker (script officiel get.docker.com)"
@@ -140,6 +151,7 @@ cat <<EOF
   API            : https://$DOMAIN
   Console test   : https://$DOMAIN/console
   État           : https://$DOMAIN/health/ready
+  Horloge        : https://$DOMAIN/health/clock  (503 = heure du serveur à corriger)
 
   Mettre à jour  : sudo bash $APP_DIR/deploy/oracle/update.sh
   Logs           : sudo docker compose -f $APP_DIR/deploy/oracle/docker-compose.yml logs -f api

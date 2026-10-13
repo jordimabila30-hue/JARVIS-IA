@@ -65,6 +65,14 @@ abstract interface class AuthRepository {
   /// bientôt) ; null sans session.
   Future<String?> jetonAcces();
 
+  /// Renouvelle le jeton maintenant (le serveur l'a jugé expiré). Null si
+  /// la session ne peut plus être renouvelée : il faut se reconnecter.
+  Future<String?> renouvelerJeton();
+
+  /// Écart estimé entre l'heure du serveur et celle de l'appareil
+  /// (positif : l'appareil retarde) ; null tant qu'il n'est pas mesuré.
+  Duration? get decalageHorloge;
+
   /// Changements de session venus du serveur ou d'un autre onglet :
   /// déconnexion, session révoquée, utilisateur mis à jour (null : plus de
   /// session).
@@ -124,6 +132,12 @@ class AuthRepositoryNonConfigure implements AuthRepository {
 
   @override
   Future<String?> jetonAcces() async => null;
+
+  @override
+  Future<String?> renouvelerJeton() async => null;
+
+  @override
+  Duration? get decalageHorloge => null;
 
   @override
   Stream<UtilisateurAuth?> get changements => const Stream.empty();

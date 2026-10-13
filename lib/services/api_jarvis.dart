@@ -38,6 +38,9 @@ enum ErreurApi {
   /// Jeton refusé par le serveur (401).
   jetonRefuse('Le serveur JARVIS a refusé la session. Reconnectez-vous.'),
 
+  /// Jeton expiré et renouvellement impossible : nouvelle connexion.
+  sessionExpiree('Votre session a expiré. Reconnectez-vous.'),
+
   /// Serveur injoignable (arrêté, mauvaise adresse, réseau).
   injoignable('Le serveur JARVIS est injoignable.'),
 
@@ -58,12 +61,17 @@ class ApiJarvis {
   ApiJarvis({
     required this.adresse,
     required this.jeton,
+    this.renouveler,
     http.Client? client,
     this.delai = const Duration(seconds: 10),
   }) : _client = client ?? http.Client();
 
   final Uri adresse;
   final Future<String?> Function() jeton;
+
+  /// Renouvelle le jeton quand le serveur le juge expiré (null : la
+  /// session ne peut plus être renouvelée).
+  final Future<String?> Function()? renouveler;
   final Duration delai;
   final http.Client _client;
 
@@ -83,37 +91,61 @@ class ApiJarvis {
   }
 
   /// `GET /me` avec le jeton de la session : le serveur vérifie la
-  /// signature du jeton et renvoie l'utilisateur qu'il y lit.
+  /// signature du jeton et renvoie l'utilisateur qu'il y lit. Seule
+  /// l'horloge du serveur décide si le jeton est expiré ; dans ce cas, le
+  /// jeton est renouvelé (Supabase) et l'appel refait une seule fois.
   Future<ResultatApi<CompteServeur>> moi() async {
     final j = await jeton();
     if (j == null) return const EchecApi(ErreurApi.nonConnecte);
+    var r = await _getMoi(j);
+    final renouveler = this.renouveler;
+    if (r is _Refus && r.detail == 'Token expiré' && renouveler != null) {
+      final neuf = await renouveler();
+      if (neuf == null) return const EchecApi(ErreurApi.sessionExpiree);
+      r = await _getMoi(neuf);
+    }
+    return switch (r) {
+      _Refus(:final detail, :final jeton) => EchecApi(
+        ErreurApi.jetonRefuse,
+        detail: _raison(detail, jeton),
+      ),
+      _Resultat(:final resultat) => resultat,
+    };
+  }
+
+  Future<_Reponse> _getMoi(String j) async {
     final http.Response r;
     try {
       r = await _client
           .get(_route('me'), headers: {'Authorization': 'Bearer $j'})
           .timeout(delai);
     } catch (_) {
-      return const EchecApi(ErreurApi.injoignable);
+      return const _Resultat(EchecApi(ErreurApi.injoignable));
     }
     if (r.statusCode == 401 || r.statusCode == 403) {
-      final raison = [?_detail(r.body), ?_algorithme(j)].join(' · ');
-      return EchecApi(
-        ErreurApi.jetonRefuse,
-        detail: raison.isEmpty ? null : raison,
-      );
+      return _Refus(_detail(r.body), j);
     }
-    if (r.statusCode != 200) return const EchecApi(ErreurApi.serveur);
+    if (r.statusCode != 200) {
+      return const _Resultat(EchecApi(ErreurApi.serveur));
+    }
     try {
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      return SuccesApi(
-        CompteServeur(
-          identifiant: '${json['id']}',
-          email: json['email'] as String?,
+      return _Resultat(
+        SuccesApi(
+          CompteServeur(
+            identifiant: '${json['id']}',
+            email: json['email'] as String?,
+          ),
         ),
       );
     } catch (_) {
-      return const EchecApi(ErreurApi.serveur);
+      return const _Resultat(EchecApi(ErreurApi.serveur));
     }
+  }
+
+  static String? _raison(String? detail, String jeton) {
+    final raison = [?detail, ?_algorithme(jeton)].join(' · ');
+    return raison.isEmpty ? null : raison;
   }
 
   static String? _detail(String corps) {
@@ -144,4 +176,19 @@ class ApiJarvis {
   }
 
   void fermer() => _client.close();
+}
+
+sealed class _Reponse {
+  const _Reponse();
+}
+
+final class _Refus extends _Reponse {
+  const _Refus(this.detail, this.jeton);
+  final String? detail;
+  final String jeton;
+}
+
+final class _Resultat extends _Reponse {
+  const _Resultat(this.resultat);
+  final ResultatApi<CompteServeur> resultat;
 }

@@ -8,6 +8,7 @@ import '../../models/authentification/profil_compte.dart';
 import '../../models/authentification/resultat_auth.dart';
 import '../../models/authentification/utilisateur_auth.dart';
 import 'auth_repository.dart';
+import 'horloge_jetons.dart';
 
 /// Authentification réelle par Supabase Auth (e-mail + mot de passe), et
 /// profil dans la table `public.users` (protégée par la RLS : chacun ne
@@ -18,7 +19,11 @@ import 'auth_repository.dart';
 /// publique du projet. Les erreurs Supabase sont traduites en
 /// [TypeErreurAuth] : les pages n'en connaissent jamais le détail.
 class AuthRepositorySupabase implements AuthRepository {
-  AuthRepositorySupabase(this._client, {this.redirection}) {
+  AuthRepositorySupabase(
+    this._client, {
+    this.redirection,
+    HorlogeJetons? horloge,
+  }) : _horloge = horloge ?? HorlogeJetons() {
     // Les événements déjà émis (session initiale, lien de récupération
     // ouvert au démarrage) sont rejoués à l'abonnement.
     _abonnement = _auth.onAuthStateChange.listen(
@@ -32,6 +37,9 @@ class AuthRepositorySupabase implements AuthRepository {
   /// Adresse où renvoient les liens envoyés par e-mail (récupération) ;
   /// null : l'adresse du site configurée dans Supabase.
   final String? redirection;
+
+  /// Durée de vie des jetons, indépendante de l'heure de l'appareil.
+  final HorlogeJetons _horloge;
 
   late final StreamSubscription<AuthState> _abonnement;
   final _changements = StreamController<UtilisateurAuth?>.broadcast();
@@ -49,12 +57,21 @@ class AuthRepositorySupabase implements AuthRepository {
   static const _margeJeton = Duration(seconds: 60);
 
   void _surEvenement(AuthState etat) {
+    // Seuls les jetons qui viennent d'être délivrés ont une durée de vie
+    // connue (la session restaurée au démarrage n'en a pas).
+    if (etat.event
+        case AuthChangeEvent.signedIn ||
+            AuthChangeEvent.tokenRefreshed ||
+            AuthChangeEvent.passwordRecovery) {
+      if (etat.session?.accessToken case final j?) _horloge.observer(j);
+    }
     switch (etat.event) {
       case AuthChangeEvent.passwordRecovery:
         _recuperation = true;
         _changements.add(_utilisateurDe(etat.session?.user));
       case AuthChangeEvent.signedOut:
         _recuperation = false;
+        _horloge.oublier();
         _changements.add(null);
       case AuthChangeEvent.signedIn ||
           AuthChangeEvent.tokenRefreshed ||
@@ -83,9 +100,11 @@ class AuthRepositorySupabase implements AuthRepository {
       password: motDePasse,
     );
     final u = r.user;
-    if (u == null || r.session == null) {
+    final session = r.session;
+    if (u == null || session == null) {
       return const EchecAuth(ErreurAuth(TypeErreurAuth.inconnue));
     }
+    _horloge.observer(session.accessToken);
     return SuccesAuth(_utilisateurDe(u)!);
   });
 
@@ -100,7 +119,8 @@ class AuthRepositorySupabase implements AuthRepository {
           data: {'display_name': demande.nom},
         );
         final u = r.user;
-        if (r.session != null && u != null) {
+        if (r.session case final s? when u != null) {
+          _horloge.observer(s.accessToken);
           return SuccesAuth(_utilisateurDe(u)!);
         }
         // Confirmation exigée et adresse déjà inscrite : Supabase répond
@@ -151,9 +171,11 @@ class AuthRepositorySupabase implements AuthRepository {
   Future<ResultatAuth<UtilisateurAuth?>> restaurerSession() async {
     final session = _auth.currentSession;
     if (session == null) return const SuccesAuth(null);
+    // Seule la réponse du serveur prouve que la session est valide. On ne
+    // se fie pas à l'heure de l'appareil pour juger le jeton expiré : on
+    // demande au serveur, et s'il refuse le jeton, on tente un
+    // renouvellement avant de conclure.
     try {
-      if (session.isExpired) await _auth.refreshSession();
-      // Seule la réponse du serveur prouve que la session est valide.
       final r = await _auth.getUser();
       return SuccesAuth(_utilisateurDe(r.user));
     } catch (e) {
@@ -163,11 +185,21 @@ class AuthRepositorySupabase implements AuthRepository {
         // renouvelée dès que le serveur répondra.
         return SuccesAuth(_utilisateurDe(session.user));
       }
-      // Session refusée (expirée, révoquée) : effacée de l'appareil.
-      try {
-        await _auth.signOut(scope: SignOutScope.local);
-      } catch (_) {}
-      return EchecAuth(erreur);
+    }
+    // Jeton refusé (souvent simplement expiré) : renouvellement. En cas
+    // d'échec définitif, renouvelerJeton efface la session de l'appareil.
+    if (await renouvelerJeton() == null) {
+      if (_auth.currentSession != null) {
+        // Échec réseau pendant le renouvellement : session gardée.
+        return SuccesAuth(_utilisateurDe(session.user));
+      }
+      return const EchecAuth(ErreurAuth(TypeErreurAuth.sessionExpiree));
+    }
+    try {
+      final r = await _auth.getUser();
+      return SuccesAuth(_utilisateurDe(r.user));
+    } catch (e) {
+      return EchecAuth(erreurDe(e));
     }
   }
 
@@ -206,33 +238,45 @@ class AuthRepositorySupabase implements AuthRepository {
       });
 
   @override
+  Duration? get decalageHorloge => _horloge.decalage;
+
+  /// Jeton valide : renouvelé s'il lui reste moins d'une minute, d'après
+  /// sa durée de vie mesurée depuis sa réception (jamais d'après l'heure
+  /// de l'appareil). Session restaurée au démarrage : durée inconnue, il
+  /// est renouvelé une fois.
+  @override
   Future<String?> jetonAcces() async {
     final session = _auth.currentSession;
     if (session == null) return null;
-    final expire = session.expiresAt;
-    if (expire != null) {
-      final reste = DateTime.fromMillisecondsSinceEpoch(
-        expire * 1000,
-        isUtc: true,
-      ).difference(DateTime.now().toUtc());
-      if (reste < _margeJeton) {
-        // Plusieurs appels simultanés partagent un seul renouvellement.
-        try {
-          return await (_renouvellement ??= _renouveler().whenComplete(
-            () => _renouvellement = null,
-          ));
-        } catch (_) {
-          return null;
-        }
-      }
+    final reste = _horloge.resteValide(session.accessToken);
+    if (reste != null && reste > _margeJeton) return session.accessToken;
+    return renouvelerJeton();
+  }
+
+  @override
+  Future<String?> renouvelerJeton() async {
+    if (_auth.currentSession == null) return null;
+    try {
+      // Plusieurs appels simultanés partagent un seul renouvellement.
+      return await (_renouvellement ??= _renouveler().whenComplete(
+        () => _renouvellement = null,
+      ));
+    } catch (e) {
+      if (erreurDe(e).type == TypeErreurAuth.reseau) return null;
+      // Session refusée (révoquée, jeton de renouvellement expiré) :
+      // effacée ; l'application revient à la connexion.
+      try {
+        await _auth.signOut(scope: SignOutScope.local);
+      } catch (_) {}
+      return null;
     }
-    return session.accessToken;
   }
 
   Future<String> _renouveler() async {
     final r = await _auth.refreshSession();
     final jeton = r.session?.accessToken;
     if (jeton == null) throw const AuthException('Session expirée');
+    _horloge.observer(jeton);
     return jeton;
   }
 

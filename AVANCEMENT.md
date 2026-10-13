@@ -705,3 +705,25 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Enregistrer les conversations sur l'appareil, pour que la suppression soit aussi persistante.
+
+---
+
+## 2026-10-13 — Backend unifié, comptes Supabase, horloge fiable
+
+### Fait
+- **Fusion** : le backend FastAPI (Redis, Supabase, GroqCloud) vit dans `backend/` du projet, avec `supabase/schema.sql`, `deploy/`, la CI `.github/`, les scripts `.bat` et `docs/backend/`. L'ancien dossier `C:\Users\jordi\Jarvis-Backend-Ami` n'est plus exécuté : il reste une sauvegarde.
+- **Docker** : `jarvis-api` et `jarvis-redis` tournent depuis `backend/` du projet unifié (projet Compose `backend`, volume Redis `backend_redis-data` conservé, ports 8000 et 6379).
+- **Comptes (Supabase Auth)** : `AuthRepositorySupabase` ; inscription avec confirmation d'e-mail, connexion, restauration de session, déconnexion, mot de passe oublié et nouveau mot de passe, profil `public.users` (nom modifiable). Paramètres → Compte : profil réel, vérification par le serveur (`GET /me`), déconnexion.
+- **Horloge** :
+  - cause du « Token invalide » : service Windows Time désactivé (`NoSync`), 202 s de retard, hérités par WSL2 et Docker ; corrigé par `scripts/windows/synchroniser_horloge.ps1` (sources NTP, synchro horaire, resynchro au démarrage et au réveil) ; diagnostic en lecture seule : `scripts/windows/verifier_horloge.ps1` ;
+  - backend : `app/horloge.py`, `GET /health/clock`, journaux INFO / WARNING / ERROR, nouvel essai rapide après une mesure ratée ; tolérance JWT inchangée (10 s) ;
+  - appareils des utilisateurs : `HorlogeJetons` (durée de vie `exp - iat`, chronomètre monotone) ; FastAPI « Token expiré » → renouvellement puis une seule nouvelle tentative ; session expirée → retour à la connexion avec un message ; décalage de l'appareil signalé dans Paramètres → Compte.
+- **Correction backend** : l'enregistrement des messages du chat échouait (400 PGRST102, clés différentes entre message utilisateur et assistant) ; insertion avec la liste des colonnes, vérifiée dans Supabase.
+- **Tests** : 476 tests Flutter, 49 tests backend ; réponse IA réelle (GroqCloud `openai/gpt-oss-120b`) par l'API avec un vrai jeton.
+
+### Limites
+- Connecteur Supabase MCP non installé : RLS, fonctions et déclencheurs non relus en direct (structure des tables vérifiée par l'API PostgREST, identique à `schema.sql`).
+- Clés utilisées pendant les tests (service_role, GroqCloud) : à renouveler avant une mise en production.
+
+### Prochaine étape
+- Moteur de conversation hybride (commandes locales + IA du backend), puis MIA universel.

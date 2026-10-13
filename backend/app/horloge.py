@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 # Ne pas l'augmenter pour masquer une horloge déréglée.
 TOLERANCE_JWT_SECONDES = 10
 
+# Après une mesure ratée (réseau pas encore prêt au démarrage, réveil de
+# veille…), nouvel essai sans attendre l'intervalle complet.
+NOUVEL_ESSAI_SECONDES = 60
+
 
 @dataclass(frozen=True)
 class MesureHorloge:
@@ -171,10 +175,17 @@ class SurveillanceHorloge:
             "erreur": self.erreur,
         }
 
+    def delai_suivant(self, mesure: MesureHorloge | None) -> int:
+        """Attente avant la prochaine mesure : l'intervalle normal, ou un
+        nouvel essai rapide si la mesure a échoué."""
+        if mesure is None:
+            return min(NOUVEL_ESSAI_SECONDES, self.intervalle)
+        return self.intervalle
+
     async def _boucle(self) -> None:
         while True:
-            await self.verifier()
-            await asyncio.sleep(self.intervalle)
+            mesure = await self.verifier()
+            await asyncio.sleep(self.delai_suivant(mesure))
 
     def demarrer(self) -> None:
         """Lance les vérifications en arrière-plan (ne retarde pas le

@@ -226,6 +226,19 @@ lib/
 ```
 
 ```text
+backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
+├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), quotas Redis, horloge.py (/health/clock)
+├── tests/                            # pytest (49)
+├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
+└── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
+supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
+deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
+scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
+docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE
+config_locale.json                    # URL + clé PUBLIQUE Supabase pour Flutter (non versionné ; modèle : config_locale.example.json)
+```
+
+```text
 tool/
 ├── banc_perf.dart                    # banc de mesure Web (images, sections du moteur)
 ├── capture_rendu_test.dart           # non-régression visuelle (captures déterministes)
@@ -248,13 +261,20 @@ Performance : mesurer avec `flutter build web -t tool/banc_perf.dart
 
 Règle : la logique vocale reste dans `services/`, jamais dans les pages.
 
-Authentification : aucun backend pour l'instant, et rien n'est simulé
-(aucun compte, aucune session, aucun jeton). Les pages appellent
-`AuthService`, qui appelle `AuthRepository` (seule couche qui parlera au
-serveur ; aujourd'hui `AuthRepositoryNonConfigure`). Point de bascule
-unique : `ConfigAuth.creerRepository()`. Accès de développement « Continuer
-sans compte » : debug / profile seulement (`JARVIS_ACCES_DEV`). Contrat à
-confirmer avec le backend : `docs/integration_backend_auth.md`.
+Authentification : Supabase Auth réel. Les pages appellent `AuthService`,
+qui appelle `AuthRepository` (`AuthRepositorySupabase` ; sans configuration :
+`AuthRepositoryNonConfigure`). Point de bascule unique :
+`ConfigAuth.creerRepository()`. Configuration Flutter (publique seulement) :
+`--dart-define-from-file=config_locale.json` (`SUPABASE_URL`,
+`SUPABASE_PUBLISHABLE_KEY`, `JARVIS_API_URL` facultatif ; émulateur Android :
+10.0.2.2, téléphone USB : `adb reverse tcp:8000 tcp:8000`). Jamais de clé
+serveur dans Flutter. Backend : `ApiJarvis` (`GET /me` avec le JWT ;
+« Token expiré » → renouvellement + une nouvelle tentative). Durée de vie des
+jetons sans l'heure de l'appareil : `HorlogeJetons`. Tolérance JWT du
+backend : 10 s, ne pas l'augmenter ; dérive d'horloge : `docs/backend/HORLOGE.md`.
+Flutter Web : port 3000 (seule origine CORS autorisée). Accès de
+développement « Continuer sans compte » : debug / profile seulement
+(`JARVIS_ACCES_DEV`).
 Les commandes locales (heure, date…) restent prioritaires sur la future IA.
 
 Conversations multicanal (menu latéral) : le panneau ne connaît que

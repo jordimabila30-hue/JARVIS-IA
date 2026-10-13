@@ -140,10 +140,16 @@ class SupabaseAdmin:
         return list(reversed(resp.json()))
 
     async def insert_messages(self, rows: list[dict]) -> None:
+        # Insertion groupée : PostgREST exige les mêmes clés dans chaque
+        # objet (sinon 400 PGRST102), or le message utilisateur n'a ni
+        # modèle ni tokens. `columns` liste toutes les colonnes envoyées ;
+        # une clé absente d'un objet prend la valeur par défaut de la base.
+        columns = sorted({key for row in rows for key in row})
         resp = await self._http.post(
             "/messages",
             json=rows,
-            headers={"Prefer": "return=minimal"},
+            params={"columns": ",".join(columns)},
+            headers={"Prefer": "return=minimal,missing=default"},
         )
         resp.raise_for_status()
 

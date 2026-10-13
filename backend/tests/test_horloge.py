@@ -102,3 +102,15 @@ async def test_tache_de_fond_arretee_proprement():
             await asyncio.sleep(0.01)
         assert s.etat() == "ok"
         await s.arreter()
+
+
+async def test_nouvel_essai_rapide_apres_echec():
+    def echouer(request):
+        raise httpx.ConnectError("DNS pas encore prêt")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(echouer)) as client:
+        s = SurveillanceHorloge(URL, intervalle=900, client=client)
+        assert s.delai_suivant(await s.verifier()) == 60
+    async with client_avec_decalage(0) as client:
+        s = SurveillanceHorloge(URL, intervalle=900, client=client)
+        assert s.delai_suivant(await s.verifier()) == 900

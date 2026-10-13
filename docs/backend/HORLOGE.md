@@ -51,22 +51,57 @@ Constat du 13/10/2026 : service **Windows Time arrêté et désactivé**
 (`Type = NoSync`) → Windows, la VM WSL2 et le conteneur avaient tous environ
 **3 min 20 s de retard**, et FastAPI refusait tous les jetons.
 
-Configuration recommandée (PowerShell **en administrateur**) :
+Correction durable (mécanisme natif de Windows, aucun NTP dans les
+conteneurs) : **`scripts/windows/synchroniser_horloge.ps1`**, à lancer une
+fois dans PowerShell **en administrateur** :
 
 ```powershell
-Set-Service w32time -StartupType Automatic
-Start-Service w32time
-w32tm /config /manualpeerlist:"time.windows.com,0x9 time.cloudflare.com,0x9 pool.ntp.org,0x9" /syncfromflags:manual /update
-# Synchronisation toutes les heures (au lieu de 4 h 30)
-Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\NtpClient' SpecialPollInterval 3600
-Restart-Service w32time
-w32tm /resync /force
-w32tm /query /status
+powershell -ExecutionPolicy Bypass -File scripts\windows\synchroniser_horloge.ps1
 ```
 
-Vérifier ensuite l'écart : `GET http://localhost:8000/health/clock` (après
-redémarrage de l'API), ou les journaux `docker logs jarvis-api`. La VM WSL2
-suit Windows ; si elle restait décalée, redémarrer Docker Desktop.
+Il met Windows Time en démarrage automatique, configure trois sources
+(`time.windows.com`, `time.cloudflare.com`, `pool.ntp.org`), synchronise
+toutes les heures et ajoute la tâche planifiée « JARVIS - Resynchroniser
+l'horloge » (au démarrage et au réveil de veille, cause fréquente de
+dérive). Relançable sans risque.
+
+Diagnostic (lecture seule, sans droits administrateur) :
+**`scripts/windows/verifier_horloge.ps1`** : état du service, écart de
+Windows, de la VM WSL2 et du conteneur avec l'heure réelle, et
+`/health/clock`. La VM WSL2 suit Windows ; si elle restait décalée,
+redémarrer Docker Desktop.
+
+## Horloge des appareils des utilisateurs (Flutter)
+
+FastAPI ne lit jamais l'heure de l'appareil : il vérifie signature et
+dates du jeton avec **sa propre horloge**. Le fuseau horaire n'a aucun
+effet (tout est en temps universel).
+
+Côté application, `supabase_flutter` décide de renouveler le jeton en
+comparant son expiration à l'heure de l'appareil : une horloge fausse
+(avancée ou retardée de plus d'une heure) peut donc envoyer des jetons
+expirés ou renouveler sans cesse. JARVIS s'en protège sans toucher aux
+contrôles de sécurité :
+
+- `HorlogeJetons` (`lib/services/authentification/horloge_jetons.dart`) :
+  durée de vie = `exp - iat` (deux dates du serveur), temps écoulé mesuré
+  par un chronomètre monotone ; `jetonAcces()` renouvelle à moins d'une
+  minute de la fin, sans consulter l'heure de l'appareil ;
+- session restaurée au démarrage : on demande au serveur (`getUser`) ; si
+  le jeton est refusé, renouvellement avant de conclure (pas de
+  déconnexion inutile) ;
+- `ApiJarvis` : si FastAPI répond « Token expiré », un renouvellement puis
+  une seule nouvelle tentative ; renouvellement impossible → « Votre
+  session a expiré. Reconnectez-vous. » et retour à la connexion ;
+- écart serveur/appareil estimé (`iat` comparé à l'heure locale) :
+  au-delà de 2 min, Paramètres → Compte le signale.
+
+Limite assumée : avec une horloge extrêmement fausse, les connexions HTTPS
+elles-mêmes peuvent échouer (certificats jugés « pas encore » ou « plus »
+valides) ; JARVIS ne contourne jamais ces contrôles. Sur Android, le
+chronomètre monotone peut ne pas compter la veille profonde : le serveur
+répond alors « Token expiré » et le renouvellement automatique prend le
+relais.
 
 ## Serveur de production (Linux)
 
@@ -76,4 +111,7 @@ Synchroniser l'hôte, jamais le conteneur :
 - service : `systemd-timesyncd` (par défaut sur Ubuntu/Debian) ou `chrony`
   (recommandé sur les serveurs, par ex. Oracle Cloud) ;
 - surveiller `GET /health/clock` (503 = jetons refusés) avec l'outil de
-  supervision, et les `ERROR app.horloge` dans les journaux.
+  supervision, et les `ERROR app.horloge` dans les journaux ;
+- garder la tolérance JWT à 10 s et `CLOCK_CHECK_INTERVAL` actif ;
+- `CLOCK_REFERENCE_URL` peut viser un autre serveur de référence si
+  Supabase n'est pas joignable depuis l'hébergeur.

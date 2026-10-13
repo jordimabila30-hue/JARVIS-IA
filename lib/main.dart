@@ -44,7 +44,11 @@ class _JarvisAppState extends State<JarvisApp> {
   late final _auth = widget.auth ?? AuthService(_config.creerRepository());
   late final _api =
       widget.api ??
-      ApiJarvis(adresse: _config.adresseApi, jeton: _auth.jetonAcces);
+      ApiJarvis(
+        adresse: _config.adresseApi,
+        jeton: _auth.jetonAcces,
+        renouveler: _auth.renouvelerJeton,
+      );
   final _navigateur = GlobalKey<NavigatorState>();
 
   // Lancée pendant l'animation de démarrage.
@@ -114,6 +118,10 @@ class _JarvisAppState extends State<JarvisApp> {
     key: ValueKey(ecran),
     service: _auth,
     ecranInitial: ecran,
+    // Session expirée ou révoquée (pas une déconnexion volontaire).
+    messageConnexion: _auth.sessionPerdue
+        ? 'Votre session a expiré. Reconnectez-vous.'
+        : null,
     surConnecte: (_) => _aller(_Destination.accueilConnecte),
     surAccesDeveloppement: _config.accesDeveloppement
         ? () => _aller(_Destination.accueilSansCompte)

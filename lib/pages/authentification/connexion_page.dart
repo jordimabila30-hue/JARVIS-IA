@@ -24,6 +24,7 @@ class ConnexionPage extends StatefulWidget {
     required this.surConnecte,
     this.surAccesDeveloppement,
     this.validation = const ValidationAuth(),
+    this.messageInitial,
   });
 
   final AuthService service;
@@ -36,6 +37,9 @@ class ConnexionPage extends StatefulWidget {
   final VoidCallback? surAccesDeveloppement;
   final ValidationAuth validation;
 
+  /// Message affiché à l'ouverture (session expirée…).
+  final String? messageInitial;
+
   static const nonDisponible =
       'La connexion sera disponible après l’intégration du serveur JARVIS. '
       'Aucune session n’a été ouverte.';
@@ -47,7 +51,10 @@ class ConnexionPage extends StatefulWidget {
 class _ConnexionPageState extends State<ConnexionPage> {
   final _formulaire = GlobalKey<FormState>();
   final _focusMotDePasse = FocusNode();
-  BandeauAuth? _bandeau;
+  late BandeauAuth? _bandeau = switch (widget.messageInitial) {
+    final m? => BandeauAuth(message: m),
+    null => null,
+  };
   bool _soumis = false;
 
   @override

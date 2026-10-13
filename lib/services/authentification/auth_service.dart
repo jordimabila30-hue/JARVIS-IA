@@ -42,6 +42,16 @@ class AuthService extends ChangeNotifier {
   /// choisir un nouveau mot de passe.
   bool get recuperationEnCours => _depot.recuperationEnCours;
 
+  /// La session a été perdue sans déconnexion volontaire (expirée,
+  /// révoquée, renouvellement refusé) : la connexion l'explique.
+  bool get sessionPerdue => _sessionPerdue;
+  bool _sessionPerdue = false;
+  bool _deconnexionVolontaire = false;
+
+  /// Écart estimé entre l'heure du serveur et celle de l'appareil
+  /// (positif : l'appareil retarde) ; null tant qu'il n'est pas mesuré.
+  Duration? get decalageHorloge => _depot.decalageHorloge;
+
   /// Session perdue ou changée ailleurs (déconnexion depuis un autre
   /// onglet, session révoquée, profil mis à jour).
   void _surChangement(UtilisateurAuth? u) {
@@ -49,7 +59,12 @@ class AuthService extends ChangeNotifier {
         u?.nom == _utilisateur?.nom) {
       return;
     }
-    if (u == null) _profil = null;
+    if (u == null) {
+      _profil = null;
+      if (_utilisateur != null && !_deconnexionVolontaire) {
+        _sessionPerdue = true;
+      }
+    }
     _utilisateur = u;
     notifyListeners();
   }
@@ -90,11 +105,16 @@ class AuthService extends ChangeNotifier {
       _executer(() => _depot.changerMotDePasse(motDePasse));
 
   Future<ResultatAuth<void>> deconnecter() => _executer(() async {
-    final r = await _depot.deconnecter();
-    // Quoi que réponde le serveur, l'appareil n'est plus connecté.
-    _utilisateur = null;
-    _profil = null;
-    return r;
+    _deconnexionVolontaire = true;
+    try {
+      final r = await _depot.deconnecter();
+      // Quoi que réponde le serveur, l'appareil n'est plus connecté.
+      _utilisateur = null;
+      _profil = null;
+      return r;
+    } finally {
+      _deconnexionVolontaire = false;
+    }
   });
 
   /// Au lancement : restaure la session gardée sur l'appareil, si le
@@ -134,9 +154,14 @@ class AuthService extends ChangeNotifier {
   /// Jeton d'accès valide pour le backend JARVIS (null sans session).
   Future<String?> jetonAcces() => _depot.jetonAcces();
 
+  /// Renouvelle le jeton (le serveur l'a jugé expiré) ; null : il faut se
+  /// reconnecter.
+  Future<String?> renouvelerJeton() => _depot.renouvelerJeton();
+
   void _definir(UtilisateurAuth u) {
     if (u.identifiant != _utilisateur?.identifiant) _profil = null;
     _utilisateur = u;
+    _sessionPerdue = false;
   }
 
   Future<ResultatAuth<T>> _executer<T>(
