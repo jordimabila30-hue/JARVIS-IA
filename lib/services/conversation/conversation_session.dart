@@ -3,10 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../models/message_conversation.dart';
+import '../conversations/correspondance_conversations.dart';
+import '../conversations/depot_conversations.dart';
+import '../conversations/synchro_echanges_locaux.dart';
 import '../voice_command_service.dart';
 import 'detecteur_conversation.dart';
 import 'detecteur_intention.dart';
 import 'moteur_conversation.dart';
+import 'moteur_conversation_ia.dart';
 
 /// Conversation écrite avec JARVIS : une seule discussion, dans laquelle
 /// l'utilisateur peut parler normalement, coller une conversation externe,
@@ -24,10 +28,33 @@ class ConversationSession extends ChangeNotifier {
     MoteurConversation? moteur,
     this.delaiReflexion = const Duration(milliseconds: 450),
     DateTime Function()? horloge,
+    this.depot,
+    CorrespondanceConversations? correspondance,
   }) : moteur = moteur ?? MoteurConversationLocal(),
-       _horloge = horloge ?? DateTime.now;
+       _horloge = horloge ?? DateTime.now,
+       correspondance = correspondance ?? CorrespondanceConversations();
 
   final MoteurConversation moteur;
+
+  /// Conversations enregistrées sur le serveur (null : aucun compte, tout
+  /// reste en mémoire).
+  final DepotConversations? depot;
+
+  /// Conversation du fil <-> conversation serveur (partagée avec le moteur
+  /// IA, qui l'établit à la première réponse).
+  final CorrespondanceConversations correspondance;
+
+  /// La conversation serveur [idServeur] n'existe plus (supprimée depuis
+  /// un autre appareil).
+  void Function(String idServeur)? surConversationIntrouvable;
+
+  /// Un échange avec l'IA vient d'être enregistré par le serveur.
+  VoidCallback? surEchangeEnregistre;
+
+  /// Échange ordinaire traité sur l'appareil (heure, calcul…), à
+  /// enregistrer dans la conversation du compte. Jamais appelé pour une
+  /// conversation collée ou importée, ni pour un message d'erreur.
+  void Function(EchangeLocal echange)? surEchangeLocal;
 
   /// Courte « réflexion » visible avant la réponse.
   final Duration delaiReflexion;
@@ -45,7 +72,24 @@ class ConversationSession extends ChangeNotifier {
   bool get enReflexion => _enCours > 0;
   int _enCours = 0;
 
-  bool get vide => messages.isEmpty;
+  /// Vrai tant qu'aucun message n'est affiché (une conversation en cours
+  /// de chargement n'est pas vide).
+  bool get vide => messages.isEmpty && !chargement;
+
+  /// Vrai pendant le chargement de la conversation affichée depuis le
+  /// serveur.
+  bool get chargement => _chargementDe != null && _chargementDe == _idCourant;
+  String? _chargementDe;
+
+  /// Le serveur garde des messages plus anciens que ceux affichés.
+  bool get plusAnciens => _plusAnciens;
+  bool _plusAnciens = false;
+
+  /// UUID serveur de la conversation affichée, s'il existe.
+  String? get idServeurCourant {
+    final id = _idCourant;
+    return id == null ? null : correspondance.serveur(id);
+  }
 
   /// Dernière conversation externe de la discussion : les questions
   /// suivantes s'y rapportent (« et là, je dis quoi ? »).
@@ -182,6 +226,7 @@ class ConversationSession extends ChangeNotifier {
     }
     _enCours--;
     if (_ferme) return null;
+    final idServeur = reponse.idServeur;
     final message = MessageConversation(
       id: _id++,
       auteur: AuteurMessage.jarvis,
@@ -192,29 +237,99 @@ class ConversationSession extends ChangeNotifier {
       actions: reponse.actions,
       choixTon: reponse.choixTon,
       vocal: vocal,
+      idServeur: idServeur,
+      enregistre: idServeur != null,
     );
+    if (idServeur != null) surEchangeEnregistre?.call();
     if (generation != _generation) {
       // Le fil a changé pendant la réponse (IA : plusieurs secondes). Elle
       // ne va jamais dans le fil affiché, mais rejoint sa propre
       // conversation, mise de côté ou rouverte, comme sur le serveur ;
       // conversation supprimée : perdue. Rien à dire en vocal.
-      _rangerReponseTardive(demande.idConversation, message);
+      _rangerReponseTardive(demande, message);
       notifyListeners();
       return null;
     }
+    if (idServeur != null) _marquerEnregistree(messages, demande.texte);
     messages.add(message);
+    _confierEchangeLocal(demande, reponse);
     notifyListeners();
     return reponse;
   }
 
-  void _rangerReponseTardive(String? id, MessageConversation message) {
+  /// Réponse locale ordinaire : les deux messages reçoivent l'identifiant
+  /// de leur future ligne serveur (une actualisation les reconnaîtra), et
+  /// l'échange part dans la file d'enregistrement. L'affichage n'attend
+  /// rien.
+  void _confierEchangeLocal(DemandeJarvis demande, ReponseJarvis reponse) {
+    final confier = surEchangeLocal;
+    final idLocal = demande.idConversation;
+    if (confier == null ||
+        idLocal == null ||
+        reponse.idServeur != null ||
+        reponse.erreur ||
+        demande.conversation != null ||
+        reponse.texte.trim().isEmpty ||
+        messages.length < 2) {
+      return;
+    }
+    final r = messages.length - 1;
+    var q = -1;
+    for (var i = r - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (!m.deJarvis && m.idServeur == null && m.texte == demande.texte) {
+        q = i;
+        break;
+      }
+    }
+    if (q < 0 || demande.texte.trim().isEmpty) return;
+    final echange = EchangeLocal(
+      idQuestion: EchangeLocal.nouvelId(),
+      idReponse: EchangeLocal.nouvelId(),
+      idLocal: idLocal,
+      question: messages[q].texte,
+      reponse: messages[r].texte,
+      questionA: messages[q].heure,
+      reponseA: messages[r].heure,
+    );
+    messages[q] = messages[q].avecIdPrevu(echange.idQuestion);
+    messages[r] = messages[r].avecIdPrevu(echange.idReponse);
+    confier(echange);
+  }
+
+  void _rangerReponseTardive(
+    DemandeJarvis demande,
+    MessageConversation message,
+  ) {
+    final id = demande.idConversation;
     if (id == null) return;
+    final enregistre = message.enregistre;
     if (id == _idCourant) {
+      if (enregistre) _marquerEnregistree(messages, demande.texte);
       messages.add(message);
       return;
     }
     final i = _archives.indexWhere((a) => a.id == id);
-    if (i >= 0) _archives[i] = _archives[i]._avec(message);
+    if (i < 0) return;
+    final liste = [..._archives[i].messages];
+    if (enregistre) _marquerEnregistree(liste, demande.texte);
+    _archives[i] = _archives[i]._avec(liste..add(message));
+  }
+
+  /// La question de l'utilisateur a été enregistrée avec la réponse de
+  /// l'IA : sa ligne serveur sera reconnue (et jamais affichée en double)
+  /// à la prochaine actualisation.
+  static void _marquerEnregistree(
+    List<MessageConversation> liste,
+    String texte,
+  ) {
+    for (var i = liste.length - 1; i >= 0; i--) {
+      final m = liste[i];
+      if (m.deJarvis || m.enregistre) continue;
+      if (m.texte.trim() != texte.trim()) continue;
+      liste[i] = m.enregistreSurServeur();
+      return;
+    }
   }
 
   /// Ton choisi pour la proposition du message [id] : la réponse proposée
@@ -314,6 +429,7 @@ class ConversationSession extends ChangeNotifier {
         derniere: _derniere,
         questionAttendue: _questionAttendue,
         contexte: moteur.capturerContexte(),
+        plusAnciens: _plusAnciens,
       ),
     );
   }
@@ -329,6 +445,7 @@ class ConversationSession extends ChangeNotifier {
     _idCourant = null;
     _derniere = null;
     _questionAttendue = false;
+    _plusAnciens = false;
     notifyListeners();
   }
 
@@ -349,9 +466,174 @@ class ConversationSession extends ChangeNotifier {
     _idCourant = cible.id;
     _derniere = cible.derniere;
     _questionAttendue = cible.questionAttendue;
+    _plusAnciens = cible.plusAnciens;
     moteur.restaurerContexte(cible.contexte);
     notifyListeners();
+    // Enregistrée sur le serveur : un autre appareil l'a peut-être
+    // poursuivie entre-temps.
+    if (idServeurCourant != null) unawaited(rafraichir());
     return true;
+  }
+
+  // --- Conversations enregistrées sur le serveur ---------------------------
+  //
+  // Les messages viennent du serveur (lecture seule : seul le backend les
+  // enregistre). Une conversation ouverte depuis le serveur garde son UUID
+  // comme identifiant local. Les réponses locales (heure, calcul...) et les
+  // conversations collées restent sur l'appareil.
+
+  /// Ouvre la conversation serveur [idServeur] : la conversation actuelle
+  /// est mise de côté, les derniers messages sont chargés, et la suite de
+  /// la discussion reprend le contexte du serveur.
+  Future<bool> ouvrirServeur(String idServeur) async {
+    if (depot == null) return false;
+    final local = correspondance.local(idServeur);
+    if (local != null &&
+        (local == _idCourant || _archives.any((a) => a.id == local))) {
+      return ouvrir(local);
+    }
+    _generation++;
+    _archiverCourante();
+    moteur.reinitialiser();
+    messages.clear();
+    _idCourant = idServeur;
+    _derniere = null;
+    _questionAttendue = false;
+    _plusAnciens = false;
+    correspondance.associer(idServeur, idServeur);
+    await _charger(idServeur);
+    return true;
+  }
+
+  /// Messages plus anciens de la conversation affichée (pagination).
+  Future<void> chargerPlusAnciens() async {
+    final serveur = idServeurCourant;
+    final depot = this.depot;
+    if (depot == null || serveur == null || !_plusAnciens || chargement) {
+      return;
+    }
+    DateTime? avant;
+    for (final m in messages) {
+      if (m.idServeur != null) {
+        avant = m.heure;
+        break;
+      }
+    }
+    if (avant == null) return;
+    final id = _idCourant!;
+    final generation = _generation;
+    _chargementDe = id;
+    notifyListeners();
+    try {
+      final page = await depot.messages(serveur, avant: avant);
+      if (_ferme || generation != _generation || id != _idCourant) return;
+      final connus = {for (final m in messages) ?m.idServeur};
+      messages.insertAll(0, [
+        for (final r in page.messages)
+          if (r.role != 'system' && !connus.contains(r.id)) _depuisServeur(r),
+      ]);
+      _plusAnciens = page.plusAnciens;
+    } on EchecSynchro catch (e) {
+      debugPrint('[JARVIS synchro] messages anciens non chargés : $e');
+    } finally {
+      if (_chargementDe == id) _chargementDe = null;
+      if (!_ferme) notifyListeners();
+    }
+  }
+
+  /// Relit les derniers messages de la conversation affichée (retour au
+  /// premier plan, autre appareil) et ajoute ceux qui manquent, sans
+  /// jamais en dupliquer. Rien pendant une réponse ou un chargement.
+  Future<void> rafraichir() async {
+    final serveur = idServeurCourant;
+    if (depot == null || serveur == null || chargement || _enCours > 0) {
+      return;
+    }
+    await _charger(serveur);
+  }
+
+  Future<void> _charger(String serveur) async {
+    final id = _idCourant!;
+    final generation = _generation;
+    _chargementDe = id;
+    notifyListeners();
+    try {
+      final page = await depot!.messages(serveur);
+      if (_ferme || generation != _generation || id != _idCourant) return;
+      messages.removeWhere((m) => m.provisoire);
+      final premierChargement = messages.isEmpty;
+      _fusionner(page.messages);
+      if (premierChargement) _plusAnciens = page.plusAnciens;
+    } on EchecSynchro catch (e) {
+      if (_ferme || generation != _generation || id != _idCourant) return;
+      debugPrint('[JARVIS synchro] conversation non chargée : $e');
+      if (e.type == ErreurSynchro.introuvable) {
+        correspondance.oublier(id);
+        surConversationIntrouvable?.call(serveur);
+      }
+      // Déjà affichée : elle reste telle quelle (hors connexion).
+      if (messages.any((m) => !m.provisoire)) return;
+      messages
+        ..clear()
+        ..add(
+          MessageConversation(
+            id: _id++,
+            auteur: AuteurMessage.jarvis,
+            heure: _horloge(),
+            provisoire: true,
+            texte: switch (e.type) {
+              ErreurSynchro.introuvable =>
+                'Cette conversation n’existe plus : elle a peut-être été '
+                    'supprimée depuis un autre appareil.',
+              ErreurSynchro.sessionExpiree => e.type.message,
+              _ =>
+                'Impossible de charger cette conversation pour le moment. '
+                    '${e.type.message} Elle sera rechargée dès que possible.',
+            },
+          ),
+        );
+    } finally {
+      if (_chargementDe == id) _chargementDe = null;
+      if (!_ferme) notifyListeners();
+    }
+  }
+
+  /// Ajoute les lignes serveur absentes du fil. Une ligne déjà affichée
+  /// est reconnue par son UUID, ou (pour une question envoyée depuis cet
+  /// appareil, dont le serveur ne renvoie pas l'UUID) par son texte.
+  void _fusionner(List<MessageServeur> lignes) {
+    final nouveaux = <MessageConversation>[];
+    for (final r in lignes) {
+      if (r.role == 'system') continue;
+      if (messages.any((m) => m.idServeur == r.id)) continue;
+      if (r.role == 'user') {
+        final i = messages.indexWhere(
+          (m) =>
+              !m.deJarvis &&
+              m.enregistre &&
+              m.idServeur == null &&
+              m.texte.trim() == r.contenu.trim(),
+        );
+        if (i >= 0) {
+          messages[i] = messages[i].avecIdServeur(r.id);
+          continue;
+        }
+      }
+      nouveaux.add(_depuisServeur(r));
+    }
+    messages.addAll(nouveaux);
+  }
+
+  MessageConversation _depuisServeur(MessageServeur r) {
+    final jarvis = r.role != 'user';
+    return MessageConversation(
+      id: _id++,
+      auteur: jarvis ? AuteurMessage.jarvis : AuteurMessage.utilisateur,
+      heure: r.date,
+      texte: jarvis ? MoteurConversationIA.texteSimple(r.contenu) : r.contenu,
+      idServeur: r.id,
+      enregistre: true,
+    );
   }
 
   /// Supprime une conversation (mise de côté ou affichée) : ses messages
@@ -366,6 +648,7 @@ class ConversationSession extends ChangeNotifier {
       _idCourant = null;
       _derniere = null;
       _questionAttendue = false;
+      _plusAnciens = false;
       notifyListeners();
       return true;
     }
@@ -392,6 +675,7 @@ class ConversationArchivee {
     required this.derniere,
     required this.questionAttendue,
     required this.contexte,
+    this.plusAnciens = false,
   });
 
   final String id;
@@ -402,12 +686,16 @@ class ConversationArchivee {
   /// Contexte du moteur (prénom, sujet…), opaque.
   final Object? contexte;
 
-  ConversationArchivee _avec(MessageConversation message) =>
+  /// Le serveur garde des messages plus anciens que ceux chargés.
+  final bool plusAnciens;
+
+  ConversationArchivee _avec(List<MessageConversation> liste) =>
       ConversationArchivee._(
         id: id,
-        messages: List.unmodifiable([...messages, message]),
+        messages: List.unmodifiable(liste),
         derniere: derniere,
         questionAttendue: questionAttendue,
         contexte: contexte,
+        plusAnciens: plusAnciens,
       );
 }

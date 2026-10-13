@@ -49,6 +49,10 @@ class _JarvisAppState extends State<JarvisApp> {
         jeton: _auth.jetonAcces,
         renouveler: _auth.renouvelerJeton,
       );
+  late final _depotConversations = _config.creerDepotConversations(
+    jeton: _auth.jetonAcces,
+    renouveler: _auth.renouvelerJeton,
+  );
   final _navigateur = GlobalKey<NavigatorState>();
 
   // Lancée pendant l'animation de démarrage.
@@ -104,6 +108,10 @@ class _JarvisAppState extends State<JarvisApp> {
         auth: _auth,
         api: _api,
         surConnexion: () => _aller(_Destination.connexion),
+        // Sans compte : aucune conversation enregistrée.
+        depotConversations: d == _Destination.accueilConnecte
+            ? _depotConversations
+            : null,
       ),
       _Destination.connexion => _authentification(EcranAuth.connexion),
       _Destination.nouveauMotDePasse => _authentification(

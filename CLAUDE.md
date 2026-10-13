@@ -202,7 +202,7 @@ lib/
 │   ├── api_jarvis.dart               # client FastAPI : /me, chat SSE (discuter) ; flux_sse.dart : décodage SSE
 │   ├── authentification/            # AuthService, contrat AuthRepository (non configuré), validations, session, ConfigAuth
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
-│   ├── conversations/                # multicanal : fournisseurs par messagerie (JARVIS réel, autres non intégrées), tri, recherche, épingles
+│   ├── conversations/                # multicanal (fournisseurs, tri, recherche, épingles) ; synchro Supabase : dépôt, correspondance local ↔ UUID, liste, file des échanges locaux
 │   ├── preferences_pim_service.dart  # forme principale PIM (enregistrée sur l'appareil)
 │   └── connaissances_techniques.dart # notions techniques (réponse courte + développement)
 ├── models/
@@ -228,8 +228,8 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), quotas Redis, horloge.py (/health/clock)
-├── tests/                            # pytest (49)
+├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), échanges locaux (/api/v1/conversations/local-exchanges), quotas Redis, horloge.py
+├── tests/                            # pytest (60)
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
@@ -284,6 +284,17 @@ Conversation IA : `ConversationSession` → `MoteurConversationHybride`
 message part ; le serveur garde l'historique (UUID rattaché à l'id local de
 la conversation). Écrit et vocal : même moteur. Conversations collées ou
 importées : jamais envoyées.
+
+Synchronisation des conversations (compte connecté) : Supabase est la
+source des conversations enregistrées. Flutter lit et supprime avec la
+session de l'utilisateur (`DepotConversationsSupabase`, RLS, jamais de clé
+administrative) ; le backend seul écrit les messages : réponses IA (chat
+SSE) et échanges locaux (`local-exchanges`, `model = "jarvis-local"`,
+identifiants choisis par l'appareil, aucun quota). `ConversationSession`
+reste le seul gestionnaire ; `FournisseurJarvis` réunit mémoire et serveur
+sans doublon (`CorrespondanceConversations`). Pas d'interrogation
+continue : connexion, menu, échange, retour au premier plan (≥ 30 s
+masqué). Conversations collées et imports WhatsApp : jamais envoyés.
 
 Conversations multicanal (menu latéral) : le panneau ne connaît que
 `ConversationsMulticanal` ; chaque messagerie est un

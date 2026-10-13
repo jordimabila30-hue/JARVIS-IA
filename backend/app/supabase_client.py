@@ -139,6 +139,17 @@ class SupabaseAdmin:
         resp.raise_for_status()
         return list(reversed(resp.json()))
 
+    async def get_message(self, message_id: str) -> dict | None:
+        """Propriétaire et conversation d'un message (tous comptes : le
+        contrôle d'appartenance est fait par l'appelant)."""
+        resp = await self._http.get(
+            "/messages",
+            params={"id": f"eq.{message_id}", "select": "id,conversation_id,user_id"},
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
     async def insert_messages(self, rows: list[dict]) -> None:
         # Insertion groupée : PostgREST exige les mêmes clés dans chaque
         # objet (sinon 400 PGRST102), or le message utilisateur n'a ni

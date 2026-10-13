@@ -86,13 +86,22 @@ class ConversationsMulticanal extends ChangeNotifier {
   bool ouvrir(ApercuConversation c) =>
       c.disponible && (_fournisseurs[c.source]?.ouvrir(c.id) ?? false);
 
-  /// Supprime une conversation des données locales de sa messagerie, puis
-  /// son épingle. Faux si rien n'a été supprimé.
-  bool supprimer(ApercuConversation c) {
-    final supprimee = _fournisseurs[c.source]?.supprimer(c.id) ?? false;
+  /// Supprime une conversation des données de sa messagerie, puis son
+  /// épingle, une fois la suppression confirmée. Faux si rien n'a été
+  /// supprimé (l'épingle reste alors en place).
+  Future<bool> supprimer(ApercuConversation c) async {
+    final supprimee = await (_fournisseurs[c.source]?.supprimer(c.id) ?? false);
     if (supprimee) epingles.retirer(c);
     return supprimee;
   }
+
+  /// Relit les conversations de [source] (ouverture du menu, réessai).
+  Future<void> actualiser(SourceConversation source, {bool force = false}) =>
+      _fournisseurs[source]?.actualiser(force: force) ?? Future.value();
+
+  /// Explication à afficher sous la liste de [source], ou null.
+  String? avertissement(SourceConversation source) =>
+      _fournisseurs[source]?.avertissement;
 
   /// Minuscules sans accents, pour la recherche.
   static String normaliser(String texte) {

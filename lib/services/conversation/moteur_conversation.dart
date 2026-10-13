@@ -57,6 +57,7 @@ class ReponseJarvis {
     this.actions = const [],
     this.terminerSession = false,
     this.erreur = false,
+    this.idServeur,
   });
 
   final String texte;
@@ -73,6 +74,10 @@ class ReponseJarvis {
   /// Pas une réponse : explication d'un échec (serveur injoignable, quota
   /// atteint…). Le message de l'utilisateur reste dans le fil, à renvoyer.
   final bool erreur;
+
+  /// Réponse de l'IA enregistrée par le serveur : UUID de sa ligne. Null
+  /// pour une réponse locale (qui reste sur l'appareil).
+  final String? idServeur;
 }
 
 /// Cerveau de la conversation, écrite comme vocale (une seule conversation,

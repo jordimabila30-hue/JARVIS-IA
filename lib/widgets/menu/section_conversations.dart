@@ -332,54 +332,114 @@ class _ListeSourceState extends State<_ListeSource> {
     return ListenableBuilder(
       listenable: Listenable.merge([m, m.recherche, m.selection]),
       builder: (context, _) {
-        final requete = m.selection.value == widget.source
-            ? m.recherche.value
-            : '';
-        final liste = m.liste(widget.source, requete: requete);
-        if (liste.isEmpty) {
-          return _Vide(
-            texte: requete.trim().isNotEmpty
-                ? 'Aucun résultat'
-                : widget.source == SourceConversation.jarvis
-                ? 'Aucune conversation pour l’instant'
-                : 'Aucune conversation ${widget.source.libelle}',
-          );
-        }
-        final maintenant = DateTime.now();
-        return NotificationListener<ScrollStartNotification>(
-          // La liste défile : une ligne restée ouverte se referme.
-          onNotification: (_) {
-            LigneConversation.fermerToutes();
-            return false;
-          },
-          child: ScrollConfiguration(
-            behavior: const DefilementSansBarre(),
-            child: ListView.builder(
-              controller: _defilement,
-              padding: const EdgeInsets.only(top: 2, bottom: 8),
-              itemExtent: LigneConversation.hauteurPour(
-                MediaQuery.textScalerOf(context),
-              ),
-              itemCount: liste.length,
-              itemBuilder: (context, i) {
-                final c = liste[i];
-                return LigneConversation(
-                  key: ValueKey(c.cle),
-                  conversation: c,
-                  epinglee: m.epingles.estEpinglee(c),
-                  maintenant: maintenant,
-                  surOuvrir: () => widget.surOuvrir(c),
-                  surEpingler: () => m.epingles.basculer(c),
-                  surSupprimer: () {
-                    final supprimer = widget.surSupprimer;
-                    supprimer == null ? m.supprimer(c) : supprimer(c);
-                  },
-                );
-              },
+        final contenu = _contenu(context, m);
+        final avertissement = m.avertissement(widget.source);
+        if (avertissement == null) return contenu;
+        return Column(
+          children: [
+            _Avertissement(
+              texte: avertissement,
+              surAppui: () => m.actualiser(widget.source, force: true),
             ),
-          ),
+            Expanded(child: contenu),
+          ],
         );
       },
+    );
+  }
+
+  Widget _contenu(BuildContext context, ConversationsMulticanal m) {
+    final requete = m.selection.value == widget.source ? m.recherche.value : '';
+    final liste = m.liste(widget.source, requete: requete);
+    if (liste.isEmpty) {
+      return _Vide(
+        texte: requete.trim().isNotEmpty
+            ? 'Aucun résultat'
+            : widget.source == SourceConversation.jarvis
+            ? 'Aucune conversation pour l’instant'
+            : 'Aucune conversation ${widget.source.libelle}',
+      );
+    }
+    final maintenant = DateTime.now();
+    return NotificationListener<ScrollStartNotification>(
+      // La liste défile : une ligne restée ouverte se referme.
+      onNotification: (_) {
+        LigneConversation.fermerToutes();
+        return false;
+      },
+      child: ScrollConfiguration(
+        behavior: const DefilementSansBarre(),
+        child: ListView.builder(
+          controller: _defilement,
+          padding: const EdgeInsets.only(top: 2, bottom: 8),
+          itemExtent: LigneConversation.hauteurPour(
+            MediaQuery.textScalerOf(context),
+          ),
+          itemCount: liste.length,
+          itemBuilder: (context, i) {
+            final c = liste[i];
+            return LigneConversation(
+              key: ValueKey(c.cle),
+              conversation: c,
+              epinglee: m.epingles.estEpinglee(c),
+              maintenant: maintenant,
+              surOuvrir: () => widget.surOuvrir(c),
+              surEpingler: () => m.epingles.basculer(c),
+              surSupprimer: () {
+                final supprimer = widget.surSupprimer;
+                supprimer == null ? m.supprimer(c) : supprimer(c);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Liste non actualisée, suppression impossible… : une ligne discrète
+/// au-dessus de la liste ; la toucher relance l'actualisation.
+class _Avertissement extends StatelessWidget {
+  const _Avertissement({required this.texte, required this.surAppui});
+
+  final String texte;
+  final VoidCallback surAppui;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: surAppui,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.cloud_off_rounded,
+                  size: 14,
+                  color: CouleursJarvis.texteSecondaire,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  texte,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: CouleursJarvis.texteSecondaire,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

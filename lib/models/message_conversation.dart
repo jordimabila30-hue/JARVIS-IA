@@ -107,6 +107,9 @@ class MessageConversation {
     this.ton,
     this.reponseProposee,
     this.vocal = false,
+    this.idServeur,
+    this.enregistre = false,
+    this.provisoire = false,
   });
 
   final int id;
@@ -125,19 +128,56 @@ class MessageConversation {
   /// même conversation que l'écrit.
   final bool vocal;
 
+  /// UUID de la ligne enregistrée sur le serveur (table `messages`), si
+  /// elle est connue : sert à ne jamais afficher deux fois un message lors
+  /// d'une actualisation.
+  final String? idServeur;
+
+  /// Enregistré sur le serveur (échange avec l'IA réussi), même si son
+  /// [idServeur] n'est pas encore connu. Faux pour les réponses locales
+  /// (heure, calcul…), les erreurs et les conversations collées : elles
+  /// restent sur cet appareil.
+  final bool enregistre;
+
+  /// Message d'état temporaire (chargement impossible…), retiré dès que
+  /// la conversation est chargée.
+  final bool provisoire;
+
   bool get deJarvis => auteur == AuteurMessage.jarvis;
 
   MessageConversation avecReponse(TonReponse ton, String reponse) =>
-      MessageConversation(
-        id: id,
-        auteur: auteur,
-        heure: heure,
-        texte: texte,
-        conversation: conversation,
-        actions: actions,
-        choixTon: choixTon,
-        ton: ton,
-        reponseProposee: reponse,
-        vocal: vocal,
-      );
+      _copie(ton: ton, reponseProposee: reponse);
+
+  /// Rattaché à sa ligne serveur.
+  MessageConversation avecIdServeur(String idServeur) =>
+      _copie(idServeur: idServeur, enregistre: true);
+
+  /// Enregistré sur le serveur (identifiant pas encore connu).
+  MessageConversation enregistreSurServeur() => _copie(enregistre: true);
+
+  /// Identifiant choisi par l'appareil pour sa future ligne serveur
+  /// (échange local en attente d'enregistrement).
+  MessageConversation avecIdPrevu(String idServeur) =>
+      _copie(idServeur: idServeur);
+
+  MessageConversation _copie({
+    TonReponse? ton,
+    String? reponseProposee,
+    String? idServeur,
+    bool? enregistre,
+  }) => MessageConversation(
+    id: id,
+    auteur: auteur,
+    heure: heure,
+    texte: texte,
+    conversation: conversation,
+    actions: actions,
+    choixTon: choixTon,
+    ton: ton ?? this.ton,
+    reponseProposee: reponseProposee ?? this.reponseProposee,
+    vocal: vocal,
+    idServeur: idServeur ?? this.idServeur,
+    enregistre: enregistre ?? this.enregistre,
+    provisoire: provisoire,
+  );
 }

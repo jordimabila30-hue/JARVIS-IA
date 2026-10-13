@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/message_conversation.dart';
 import '../services/conversation/conversation_session.dart';
 import '../theme/gabarit_jarvis.dart';
+import '../theme/theme_jarvis.dart';
 import '../widgets/conversation/bulle_utilisateur.dart';
 import '../widgets/conversation/carte_jarvis.dart';
 import '../widgets/defilement_sans_barre.dart';
@@ -113,16 +114,20 @@ class ConversationPage extends StatefulWidget {
 
 class _ConversationPageState extends State<ConversationPage> {
   final _defilement = ScrollController();
-  int _nombre = 0;
+  int? _dernier;
   bool _reflexion = false;
 
   @override
   void initState() {
     super.initState();
-    _nombre = widget.session.messages.length;
-    _reflexion = widget.session.enReflexion;
+    _dernier = widget.session.messages.lastOrNull?.id;
+    _reflexion = _attente(widget.session);
     widget.session.addListener(_surSession);
   }
+
+  /// Réponse en préparation ou conversation en cours de chargement : les
+  /// mêmes trois points en bas du fil.
+  static bool _attente(ConversationSession s) => s.enReflexion || s.chargement;
 
   @override
   void didUpdateWidget(ConversationPage ancien) {
@@ -148,15 +153,17 @@ class _ConversationPageState extends State<ConversationPage> {
   void _surSession() {
     final session = widget.session;
     final messages = session.messages;
-    final ajout = messages.length > _nombre;
-    final reflexion = session.enReflexion && !_reflexion;
+    // Nouveau message en bas (des messages plus anciens chargés en haut ne
+    // font jamais descendre le fil).
+    final ajout = messages.isNotEmpty && messages.last.id != _dernier;
+    final reflexion = _attente(session) && !_reflexion;
     // Message de l'utilisateur : il vient d'agir, on descend toujours.
     // Réponse de JARVIS : seulement s'il est déjà près du bas, sinon il
     // garde sa place dans l'historique.
     final deLUtilisateur = ajout && !messages.last.deJarvis;
     final descendre = (ajout || reflexion) && (deLUtilisateur || _presDuBas);
-    _nombre = messages.length;
-    _reflexion = session.enReflexion;
+    _dernier = messages.lastOrNull?.id;
+    _reflexion = _attente(session);
     if (messages.isEmpty) _cles.clear();
     // L'utilisateur relit l'historique : un message visible sert de repère
     // pour qu'il ne bouge pas quand la réponse arrive en bas.
@@ -264,10 +271,13 @@ class _ConversationPageState extends State<ConversationPage> {
     final g = widget.gabarit;
     final session = widget.session;
     final messages = session.messages;
-    final reflexion = session.enReflexion;
+    final reflexion = _attente(session);
     final taille = g.compact ? 14.5 : 15.0;
     final decalage = reflexion ? 1 : 0;
-    final total = messages.length + decalage;
+    // Tout en haut : « messages précédents » (conversation enregistrée dont
+    // seuls les derniers messages sont chargés).
+    final precedents = session.plusAnciens && !session.chargement;
+    final total = messages.length + decalage + (precedents ? 1 : 0);
 
     return ShaderMask(
       key: ConversationPage.cleFil,
@@ -310,6 +320,9 @@ class _ConversationPageState extends State<ConversationPage> {
               if (cle == const ValueKey('reflexion')) {
                 return reflexion ? 0 : null;
               }
+              if (cle == const ValueKey('precedents')) {
+                return precedents ? total - 1 : null;
+              }
               if (cle is! ValueKey<int>) return null;
               final i = messages.indexWhere((m) => m.id == cle.value);
               return i < 0 ? null : messages.length - 1 - i + decalage;
@@ -323,6 +336,22 @@ class _ConversationPageState extends State<ConversationPage> {
                     vertical: MesuresConversation.ecartMessages,
                   ),
                   child: ReflexionJarvis(),
+                );
+              }
+              if (precedents && i == total - 1) {
+                return Padding(
+                  key: const ValueKey('precedents'),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Center(
+                    child: TextButton(
+                      onPressed: session.chargerPlusAnciens,
+                      style: TextButton.styleFrom(
+                        foregroundColor: CouleursJarvis.texteSecondaire,
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                      child: const Text('Afficher les messages précédents'),
+                    ),
+                  ),
                 );
               }
               final m = messages[messages.length - 1 - (i - decalage)];

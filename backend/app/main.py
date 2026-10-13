@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 
 from . import console
-from .api.v1 import chat
+from .api.v1 import chat, local_exchanges
 from .auth import AuthUser, get_current_user
 from .config import get_settings
 from .horloge import (
@@ -65,6 +65,7 @@ app.add_middleware(
 )
 
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(local_exchanges.router, prefix="/api/v1")
 app.include_router(console.router)
 
 

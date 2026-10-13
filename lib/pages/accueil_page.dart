@@ -10,6 +10,10 @@ import '../services/authentification/auth_service.dart';
 import '../services/conversation/conversation_session.dart';
 import '../services/conversation/moteur_conversation_hybride.dart';
 import '../services/conversation/moteur_conversation_ia.dart';
+import '../services/conversations/correspondance_conversations.dart';
+import '../services/conversations/depot_conversations.dart';
+import '../services/conversations/synchro_echanges_locaux.dart';
+import '../services/conversations/synchronisation_conversations.dart';
 import '../services/conversations/conversations_multicanal.dart';
 import '../services/conversations/epingles_conversations.dart';
 import '../services/conversations/fournisseur_conversations.dart';
@@ -56,6 +60,7 @@ class AccueilPage extends StatefulWidget {
     this.auth,
     this.api,
     this.surConnexion,
+    this.depotConversations,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -90,11 +95,16 @@ class AccueilPage extends StatefulWidget {
   /// compte (accès de développement).
   final VoidCallback? surConnexion;
 
+  /// Conversations enregistrées du compte connecté (null : sans compte,
+  /// tout reste en mémoire). Vit avec cette page : à la déconnexion, la
+  /// page et ses données disparaissent.
+  final DepotConversations? depotConversations;
+
   @override
   State<AccueilPage> createState() => _AccueilPageState();
 }
 
-class _AccueilPageState extends State<AccueilPage> {
+class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   static const _transition = Duration(milliseconds: 550);
 
   final _controleur = TextEditingController();
@@ -121,15 +131,55 @@ class _AccueilPageState extends State<AccueilPage> {
   // Dernière réponse de JARVIS déjà vue (seules les nouvelles sont lues).
   int _derniereVue = -1;
 
+  // Conversation du fil <-> conversation serveur : partagée par le moteur
+  // IA et la synchronisation (jamais deux fois la même conversation).
+  final _correspondance = CorrespondanceConversations();
+
+  late final _synchronisation = switch (widget.depotConversations) {
+    final depot? => SynchronisationConversations(depot),
+    null => null,
+  };
+
+  // Échanges traités sur l'appareil (heure, calcul…) : enregistrés dans
+  // les conversations du compte connecté, sans passer par l'IA.
+  late final _echangesLocaux = switch ((
+    widget.depotConversations,
+    widget.depotConversations?.utilisateur,
+    widget.api,
+  )) {
+    (final depot?, final compte?, final api?) => SynchroEchangesLocaux(
+      compte: compte,
+      compteActuel: () => depot.utilisateur,
+      correspondance: _correspondance,
+      decalage: () => widget.auth?.decalageHorloge,
+      envoyer: (e, conversation) => api.enregistrerEchangeLocal(
+        idQuestion: e.idQuestion,
+        idReponse: e.idReponse,
+        question: e.question,
+        reponse: e.reponse,
+        conversation: conversation,
+        questionA: e.questionA,
+        reponseA: e.reponseA,
+      ),
+    ),
+    _ => null,
+  };
+
   late final _conversation =
       widget.conversation ??
       ConversationSession(
         moteur: switch (widget.api) {
           final api? => MoteurConversationHybride(
-            ia: MoteurConversationIA(api),
+            ia: MoteurConversationIA(
+              api,
+              correspondance: _correspondance,
+              avantEnvoi: _echangesLocaux?.attendre,
+            ),
           ),
           null => null,
         },
+        depot: widget.depotConversations,
+        correspondance: _correspondance,
       );
   bool _enConversation = false;
 
@@ -137,7 +187,11 @@ class _AccueilPageState extends State<AccueilPage> {
       widget.multicanal ??
       ConversationsMulticanal(
         fournisseurs: [
-          FournisseurJarvis(_conversation),
+          FournisseurJarvis(
+            _conversation,
+            synchronisation: _synchronisation,
+            echangesLocaux: _echangesLocaux,
+          ),
           for (final s in SourceConversation.values)
             if (s != SourceConversation.jarvis) FournisseurNonIntegre(s),
         ],
@@ -187,10 +241,52 @@ class _AccueilPageState extends State<AccueilPage> {
     _session.reglages.charger();
     // Conversations épinglées (menu latéral).
     _multicanal.epingles.charger();
+    // Conversations enregistrées : à la connexion, puis à l'ouverture du
+    // menu, au retour au premier plan et après chaque échange avec l'IA.
+    WidgetsBinding.instance.addObserver(this);
+    _conversation.surEchangeEnregistre = () {
+      _echangesLocaux?.envoyer();
+      _synchronisation?.actualiser();
+    };
+    final echanges = _echangesLocaux;
+    if (echanges != null) {
+      _conversation.surEchangeLocal = echanges.ajouter;
+      // File restée sur l'appareil (hors connexion, application fermée).
+      echanges.charger().then((_) => echanges.envoyer());
+    }
+    _synchronisation?.actualiser(force: true);
+  }
+
+  // Depuis quand JARVIS est masqué (onglet caché, application en arrière-
+  // plan) ; null : visible.
+  DateTime? _masqueDepuis;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState etat) {
+    if (etat == AppLifecycleState.hidden || etat == AppLifecycleState.paused) {
+      _masqueDepuis ??= DateTime.now();
+      return;
+    }
+    if (etat != AppLifecycleState.resumed) return;
+    final depuis = _masqueDepuis;
+    _masqueDepuis = null;
+    // Une simple perte de focus (fréquente sur le Web et sous Windows) ne
+    // relit rien : seulement un vrai retour après au moins 30 s, quand un
+    // autre appareil a pu poursuivre ou supprimer une conversation.
+    if (depuis == null ||
+        DateTime.now().difference(depuis) < const Duration(seconds: 30)) {
+      return;
+    }
+    _echangesLocaux?.envoyer();
+    _synchronisation?.actualiser();
+    _conversation.rafraichir();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _conversation.surEchangeEnregistre = null;
+    _conversation.surEchangeLocal = null;
     _partages.annonces.removeListener(_surPartage);
     _partagesImport?.close();
     _retourAccueil?.cancel();
@@ -202,6 +298,8 @@ class _AccueilPageState extends State<AccueilPage> {
     if (widget.conversation == null) _conversation.dispose();
     _menu.dispose();
     if (widget.multicanal == null) _multicanal.dispose();
+    _synchronisation?.dispose();
+    _echangesLocaux?.dispose();
     _formesPim.removeListener(_surFormePim);
     if (widget.formesPim == null) _formesPim.dispose();
     super.dispose();
@@ -259,6 +357,7 @@ class _AccueilPageState extends State<AccueilPage> {
     // Le clavier se referme ; le texte saisi reste dans la barre.
     _focus.unfocus();
     _menu.value = true;
+    _multicanal.actualiser(SourceConversation.jarvis);
   }
 
   void _fermerMenu() => _menu.value = false;
@@ -327,10 +426,14 @@ class _AccueilPageState extends State<AccueilPage> {
     _multicanal.ouvrir(c);
   }
 
-  /// Suppression confirmée dans le menu (qui reste ouvert). Si c'est la
-  /// conversation affichée, l'accueil revient vide : le chat vocal qui lui
-  /// appartenait se termine, la saisie est vidée, PIM n'est pas touché.
-  void _supprimerConversation(ApercuConversation c) {
+  /// Suppression confirmée dans le menu (qui reste ouvert). Une fois la
+  /// suppression réussie (serveur compris), si c'était la conversation
+  /// affichée, l'accueil revient vide : le chat vocal qui lui appartenait
+  /// se termine, la saisie est vidée, PIM n'est pas touché. Échec : rien
+  /// ne change (le menu explique pourquoi).
+  Future<void> _supprimerConversation(ApercuConversation c) async {
+    final supprimee = await _multicanal.supprimer(c);
+    if (!mounted || !supprimee) return;
     if (c.ouverte) {
       if (_modeVocal) {
         setState(() {
@@ -342,7 +445,6 @@ class _AccueilPageState extends State<AccueilPage> {
       _session.terminerChatVocal();
       _controleur.clear();
     }
-    _multicanal.supprimer(c);
   }
 
   Future<void> _ouvrirParametres() async {

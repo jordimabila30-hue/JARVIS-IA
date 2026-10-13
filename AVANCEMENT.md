@@ -751,3 +751,25 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Test sur le Galaxy S10+ (`adb reverse tcp:8000 tcp:8000`), puis affichage progressif des fragments, synchronisation des conversations enregistrées, MIA universel.
+
+---
+
+## 2026-10-13 — Phase 3 : conversations synchronisées entre appareils
+
+### Fait
+- **Supabase examiné en direct (MCP)** : RLS active sur les 4 tables, aucun droit `anon` ; `conversations` (lecture, création, modification, suppression : propriétaire seulement), `messages` (lecture et suppression : propriétaire ; insertion `user` seulement ; aucune modification) ; suppression en cascade des messages. Aucune modification de schéma ni de RLS.
+- **Liste et historique** : Flutter lit ses conversations et messages avec la session de l'utilisateur (`DepotConversationsSupabase`, règles RLS appliquées, aucune clé administrative) ; conversations vides comprises (supprimables) ; 50 derniers messages, puis « Afficher les messages précédents ».
+- **Identifiants** : `CorrespondanceConversations` (conversation du fil ↔ UUID serveur, partagée par le moteur IA et la synchronisation) ; une conversation ouverte depuis le serveur garde son UUID ; fusion sans doublon (UUID du message, ou texte d'une question envoyée depuis l'appareil).
+- **Actualisation** : connexion, ouverture du menu, après un échange, retour au premier plan après au moins 30 s masqué (plus de relecture toutes les 22 s au simple changement de focus : vérifié, une seule lecture en 3 min d'inactivité).
+- **Suppression** : d'abord sur le serveur (droits vérifiés par la RLS), retirée de l'interface après confirmation ; échec : conversation et épingle conservées, raison affichée dans le menu.
+- **Échanges locaux synchronisés** (heure, calcul…) : exécutés sur l'appareil (aucun appel GroqCloud), affichés tout de suite, puis enregistrés par la nouvelle route `POST /api/v1/conversations/local-exchanges` (JWT vérifié, compte lu dans le jeton, conversation du compte seulement, aucun quota, réponse marquée `model = "jarvis-local"`, identifiants choisis par l'appareil : réessai sans doublon, heure de l'appareil corrigée et bornée). File `SynchroEchangesLocaux` gardée sur l'appareil par compte, envoyée au retour du réseau ; une question à l'IA attend l'enregistrement des échanges locaux de sa conversation (même conversation serveur, contexte connu de l'IA). Conversations collées et imports WhatsApp : jamais envoyés.
+- **Tests** : 534 tests Flutter, 60 tests backend (11 nouveaux) ; sécurité RLS en transaction annulée (compte A / compte B / déconnecté) ; tests réels Web (liste, historique, suite de conversation, conversation vide ouverte puis supprimée, échange local hors connexion puis envoyé une fois, question IA dans la même conversation) ; Windows → Web (échange local retrouvé) ; compte Windows différent : rien visible sur le Web. Compilations Web et Windows.
+
+### Limites
+- Épingles propres à chaque appareil (synchronisation à décider : colonne `pinned`).
+- Pas de cache des conversations sur le disque : hors connexion, seule la liste déjà chargée reste affichée.
+- Le serveur ne limite pas encore le nombre d'échanges locaux enregistrés par compte.
+- Android et iOS non testés sur appareil ; logo `assets/logos/jarvis.png` absent (404 sur le Web, antérieur à cette phase).
+
+### Prochaine étape
+- Test sur le Galaxy S10+, décision sur les épingles, puis affichage progressif des réponses.

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../conversations/depot_conversations.dart';
 import 'auth_repository.dart';
 import 'auth_repository_supabase.dart';
 import 'stockage_session.dart';
@@ -73,6 +74,20 @@ class ConfigAuth {
   Future<void> initialiser() async {
     if (!supabaseConfigure) return;
     await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseCle);
+  }
+
+  /// Conversations enregistrées du compte connecté, lues avec sa session
+  /// (règles RLS du projet) ; null sans Supabase.
+  DepotConversations? creerDepotConversations({
+    required Future<String?> Function() jeton,
+    Future<String?> Function()? renouveler,
+  }) {
+    if (!supabaseConfigure) return null;
+    return DepotConversationsSupabase(
+      Supabase.instance.client,
+      jeton: jeton,
+      renouveler: renouveler,
+    );
   }
 
   /// Accès au serveur pour cette configuration : Supabase s'il est

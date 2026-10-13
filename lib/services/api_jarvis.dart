@@ -193,6 +193,71 @@ class ApiJarvis {
     );
   }
 
+  /// `POST /api/v1/conversations/local-exchanges` : enregistre un échange
+  /// traité localement (heure, calcul…) dans la conversation [conversation]
+  /// du compte (null : le serveur en crée une). Rien n'est généré par le
+  /// serveur, aucun quota n'est consommé. Renvoie l'UUID de la
+  /// conversation.
+  ///
+  /// [idQuestion] et [idReponse] (UUID choisis par l'appareil) rendent
+  /// l'envoi sans risque de doublon : renvoyé après une coupure, il n'est
+  /// pas réinséré.
+  Future<ResultatApi<String>> enregistrerEchangeLocal({
+    required String idQuestion,
+    required String idReponse,
+    required String question,
+    required String reponse,
+    String? conversation,
+    DateTime? questionA,
+    DateTime? reponseA,
+  }) => _authentifie((j) async {
+    _Reponse<String> echec(ErreurApi e, [String? detail]) =>
+        _Resultat(EchecApi(e, detail: detail));
+    final http.Response r;
+    try {
+      r = await _client
+          .post(
+            _route('api/v1/conversations/local-exchanges'),
+            headers: {
+              'Authorization': 'Bearer $j',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'question_id': idQuestion,
+              'answer_id': idReponse,
+              'conversation_id': conversation,
+              'question': question,
+              'answer': reponse,
+              'question_at': questionA?.toUtc().toIso8601String(),
+              'answer_at': reponseA?.toUtc().toIso8601String(),
+            }),
+          )
+          .timeout(delai);
+    } on TimeoutException {
+      return echec(ErreurApi.delaiDepasse);
+    } catch (_) {
+      return echec(ErreurApi.injoignable);
+    }
+    switch (r.statusCode) {
+      case 200 || 201:
+        try {
+          final id = (jsonDecode(r.body) as Map)['conversation_id'];
+          if (id is String) return _Resultat(SuccesApi(id));
+        } catch (_) {}
+        return echec(ErreurApi.serveur, 'réponse illisible');
+      case 401 || 403:
+        return _Refus(_detail(r.body), j);
+      case 404:
+        return echec(ErreurApi.conversationIntrouvable);
+      case 422:
+        return echec(ErreurApi.messageTropLong);
+      case 503:
+        return echec(ErreurApi.indisponible, _detail(r.body));
+      default:
+        return echec(ErreurApi.serveur, 'HTTP ${r.statusCode}');
+    }
+  });
+
   /// Appel protégé : seule l'horloge du serveur décide si le jeton est
   /// expiré ; dans ce cas, le jeton est renouvelé (Supabase) et l'appel
   /// refait une seule fois. Renouvellement impossible : session expirée

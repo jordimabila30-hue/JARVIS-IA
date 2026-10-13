@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../api_jarvis.dart';
+import '../conversations/correspondance_conversations.dart';
 import 'moteur_conversation.dart';
 
 /// Réponses de l'IA du serveur JARVIS (FastAPI → GroqCloud), pour le chat
@@ -17,30 +18,44 @@ import 'moteur_conversation.dart';
 /// conversation collée ou importée (le moteur hybride les garde sur
 /// l'appareil).
 class MoteurConversationIA {
-  MoteurConversationIA(this._api);
+  MoteurConversationIA(
+    this._api, {
+    CorrespondanceConversations? correspondance,
+    this.avantEnvoi,
+  }) : correspondance = correspondance ?? CorrespondanceConversations();
+
+  /// Attendu avant chaque question à l'IA (conversation locale) : les
+  /// échanges locaux de la conversation sont enregistrés d'abord, pour
+  /// que tout reste dans la même conversation serveur, dans l'ordre.
+  final Future<void> Function(String idLocal)? avantEnvoi;
 
   final ApiJarvis _api;
 
-  /// Identifiant local → identifiant serveur.
-  final _serveur = <String, String>{};
+  /// Identifiant local → identifiant serveur (partagé avec la
+  /// synchronisation des conversations).
+  final CorrespondanceConversations correspondance;
 
   /// Conversation serveur rattachée à la conversation locale [idLocal].
-  String? idServeur(String idLocal) => _serveur[idLocal];
+  String? idServeur(String idLocal) => correspondance.serveur(idLocal);
 
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
     final local = demande.idConversation;
+    if (local != null) await avantEnvoi?.call(local);
     var r = await _envoyer(demande.texte, local);
     if (r case EchecApi(
       type: ErreurApi.conversationIntrouvable,
     ) when local != null) {
       // Conversation effacée côté serveur : refusée avant toute
       // génération (rien d'enregistré), on en recommence une seule fois.
-      _serveur.remove(local);
+      correspondance.oublier(local);
       r = await _envoyer(demande.texte, local);
     }
     switch (r) {
       case SuccesApi(:final valeur):
-        return ReponseJarvis(texteSimple(valeur.texte));
+        return ReponseJarvis(
+          texteSimple(valeur.texte),
+          idServeur: valeur.message,
+        );
       case EchecApi(:final type, :final detail):
         debugPrint(
           '[JARVIS IA] échec : ${type.name}${detail == null ? '' : ' ($detail)'}',
@@ -52,12 +67,12 @@ class MoteurConversationIA {
   Future<ResultatApi<ReponseChat>> _envoyer(String texte, String? local) =>
       _api.discuter(
         texte,
-        conversation: local == null ? null : _serveur[local],
+        conversation: local == null ? null : correspondance.serveur(local),
         // Dès l'événement `meta` : même si la génération échoue ensuite,
         // ou si le fil a changé entre-temps, la conversation locale garde
         // sa conversation serveur.
         surConversation: (id) {
-          if (local != null) _serveur[local] = id;
+          if (local != null) correspondance.associer(local, id);
         },
       );
 

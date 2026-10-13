@@ -355,20 +355,20 @@ void main() {
       // Mise de côté et épinglée : supprimée, épingle comprise.
       final ancienne = l.firstWhere((c) => c.id == premiere);
       m.epingles.basculer(ancienne);
-      expect(m.supprimer(ancienne), isTrue);
+      expect(await m.supprimer(ancienne), isTrue);
       expect(m.epingles.estEpinglee(ancienne), isFalse);
       expect(s.archives, isEmpty);
       expect(s.ouvrir(premiere), isFalse);
       // Affichée : l'accueil revient vide, sans la mettre de côté.
       final courante = m.liste(SourceConversation.jarvis).single;
       expect(courante.id, seconde);
-      expect(m.supprimer(courante), isTrue);
+      expect(await m.supprimer(courante), isTrue);
       expect(s.messages, isEmpty);
       expect(s.idCourant, isNull);
       expect(s.archives, isEmpty);
       expect(m.liste(SourceConversation.jarvis), isEmpty);
       // Inconnue : rien.
-      expect(m.supprimer(courante), isFalse);
+      expect(await m.supprimer(courante), isFalse);
       // L'épingle supprimée n'est plus enregistrée.
       await Future<void>.delayed(Duration.zero);
       final relues = EpinglesConversations(stockage: stockage);

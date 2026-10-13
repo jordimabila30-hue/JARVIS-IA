@@ -40,6 +40,12 @@ class FournisseurDemo extends ChangeNotifier
     return true;
   }
 
+  @override
+  String? get avertissement => null;
+
+  @override
+  Future<void> actualiser({bool force = false}) => Future.value();
+
   void ajouter(ApercuConversation c) {
     _conversations.add(c);
     notifyListeners();
