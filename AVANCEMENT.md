@@ -727,3 +727,27 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Moteur de conversation hybride (commandes locales + IA du backend), puis MIA universel.
+
+---
+
+## 2026-10-13 — Conversation reliée à l'IA du backend (moteur hybride)
+
+### Fait
+- **Moteur hybride** (`MoteurConversationHybride`) : règles locales d'abord (heure, date, calcul, prénom, notions, « au revoir », conversation collée), sinon `MoteurConversationIA` → `ApiJarvis.discuter` → `POST /api/v1/chat/stream` → GroqCloud. Un seul moteur pour l'écrit et le vocal (`VoiceSession` inchangé : il passe déjà par `ConversationSession`).
+- **Mode « IA disponible »** des règles locales (`reponseLocale(avecIA: true)`) : les échanges courants (« ok », « merci », « demain », « bonjour »…) ne captent plus que les phrases courtes ; les réponses écrites faute d'IA (« je n'ai pas d'IA branchée », liste des capacités, « ton fonctionnement ») laissent la main à l'IA ; « résume / explique / que répondre » sans conversation connue ne demandent de coller une conversation que si la phrase en parle. Aucune règle supprimée ; sans IA, comportement identique.
+- **Flux SSE** (`flux_sse.dart`) : décodage UTF-8 et lignes en flux (paquets coupés), `meta` / `delta` / `done` / `error`, réponse affichée une fois complète ; flux lu jusqu'à sa fermeture ; `surFragment` prêt pour l'affichage progressif. Web : `http` 1.6 (fetch + ReadableStream) reçoit bien le flux.
+- **Identifiants** : conversation locale → UUID serveur (rattaché dès `meta`) ; seul le nouveau message est envoyé (historique gardé par le serveur) ; nouvelle conversation → nouvel UUID ; conversation rouverte → son UUID ; 404 → nouvelle conversation, une seule fois.
+- **Réponses tardives** : fil changé pendant la réflexion → rien n'est envoyé ; réponse arrivée après un changement → rangée dans sa propre conversation (jamais dans le fil affiché), perdue si la conversation a été supprimée.
+- **Erreurs** en français dans le fil (et dites en vocal) : serveur injoignable, délai, session expirée (renouvellement puis un seul nouvel essai), quota (heure de renouvellement), GroqCloud indisponible, flux interrompu, réponse vide, message trop long. Jamais de réponse partielle présentée comme complète, jamais d'état « réflexion » bloqué ; les commandes locales restent disponibles hors ligne.
+- **Markdown** des réponses du modèle retiré (gras, italique, code, titres) : affichage et voix propres.
+- **Confidentialité** : conversations collées et imports WhatsApp jamais envoyés au serveur.
+- **Tests** : 508 tests Flutter (32 nouveaux : `test/conversation_ia_test.dart`), 49 tests backend ; tests réels Flutter Web : commande locale sans appel, question IA, contexte conservé, nouvelle conversation distincte, reprise d'une conversation du menu, serveur arrêté puis relancé, mode vocal (vérifié par l'utilisateur). Compilations Web et Windows.
+
+### Limites
+- Les réponses locales ne sont pas connues du serveur (ex. « combien font 2 + 2 » puis « et fois 3 ? » envoyé à l'IA).
+- Une réponse en erreur après un début de génération est enregistrée partiellement côté serveur (comportement du backend, non modifié).
+- Le test `test_tone_is_injected_in_system_prompt` du backend lit `backend/.env` (modèle `openai/gpt-oss-120b`) : il échoue si `.env` change le modèle.
+- Android et iOS non testés sur appareil.
+
+### Prochaine étape
+- Test sur le Galaxy S10+ (`adb reverse tcp:8000 tcp:8000`), puis affichage progressif des fragments, synchronisation des conversations enregistrées, MIA universel.

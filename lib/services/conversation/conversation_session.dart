@@ -150,6 +150,7 @@ class ConversationSession extends ChangeNotifier {
         conversation: connue,
         conversationNouvelle: nouvelle != null,
         vocale: vocal,
+        idConversation: _idCourant,
       ),
       vocal: vocal,
     );
@@ -165,6 +166,13 @@ class ConversationSession extends ChangeNotifier {
     ReponseJarvis reponse;
     try {
       if (!vocal) await Future<void>.delayed(delaiReflexion);
+      // Fil changé pendant la réflexion : la demande n'est pas envoyée
+      // (aucune conversation créée pour rien sur le serveur).
+      if (_ferme || generation != _generation) {
+        _enCours--;
+        if (!_ferme) notifyListeners();
+        return null;
+      }
       reponse = await moteur.repondre(demande);
     } catch (e) {
       debugPrint('[JARVIS conversation] réponse impossible : $e');
@@ -174,25 +182,39 @@ class ConversationSession extends ChangeNotifier {
     }
     _enCours--;
     if (_ferme) return null;
+    final message = MessageConversation(
+      id: _id++,
+      auteur: AuteurMessage.jarvis,
+      heure: _horloge(),
+      texte: reponse.texte,
+      // Conversation de référence (choix du ton, raccourcis).
+      conversation: demande.conversation,
+      actions: reponse.actions,
+      choixTon: reponse.choixTon,
+      vocal: vocal,
+    );
     if (generation != _generation) {
+      // Le fil a changé pendant la réponse (IA : plusieurs secondes). Elle
+      // ne va jamais dans le fil affiché, mais rejoint sa propre
+      // conversation, mise de côté ou rouverte, comme sur le serveur ;
+      // conversation supprimée : perdue. Rien à dire en vocal.
+      _rangerReponseTardive(demande.idConversation, message);
       notifyListeners();
       return null;
     }
-    messages.add(
-      MessageConversation(
-        id: _id++,
-        auteur: AuteurMessage.jarvis,
-        heure: _horloge(),
-        texte: reponse.texte,
-        // Conversation de référence (choix du ton, raccourcis).
-        conversation: demande.conversation,
-        actions: reponse.actions,
-        choixTon: reponse.choixTon,
-        vocal: vocal,
-      ),
-    );
+    messages.add(message);
     notifyListeners();
     return reponse;
+  }
+
+  void _rangerReponseTardive(String? id, MessageConversation message) {
+    if (id == null) return;
+    if (id == _idCourant) {
+      messages.add(message);
+      return;
+    }
+    final i = _archives.indexWhere((a) => a.id == id);
+    if (i >= 0) _archives[i] = _archives[i]._avec(message);
   }
 
   /// Ton choisi pour la proposition du message [id] : la réponse proposée
@@ -253,6 +275,7 @@ class ConversationSession extends ChangeNotifier {
           historique: historique,
           intention: intention,
           conversation: conversation,
+          idConversation: _idCourant,
         ),
       );
     });
@@ -378,4 +401,13 @@ class ConversationArchivee {
 
   /// Contexte du moteur (prénom, sujet…), opaque.
   final Object? contexte;
+
+  ConversationArchivee _avec(MessageConversation message) =>
+      ConversationArchivee._(
+        id: id,
+        messages: List.unmodifiable([...messages, message]),
+        derniere: derniere,
+        questionAttendue: questionAttendue,
+        contexte: contexte,
+      );
 }

@@ -99,7 +99,7 @@ class VoiceCommandService {
     final distant = assistantDistant;
     if (distant != null) {
       final texte = await distant.repondre(phraseReconnue);
-      contexte.derniereReponse = texte;
+      retenirReponseDistante(texte);
       return ReponseVocale(texte, source: SourceReponse.distante);
     }
     final texte = contexte.inconnues++ == 0
@@ -116,15 +116,33 @@ class VoiceCommandService {
   }
 
   /// Réponse locale si une commande correspond, sinon null.
-  ReponseVocale? reponseLocale(String phraseReconnue) {
+  ///
+  /// [avecIA] : une IA distante prend le relais quand rien ne correspond.
+  /// Les commandes exactes (heure, date, calcul, prénom, notions…) restent
+  /// locales, mais les échanges courants (« merci », « ok », « bonjour »,
+  /// « demain »…) ne répondent plus qu'aux phrases courtes : « ok, et pour
+  /// l'Espagne ? » est une vraie question. Les réponses qui n'existaient
+  /// que faute d'IA (« je n'ai pas d'IA branchée », liste des capacités)
+  /// lui laissent la main.
+  ReponseVocale? reponseLocale(String phraseReconnue, {bool avecIA = false}) {
     final phrase = normaliser(phraseReconnue);
     if (phrase.isEmpty) return null;
-    final r = _repondre(phrase, phraseReconnue);
+    final r = _repondre(phrase, phraseReconnue, avecIA);
     if (r != null) {
       contexte.tours++;
       contexte.derniereReponse = r.texte;
     }
     return r;
+  }
+
+  /// Réponse venue de l'IA distante : « répète » la redira, et « dis-m'en
+  /// plus » ne revient plus à la dernière notion locale (l'IA a le
+  /// contexte).
+  void retenirReponseDistante(String texte) {
+    contexte.tours++;
+    contexte
+      ..derniereReponse = texte
+      ..sujet = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -142,10 +160,18 @@ class VoiceCommandService {
   String get _virgulePrenom =>
       contexte.prenom == null ? '' : ', ${contexte.prenom}';
 
-  ReponseVocale? _repondre(String phrase, String brut) {
+  ReponseVocale? _repondre(String phrase, String brut, bool avecIA) {
     final encadree = ' $phrase ';
-    bool dit(List<String> variantes) =>
+    final mots = phrase.split(' ').length;
+    bool contient(List<String> variantes) =>
         variantes.any((v) => encadree.contains(' $v '));
+    // Avec une IA : la variante doit occuper presque toute la phrase (au
+    // plus [marge] mots de plus), sinon la phrase est une vraie question.
+    bool dit(List<String> variantes, {int marge = 2}) => variantes.any(
+      (v) =>
+          encadree.contains(' $v ') &&
+          (!avecIA || mots <= v.split(' ').length + marge),
+    );
     final maintenant = _horloge();
     final c = contexte;
 
@@ -160,14 +186,14 @@ class VoiceCommandService {
       }
     }
     if (attente == AttenteConversation.humeur) {
-      if (dit(_humeurNegative) && !dit(['pas mal'])) {
+      if (dit(_humeurNegative, marge: 3) && !contient(['pas mal'])) {
         return _dire(
           'Je suis désolé de l’entendre$_virgulePrenom. Prenez soin de vous. '
           'Si je peux vous aider, dites-le-moi.',
         );
       }
-      if (dit(_humeurPositive)) {
-        final retour = dit(['et toi', 'et vous'])
+      if (dit(_humeurPositive, marge: 3)) {
+        final retour = contient(['et toi', 'et vous'])
             ? ' Moi aussi, je fonctionne parfaitement.'
             : '';
         return _dire(
@@ -207,6 +233,8 @@ class VoiceCommandService {
       'tu peux developper',
     ])) {
       final sujet = c.sujet;
+      // Sans notion locale en cours, l'IA développe d'après le contexte.
+      if (sujet == null && avecIA) return null;
       if (sujet == null) {
         return _dire(
           'De quel sujet voulez-vous que je parle ? Par exemple : '
@@ -217,7 +245,7 @@ class VoiceCommandService {
     }
 
     // ---- 3. Prénom --------------------------------------------------------
-    final prenomDonne = _extrairePrenom(phrase, brut);
+    final prenomDonne = _extrairePrenom(phrase, brut, court: avecIA);
     if (prenomDonne != null) {
       c.prenom = prenomDonne;
       return _dire('Enchanté, $prenomDonne. Je m’en souviendrai.');
@@ -232,6 +260,8 @@ class VoiceCommandService {
       'qui suis je',
     ])) {
       if (c.prenom != null) return _dire('Vous vous appelez ${c.prenom}.');
+      // Prénom peut-être donné dans un échange avec l'IA : elle le sait.
+      if (avecIA) return null;
       c.attente = AttenteConversation.prenom;
       return _dire(
         'Je ne connais pas encore votre prénom. Comment vous appelez-vous ?',
@@ -244,24 +274,26 @@ class VoiceCommandService {
 
     // ---- 5. Heure et date de l'appareil -----------------------------------
     if (dit([
-      'quelle heure',
-      'quel heure',
-      'il est quelle heure',
-      'donne moi l heure',
-      'donnes moi l heure',
-      'dis moi l heure',
-      'l heure qu il est',
-      'tu as l heure',
-    ])) {
+          'quelle heure',
+          'quel heure',
+          'il est quelle heure',
+          'donne moi l heure',
+          'donnes moi l heure',
+          'dis moi l heure',
+          'l heure qu il est',
+          'tu as l heure',
+        ], marge: 5) &&
+        // « À quelle heure ouvre la poste ? » n'est pas une demande d'heure.
+        !(avecIA && contient(['a quelle heure']))) {
       return _dire(heureEnFrancais(maintenant));
     }
-    if (dit(['demain'])) {
+    if (dit(['demain'], marge: 1)) {
       final demain = maintenant.add(const Duration(days: 1));
       return _dire(
         'Demain, ${dateEnFrancais(demain).replaceFirst('Nous sommes', 'nous serons')}',
       );
     }
-    if (dit(['hier'])) {
+    if (dit(['hier'], marge: 1)) {
       final hier = maintenant.subtract(const Duration(days: 1));
       return _dire(
         'Hier, ${dateEnFrancais(hier).replaceFirst('Nous sommes', 'nous étions')}',
@@ -276,13 +308,17 @@ class VoiceCommandService {
       'on est le combien',
       'la date d aujourd hui',
       'date du jour',
-    ])) {
+    ], marge: 4)) {
       return _dire(dateEnFrancais(maintenant));
     }
-    if (dit(['quelle annee', 'en quelle annee', 'on est en quelle annee'])) {
+    if (dit([
+      'quelle annee',
+      'en quelle annee',
+      'on est en quelle annee',
+    ], marge: 4)) {
       return _dire('Nous sommes en ${maintenant.year}.');
     }
-    if (dit(['quel mois', 'on est en quel mois'])) {
+    if (dit(['quel mois', 'on est en quel mois'], marge: 4)) {
       return _dire('Nous sommes en ${moisEnFrancais(maintenant)}.');
     }
 
@@ -352,20 +388,22 @@ class VoiceCommandService {
     ])) {
       return _dire('Je suis JARVIS, votre assistant.');
     }
-    if (dit([
-      'que peux tu faire',
-      'que sais tu faire',
-      'tu peux faire quoi',
-      'tu sais faire quoi',
-      'qu est ce que tu peux faire',
-      'qu est ce que tu sais faire',
-      'quelles sont tes fonctionnalites',
-      'quelles sont tes capacites',
-      'a quoi tu sers',
-      'a quoi sers tu',
-      'aide moi',
-      'aide',
-    ])) {
+    // Réponses écrites faute d'IA : avec l'IA branchée, elle répond.
+    if (!avecIA &&
+        dit([
+          'que peux tu faire',
+          'que sais tu faire',
+          'tu peux faire quoi',
+          'tu sais faire quoi',
+          'qu est ce que tu peux faire',
+          'qu est ce que tu sais faire',
+          'quelles sont tes fonctionnalites',
+          'quelles sont tes capacites',
+          'a quoi tu sers',
+          'a quoi sers tu',
+          'aide moi',
+          'aide',
+        ])) {
       return _dire(
         'Mes fonctionnalités sont encore en cours de développement, mais je '
         'peux déjà interagir avec vous et exécuter certaines commandes '
@@ -374,26 +412,28 @@ class VoiceCommandService {
         'votre prénom.',
       );
     }
-    if (dit([
-      'comment tu fonctionnes',
-      'comment fonctionnes tu',
-      'comment tu marches',
-      'comment ca marche',
-      'parle moi de toi',
-    ])) {
+    if (!avecIA &&
+        dit([
+          'comment tu fonctionnes',
+          'comment fonctionnes tu',
+          'comment tu marches',
+          'comment ca marche',
+          'parle moi de toi',
+        ])) {
       c.sujet = _notion('ton fonctionnement');
       return _dire(c.sujet!.courte);
     }
-    if (dit([
-      'tu es une ia',
-      'es tu une ia',
-      'tu es un robot',
-      'es tu un robot',
-      'tu es humain',
-      'es tu humain',
-      'tu es vivant',
-      'tu es intelligent',
-    ])) {
+    if (!avecIA &&
+        dit([
+          'tu es une ia',
+          'es tu une ia',
+          'tu es un robot',
+          'es tu un robot',
+          'tu es humain',
+          'es tu humain',
+          'tu es vivant',
+          'tu es intelligent',
+        ])) {
       return _dire(
         'Je suis un assistant vocal en cours de développement. Pour l’instant, '
         'je réponds avec des règles écrites dans l’application, sans '
@@ -476,7 +516,7 @@ class VoiceCommandService {
     }
 
     // ---- 8. Notions techniques --------------------------------------------
-    final notion = _notionDemandee(phrase);
+    final notion = _notionDemandee(phrase, avecIA);
     if (notion != null) {
       c.sujet = notion;
       return _dire(notion.courte);
@@ -541,7 +581,12 @@ class VoiceCommandService {
 
   /// Notion citée dans une question (« c'est quoi le cloud ») ou seule
   /// (« Flutter ? »).
-  Notion? _notionDemandee(String phrase) {
+  ///
+  /// [avecIA] : la question doit porter sur la notion seule (« c'est quoi
+  /// le cloud »), pas la citer dans une demande plus large (« explique la
+  /// différence entre Flutter et React Native » va à l'IA) ; la notion
+  /// « ton fonctionnement », écrite faute d'IA, lui est laissée.
+  Notion? _notionDemandee(String phrase, [bool avecIA = false]) {
     final encadree = ' $phrase ';
     final question = _marqueursQuestion.any((m) => encadree.contains(' $m '));
     final mots = phrase.split(' ').length;
@@ -552,8 +597,11 @@ class VoiceCommandService {
         // Le nom le plus long l'emporte (« modele de langage » plutôt que
         // « ia »).
         if (encadree.contains(' $nom ') && nom.length > longueur) {
-          final seul = mots <= nom.split(' ').length + 2;
-          if (question || seul) {
+          final taille = nom.split(' ').length;
+          final seul = mots <= taille + 2;
+          final ciblee = !avecIA || mots <= taille + 5;
+          final repli = avecIA && n.noms.contains('ton fonctionnement');
+          if ((seul || (question && ciblee)) && !repli) {
             meilleure = n;
             longueur = nom.length;
           }
@@ -584,11 +632,21 @@ class VoiceCommandService {
 
   /// Prénom donné dans la phrase (« je m'appelle Jordi »), ou phrase entière
   /// quand JARVIS vient de demander le prénom ([direct]).
-  String? _extrairePrenom(String phrase, String brut, {bool direct = false}) {
+  ///
+  /// [court] : le prénom doit terminer une phrase courte (« je m'appelle
+  /// Jordi ») ; « moi c'est plutôt le football qui m'intéresse » n'en
+  /// donne pas.
+  String? _extrairePrenom(
+    String phrase,
+    String brut, {
+    bool direct = false,
+    bool court = false,
+  }) {
     String? reste;
     final m = _declarationPrenom.firstMatch(phrase);
     if (m != null) {
       reste = m.group(1);
+      if (court && reste != null && reste.split(' ').length > 3) return null;
     } else if (direct && phrase.split(' ').length <= 3) {
       reste = phrase.replaceFirst(RegExp(r'^(c est|moi c est|je suis)\s+'), '');
     }

@@ -19,6 +19,7 @@ class DemandeJarvis {
     this.conversation,
     this.conversationNouvelle = false,
     this.vocale = false,
+    this.idConversation,
   }) : texteComplet = texteComplet ?? texte;
 
   /// Ce que l'utilisateur dit à JARVIS (sans la conversation collée).
@@ -42,6 +43,10 @@ class DemandeJarvis {
 
   /// Phrase dite en mode vocal (réponse à prononcer).
   final bool vocale;
+
+  /// Identifiant local de la conversation du fil ([ConversationSession
+  /// .idCourant]) : un moteur d'IA y rattache sa conversation serveur.
+  final String? idConversation;
 }
 
 /// Réponse de JARVIS dans le fil.
@@ -51,6 +56,7 @@ class ReponseJarvis {
     this.choixTon = false,
     this.actions = const [],
     this.terminerSession = false,
+    this.erreur = false,
   });
 
   final String texte;
@@ -63,12 +69,15 @@ class ReponseJarvis {
 
   /// « Au revoir JARVIS » : le chat vocal se termine.
   final bool terminerSession;
+
+  /// Pas une réponse : explication d'un échec (serveur injoignable, quota
+  /// atteint…). Le message de l'utilisateur reste dans le fil, à renvoyer.
+  final bool erreur;
 }
 
 /// Cerveau de la conversation, écrite comme vocale (une seule conversation,
-/// un seul contexte). Aujourd'hui [MoteurConversationLocal] (règles
-/// locales) ; demain un service d'IA (API) qui implémentera la même
-/// interface, sans toucher à l'écran.
+/// un seul contexte) : [MoteurConversationLocal] (règles locales seules) ou
+/// [MoteurConversationHybride] (règles locales, sinon l'IA du serveur).
 abstract class MoteurConversation {
   Future<ReponseJarvis> repondre(DemandeJarvis demande);
 
@@ -114,19 +123,45 @@ class MoteurConversationLocal implements MoteurConversation {
 
   @override
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
+    final locale = await repondreLocalement(demande);
+    if (locale != null) return locale;
+    // Vocal : la réponse « pas encore disponible » du mode vocal.
+    if (demande.vocale) {
+      final r = await _commandes.traiter(demande.texte);
+      return ReponseJarvis(r.texte, terminerSession: r.terminerSession);
+    }
+    return const ReponseJarvis(inconnue);
+  }
+
+  /// Réponse locale si la demande en a une, sinon null : conversation
+  /// collée (analysée sur l'appareil, jamais envoyée), commande reconnue
+  /// (heure, calcul, prénom, notion…).
+  ///
+  /// [avecIA] : une IA prend le relais si rien ne correspond (voir
+  /// [VoiceCommandService.reponseLocale]).
+  Future<ReponseJarvis?> repondreLocalement(
+    DemandeJarvis demande, {
+    bool avecIA = false,
+  }) async {
     final c = demande.conversation;
+    // Sans conversation connue, « résume la Révolution française » est une
+    // vraie question pour l'IA ; « résume cette conversation » attend
+    // toujours qu'on la colle.
+    final sansConversation = !avecIA || _parleDUneConversation(demande.texte)
+        ? const ReponseJarvis(demandeConversation)
+        : null;
     switch (demande.intention) {
       case IntentionMessage.reponse:
-        if (c == null) return const ReponseJarvis(demandeConversation);
+        if (c == null) return sansConversation;
         return ReponseJarvis(
           AnalyseConversation(c).avantReponse,
           choixTon: true,
         );
       case IntentionMessage.resume:
-        if (c == null) return const ReponseJarvis(demandeConversation);
+        if (c == null) return sansConversation;
         return ReponseJarvis(AnalyseConversation(c).resume);
       case IntentionMessage.comprendre:
-        if (c == null) return const ReponseJarvis(demandeConversation);
+        if (c == null) return sansConversation;
         return ReponseJarvis(AnalyseConversation(c).comprehension);
       case IntentionMessage.analyse:
         // Sans conversation, « je suis fâché » reste une discussion.
@@ -143,18 +178,43 @@ class MoteurConversationLocal implements MoteurConversation {
           );
         }
     }
-    // Vocal : la réponse complète du mode vocal (dont « Au revoir »).
-    if (demande.vocale) {
-      final r = await _commandes.traiter(demande.texte);
-      return ReponseJarvis(r.texte, terminerSession: r.terminerSession);
-    }
-    return ReponseJarvis(_discussion(demande.texte));
+    final r = _commandes.reponseLocale(demande.texte, avecIA: avecIA);
+    if (r == null) return null;
+    // « Au revoir » ne termine que le chat vocal.
+    return ReponseJarvis(
+      r.texte,
+      terminerSession: demande.vocale && r.terminerSession,
+    );
   }
 
-  String _discussion(String texte) {
-    final r = _commandes.reponseLocale(texte);
-    return r?.texte ?? inconnue;
+  static const _motsConversation = [
+    'conversation',
+    'discussion',
+    'message',
+    'messages',
+    'echange',
+    'sms',
+    'texto',
+    'mail',
+    'whatsapp',
+    'messenger',
+    'instagram',
+    'lui',
+    'leur',
+  ];
+
+  /// « Résume cette conversation », « que lui répondre ? », « que
+  /// répondre ? » : la demande porte sur une conversation à coller.
+  static bool _parleDUneConversation(String texte) {
+    final t = DetecteurIntention.normaliser(texte);
+    final encadre = ' $t ';
+    return t.split(' ').length <= 3 ||
+        _motsConversation.any((m) => encadre.contains(' $m '));
   }
+
+  /// Réponse donnée par l'IA : retenue dans le contexte local (« répète »).
+  void retenirReponseDistante(String texte) =>
+      _commandes.retenirReponseDistante(texte);
 
   @override
   void reinitialiser() => _commandes.contexte.reinitialiser();

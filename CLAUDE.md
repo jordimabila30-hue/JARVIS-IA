@@ -198,7 +198,8 @@ lib/
 │   ├── peripheriques_audio*.dart     # liste des micros (Web uniquement)
 │   ├── prosodie.dart                 # rythme et accents des réponses (pour PIM)
 │   ├── voice_command_service.dart    # conversation locale (contexte) + futur relais IA
-│   ├── conversation/                 # LA conversation (écrit + vocal) : session, détecteurs, analyse, tons, moteur (local → API)
+│   ├── conversation/                 # LA conversation (écrit + vocal) : session, détecteurs, analyse, tons, moteurs local / IA / hybride
+│   ├── api_jarvis.dart               # client FastAPI : /me, chat SSE (discuter) ; flux_sse.dart : décodage SSE
 │   ├── authentification/            # AuthService, contrat AuthRepository (non configuré), validations, session, ConfigAuth
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
 │   ├── conversations/                # multicanal : fournisseurs par messagerie (JARVIS réel, autres non intégrées), tri, recherche, épingles
@@ -275,7 +276,14 @@ backend : 10 s, ne pas l'augmenter ; dérive d'horloge : `docs/backend/HORLOGE.m
 Flutter Web : port 3000 (seule origine CORS autorisée). Accès de
 développement « Continuer sans compte » : debug / profile seulement
 (`JARVIS_ACCES_DEV`).
-Les commandes locales (heure, date…) restent prioritaires sur la future IA.
+Les commandes locales (heure, date…) restent prioritaires sur l'IA.
+
+Conversation IA : `ConversationSession` → `MoteurConversationHybride`
+(local d'abord, `reponseLocale(avecIA: true)`) → `MoteurConversationIA` →
+`ApiJarvis.discuter` (`POST /api/v1/chat/stream`, SSE). Seul le nouveau
+message part ; le serveur garde l'historique (UUID rattaché à l'id local de
+la conversation). Écrit et vocal : même moteur. Conversations collées ou
+importées : jamais envoyées.
 
 Conversations multicanal (menu latéral) : le panneau ne connaît que
 `ConversationsMulticanal` ; chaque messagerie est un

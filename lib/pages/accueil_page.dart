@@ -8,6 +8,8 @@ import '../models/conversations/source_conversation.dart';
 import '../services/api_jarvis.dart';
 import '../services/authentification/auth_service.dart';
 import '../services/conversation/conversation_session.dart';
+import '../services/conversation/moteur_conversation_hybride.dart';
+import '../services/conversation/moteur_conversation_ia.dart';
 import '../services/conversations/conversations_multicanal.dart';
 import '../services/conversations/epingles_conversations.dart';
 import '../services/conversations/fournisseur_conversations.dart';
@@ -79,7 +81,9 @@ class AccueilPage extends StatefulWidget {
   /// d'authentification (tests, préversions).
   final AuthService? auth;
 
-  /// Backend JARVIS (vérification du compte côté serveur).
+  /// Backend JARVIS : vérification du compte côté serveur, et IA de la
+  /// conversation (écrite et vocale) quand les règles locales ne suffisent
+  /// pas. Null : règles locales seules.
   final ApiJarvis? api;
 
   /// « Se connecter » depuis les Paramètres, quand JARVIS est ouvert sans
@@ -117,7 +121,16 @@ class _AccueilPageState extends State<AccueilPage> {
   // Dernière réponse de JARVIS déjà vue (seules les nouvelles sont lues).
   int _derniereVue = -1;
 
-  late final _conversation = widget.conversation ?? ConversationSession();
+  late final _conversation =
+      widget.conversation ??
+      ConversationSession(
+        moteur: switch (widget.api) {
+          final api? => MoteurConversationHybride(
+            ia: MoteurConversationIA(api),
+          ),
+          null => null,
+        },
+      );
   bool _enConversation = false;
 
   late final _multicanal =
