@@ -21,13 +21,17 @@ class BandeauAuth extends StatelessWidget {
   });
 
   /// Bandeau d'un échec : « pas encore disponible » (information, texte
-  /// propre à la page) si aucun serveur n'est configuré, erreur sinon.
+  /// propre à la page) si aucun serveur n'est configuré ; information aussi
+  /// quand le compte est créé mais attend la confirmation de l'e-mail ;
+  /// erreur sinon.
   factory BandeauAuth.echec(
     ErreurAuth erreur, {
     required String siNonConfigure,
-  }) => erreur.type == TypeErreurAuth.serveurNonConfigure
-      ? BandeauAuth(message: siNonConfigure)
-      : BandeauAuth(message: erreur.message, type: TypeBandeau.erreur);
+  }) => switch (erreur.type) {
+    TypeErreurAuth.serveurNonConfigure => BandeauAuth(message: siNonConfigure),
+    TypeErreurAuth.confirmationEnvoyee => BandeauAuth(message: erreur.message),
+    _ => BandeauAuth(message: erreur.message, type: TypeBandeau.erreur),
+  };
 
   final String message;
   final TypeBandeau type;

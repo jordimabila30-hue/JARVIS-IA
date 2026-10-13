@@ -1,0 +1,4 @@
+# Fins de ligne des scripts du backend (repris du dépôt backend) :
+# .bat pour Windows, .sh pour les serveurs Linux (deploy/).
+*.bat text eol=crlf
+*.sh text eol=lf

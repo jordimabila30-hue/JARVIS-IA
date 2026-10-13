@@ -102,6 +102,7 @@ void main() {
             'motdepasse1',
           ],
           EcranAuth.recuperation => ['jordi@exemple.com'],
+          EcranAuth.nouveauMotDePasse => ['motdepasse1', 'motdepasse1'],
         };
         for (var i = 0; i < valeurs.length; i++) {
           await tester.enterText(champs.at(i), valeurs[i]);

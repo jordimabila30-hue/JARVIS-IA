@@ -133,7 +133,9 @@ void main() {
     final reglages = await _ouvrir(tester, const Size(1366, 768));
     expect(find.text('Paramètres'), findsWidgets);
     expect(find.text('Profil vocal'), findsOneWidget);
-    expect(find.text('jordi'), findsOneWidget);
+    // Aucun compte inventé : sans serveur de comptes, « Sans compte ».
+    expect(find.text('jordi'), findsNothing);
+    expect(find.text('Sans compte'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Dynamique'));

@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/api_jarvis.dart';
+import '../../services/authentification/auth_service.dart';
 import '../../services/voice_session.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../models/forme_pim.dart';
@@ -10,6 +12,7 @@ import '../../services/preferences_pim_service.dart';
 import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
 import 'panneau_chat_vocal.dart';
+import 'panneau_compte.dart';
 
 /// Sections du panneau Paramètres.
 enum SectionParametres {
@@ -17,7 +20,10 @@ enum SectionParametres {
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
   apparence('Apparence', Icons.palette_outlined),
-  confidentialite('Confidentialité', Icons.lock_outline_rounded);
+  confidentialite('Confidentialité', Icons.lock_outline_rounded),
+
+  /// Ouverte par la carte du compte, en bas de la navigation.
+  compte('Compte', Icons.person_outline_rounded);
 
   const SectionParametres(this.libelle, this.icone);
 
@@ -27,15 +33,6 @@ enum SectionParametres {
 
 /// Compte affiché en bas de la navigation. Aucune connexion n'existe
 /// encore : ces informations seront remplacées par le vrai compte.
-class ProfilUtilisateur {
-  const ProfilUtilisateur({required this.nom, required this.offre});
-
-  final String nom;
-  final String offre;
-
-  static const local = ProfilUtilisateur(nom: 'jordi', offre: 'Plus');
-}
-
 /// Largeur en dessous de laquelle le panneau passe en plein écran, avec
 /// la liste des sections puis la section choisie.
 const largeurParametresCompacte = 760.0;
@@ -49,6 +46,9 @@ Future<void> ouvrirParametres(
   required VoiceSession session,
   PreferencesPimService? formes,
   SectionParametres section = SectionParametres.chatVocal,
+  AuthService? compte,
+  ApiJarvis? api,
+  VoidCallback? surConnexion,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < largeurParametresCompacte;
   final route = RawDialogRoute<void>(
@@ -60,6 +60,9 @@ Future<void> ouvrirParametres(
       session: session,
       formes: formes,
       sectionInitiale: section,
+      compte: compte,
+      api: api,
+      surConnexion: surConnexion,
     ),
     transitionBuilder: (context, animation, _, enfant) {
       final courbe = CurvedAnimation(
@@ -107,7 +110,9 @@ class FenetreParametres extends StatefulWidget {
     required this.session,
     this.formes,
     this.sectionInitiale = SectionParametres.chatVocal,
-    this.utilisateur = ProfilUtilisateur.local,
+    this.compte,
+    this.api,
+    this.surConnexion,
   });
 
   final VoiceSession session;
@@ -116,7 +121,15 @@ class FenetreParametres extends StatefulWidget {
   /// si absentes.
   final PreferencesPimService? formes;
   final SectionParametres sectionInitiale;
-  final ProfilUtilisateur utilisateur;
+
+  /// Compte connecté (null : aucun serveur de comptes).
+  final AuthService? compte;
+
+  /// Backend JARVIS, pour vérifier le compte côté serveur.
+  final ApiJarvis? api;
+
+  /// « Se connecter » quand JARVIS est ouvert sans compte.
+  final VoidCallback? surConnexion;
 
   @override
   State<FenetreParametres> createState() => _FenetreParametresState();
@@ -213,7 +226,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           child: _Navigation(
                             section: _section,
                             surChoix: (s) => setState(() => _section = s),
-                            utilisateur: widget.utilisateur,
+                            compte: widget.compte,
                           ),
                         ),
                         Expanded(
@@ -221,6 +234,9 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             section: _section,
                             session: widget.session,
                             formes: _formes,
+                            compte: widget.compte,
+                            api: widget.api,
+                            surConnexion: widget.surConnexion,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -270,6 +286,9 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           section: _section,
                           session: widget.session,
                           formes: _formes,
+                          compte: widget.compte,
+                          api: widget.api,
+                          surConnexion: widget.surConnexion,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -285,7 +304,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                         child: _Navigation(
                           section: null,
                           surChoix: _choisir,
-                          utilisateur: widget.utilisateur,
+                          compte: widget.compte,
                           grand: true,
                         ),
                       ),
@@ -373,14 +392,14 @@ class _Navigation extends StatelessWidget {
   const _Navigation({
     required this.section,
     required this.surChoix,
-    required this.utilisateur,
+    required this.compte,
     this.grand = false,
   });
 
   /// Section affichée (null sur téléphone : simple liste).
   final SectionParametres? section;
   final ValueChanged<SectionParametres> surChoix;
-  final ProfilUtilisateur utilisateur;
+  final AuthService? compte;
 
   /// Téléphone : entrées plus hautes, chevron à droite.
   final bool grand;
@@ -417,20 +436,25 @@ class _Navigation extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   for (final s in SectionParametres.values)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: _EntreeNavigation(
-                        section: s,
-                        choisie: s == section,
-                        grand: grand,
-                        surChoix: () => surChoix(s),
+                    if (s != SectionParametres.compte)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _EntreeNavigation(
+                          section: s,
+                          choisie: s == section,
+                          grand: grand,
+                          surChoix: () => surChoix(s),
+                        ),
                       ),
-                    ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
-            _CarteUtilisateur(utilisateur: utilisateur),
+            _CarteUtilisateur(
+              compte: compte,
+              choisie: section == SectionParametres.compte,
+              surAppui: () => surChoix(SectionParametres.compte),
+            ),
           ],
         ),
       ),
@@ -512,77 +536,112 @@ class _EntreeNavigation extends StatelessWidget {
   }
 }
 
-/// Carte du compte, discrète, en bas de la navigation.
+/// Carte du compte, discrète, en bas de la navigation : nom et offre du
+/// compte connecté (lus sur le serveur), ou « Sans compte ». Ouvre la
+/// section « Compte ».
 class _CarteUtilisateur extends StatelessWidget {
-  const _CarteUtilisateur({required this.utilisateur});
+  const _CarteUtilisateur({
+    required this.compte,
+    required this.choisie,
+    required this.surAppui,
+  });
 
-  final ProfilUtilisateur utilisateur;
+  final AuthService? compte;
+  final bool choisie;
+  final VoidCallback surAppui;
 
   @override
   Widget build(BuildContext context) {
-    final initiale = utilisateur.nom.isEmpty
-        ? '?'
-        : utilisateur.nom[0].toUpperCase();
-    return Tooltip(
-      message: 'La gestion du compte arrive bientôt.',
-      triggerMode: TooltipTriggerMode.tap,
-      child: Semantics(
-        label: 'Compte ${utilisateur.nom}, offre ${utilisateur.offre}',
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: CouleursJarvis.trait.withValues(alpha: 0.7),
-            ),
-            color: CouleursJarvis.coque.withValues(alpha: 0.5),
+    final c = compte;
+    if (c == null) return _carte(nom: 'Sans compte', offre: 'Compte');
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        final u = c.utilisateur;
+        if (u == null) return _carte(nom: 'Sans compte', offre: 'Se connecter');
+        final p = c.profil;
+        return _carte(
+          nom: p?.nom ?? u.nom ?? u.email,
+          offre: p?.offre.libelle ?? 'Compte JARVIS',
+        );
+      },
+    );
+  }
+
+  Widget _carte({required String nom, required String offre}) {
+    final initiale = nom.isEmpty ? '?' : nom.characters.first.toUpperCase();
+    return Semantics(
+      button: true,
+      selected: choisie,
+      label: 'Compte $nom, $offre',
+      excludeSemantics: true,
+      child: Material(
+        color: choisie
+            ? CouleursJarvis.coque
+            : CouleursJarvis.coque.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: choisie
+                ? CouleursJarvis.signal.withValues(alpha: 0.45)
+                : CouleursJarvis.trait.withValues(alpha: 0.7),
           ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: CouleursJarvis.signal.withValues(alpha: 0.14),
-                child: Text(
-                  initiale,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: CouleursJarvis.signal,
+        ),
+        child: InkWell(
+          onTap: surAppui,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: CouleursJarvis.signal.withValues(
+                    alpha: 0.14,
+                  ),
+                  child: Text(
+                    initiale,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: CouleursJarvis.signal,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      utilisateur.nom,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
-                        color: CouleursJarvis.texte,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        nom,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          color: CouleursJarvis.texte,
+                        ),
                       ),
-                    ),
-                    Text(
-                      utilisateur.offre,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: CouleursJarvis.texteSecondaire,
+                      Text(
+                        offre,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: CouleursJarvis.texteSecondaire,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: CouleursJarvis.texteSecondaire,
-              ),
-            ],
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: CouleursJarvis.texteSecondaire,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -598,12 +657,18 @@ class _Contenu extends StatelessWidget {
     required this.session,
     required this.formes,
     required this.marge,
+    this.compte,
+    this.api,
+    this.surConnexion,
     this.avecTitre = true,
   });
 
   final SectionParametres section;
   final VoiceSession session;
   final PreferencesPimService formes;
+  final AuthService? compte;
+  final ApiJarvis? api;
+  final VoidCallback? surConnexion;
   final double marge;
   final bool avecTitre;
 
@@ -658,6 +723,11 @@ class _Contenu extends StatelessWidget {
                 ),
                 SectionParametres.particules => _FormePrincipale(
                   formes: formes,
+                ),
+                SectionParametres.compte => PanneauCompte(
+                  compte: compte,
+                  api: api,
+                  surConnexion: surConnexion,
                 ),
                 _ => _SectionAVenir(section: section),
               },
@@ -749,16 +819,19 @@ class _SectionAVenir extends StatelessWidget {
         [('Thème', 'Ivoire'), ('Couleur signature', 'Bleu-violet')],
       ),
       SectionParametres.confidentialite => (
-        'JARVIS n’envoie aucune donnée à un serveur. Les réglages restent '
-            'sur cet appareil. La reconnaissance vocale du navigateur ou du '
-            'système peut utiliser son propre service en ligne.',
+        'Votre compte (adresse e-mail, nom) est géré par le serveur '
+            'JARVIS. Les conversations et les réglages restent sur cet '
+            'appareil. La reconnaissance vocale du navigateur ou du système '
+            'peut utiliser son propre service en ligne.',
         [
+          ('Compte', 'Serveur JARVIS'),
           ('Réglages', 'Enregistrés sur l’appareil'),
           ('Assistant en ligne', 'Non connecté'),
         ],
       ),
       SectionParametres.chatVocal ||
-      SectionParametres.particules => ('', const []),
+      SectionParametres.particules ||
+      SectionParametres.compte => ('', const []),
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

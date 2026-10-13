@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug uniquement : le backend JARVIS local répond en http
+         (http://10.0.2.2:8000 depuis l'émulateur, ou l'adresse de
+         l'ordinateur sur le réseau local). La version publiée n'utilise
+         que https. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

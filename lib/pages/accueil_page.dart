@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../models/conversations/apercu_conversation.dart';
 import '../models/conversations/source_conversation.dart';
+import '../services/api_jarvis.dart';
+import '../services/authentification/auth_service.dart';
 import '../services/conversation/conversation_session.dart';
 import '../services/conversations/conversations_multicanal.dart';
 import '../services/conversations/epingles_conversations.dart';
@@ -49,6 +51,9 @@ class AccueilPage extends StatefulWidget {
     this.formesPim,
     this.multicanal,
     this.partages,
+    this.auth,
+    this.api,
+    this.surConnexion,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -69,6 +74,17 @@ class AccueilPage extends StatefulWidget {
   /// Partages reçus de l'extérieur (export WhatsApp sur Android) ; ceux de
   /// la plateforme par défaut.
   final ReceptionPartages? partages;
+
+  /// Compte (section « Compte » des Paramètres) ; null : aucun serveur
+  /// d'authentification (tests, préversions).
+  final AuthService? auth;
+
+  /// Backend JARVIS (vérification du compte côté serveur).
+  final ApiJarvis? api;
+
+  /// « Se connecter » depuis les Paramètres, quand JARVIS est ouvert sans
+  /// compte (accès de développement).
+  final VoidCallback? surConnexion;
 
   @override
   State<AccueilPage> createState() => _AccueilPageState();
@@ -320,7 +336,14 @@ class _AccueilPageState extends State<AccueilPage> {
     _focus.unfocus();
     // Quitter l'accueil interrompt une démonstration en cours.
     _pim.annulerApercu();
-    await ouvrirParametres(context, session: _session, formes: _formesPim);
+    await ouvrirParametres(
+      context,
+      session: _session,
+      formes: _formesPim,
+      compte: widget.auth,
+      api: widget.api,
+      surConnexion: widget.surConnexion,
+    );
   }
 
   /// « + » → « Importer une conversation » : page d'import WhatsApp

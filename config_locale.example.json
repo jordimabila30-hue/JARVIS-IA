@@ -1,0 +1,5 @@
+{
+  "SUPABASE_URL": "https://<identifiant-du-projet>.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_...",
+  "JARVIS_API_URL": ""
+}

@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/main.dart';
+import 'package:ia_jarvis/models/authentification/profil_compte.dart';
 import 'package:ia_jarvis/models/authentification/resultat_auth.dart';
 import 'package:ia_jarvis/models/authentification/utilisateur_auth.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
@@ -74,6 +75,27 @@ class _Depot implements AuthRepository {
   @override
   Future<ResultatAuth<UtilisateurAuth?>> restaurerSession() =>
       _nonConfigure.restaurerSession();
+
+  @override
+  Future<ResultatAuth<void>> changerMotDePasse(String motDePasse) =>
+      _nonConfigure.changerMotDePasse(motDePasse);
+
+  @override
+  bool get recuperationEnCours => false;
+
+  @override
+  Future<ResultatAuth<ProfilCompte>> lireProfil() =>
+      _nonConfigure.lireProfil();
+
+  @override
+  Future<ResultatAuth<ProfilCompte>> modifierProfil({required String nom}) =>
+      _nonConfigure.modifierProfil(nom: nom);
+
+  @override
+  Future<String?> jetonAcces() async => null;
+
+  @override
+  Stream<UtilisateurAuth?> get changements => const Stream.empty();
 }
 
 late _Depot _depot;

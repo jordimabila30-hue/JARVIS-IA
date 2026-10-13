@@ -2,6 +2,20 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "jarvis-web-compte",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3000",
+        "--bind",
+        "localhost",
+        "--directory",
+        "build/web"
+      ],
+      "port": 3000
+    },
+    {
       "name": "jarvis-web",
       "runtimeExecutable": "python",
       "runtimeArgs": [

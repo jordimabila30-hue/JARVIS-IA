@@ -7,12 +7,13 @@ import '../../widgets/authentification/brouillon_auth.dart';
 import 'connexion_page.dart';
 import 'inscription_page.dart';
 import 'mot_de_passe_oublie_page.dart';
+import 'nouveau_mot_de_passe_page.dart';
 
 /// Écrans du parcours d'authentification.
-enum EcranAuth { connexion, inscription, recuperation }
+enum EcranAuth { connexion, inscription, recuperation, nouveauMotDePasse }
 
 /// Parcours d'authentification : connexion, inscription, mot de passe
-/// oublié. Passage d'un écran à l'autre par un fondu léger, sans perdre les
+/// oublié, nouveau mot de passe (ouvert par le lien reçu par e-mail). Passage d'un écran à l'autre par un fondu léger, sans perdre les
 /// saisies ([BrouillonAuth]). Retour (Android, navigateur) : revient à la
 /// connexion.
 class AuthentificationPage extends StatefulWidget {
@@ -92,6 +93,17 @@ class _AuthentificationPageState extends State<AuthentificationPage> {
         brouillon: _brouillon,
         validation: v,
         surConnexion: () => _aller(EcranAuth.connexion),
+      ),
+      EcranAuth.nouveauMotDePasse => NouveauMotDePassePage(
+        key: const ValueKey(EcranAuth.nouveauMotDePasse),
+        service: service,
+        brouillon: _brouillon,
+        validation: v,
+        surConnexion: () => _aller(EcranAuth.connexion),
+        surTermine: () {
+          final u = service.utilisateur;
+          if (u != null) _quitter(() => widget.surConnecte(u));
+        },
       ),
     };
   }

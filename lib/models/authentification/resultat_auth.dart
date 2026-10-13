@@ -35,6 +35,20 @@ enum TypeErreurAuth {
   /// Session expirée ou révoquée : nouvelle connexion nécessaire.
   sessionExpiree,
 
+  /// Compte créé, mais l'adresse e-mail doit d'abord être confirmée
+  /// (lien envoyé par e-mail) : aucune session n'est ouverte.
+  confirmationEnvoyee,
+
+  /// Connexion refusée : l'adresse e-mail n'a pas encore été confirmée.
+  emailNonConfirme,
+
+  /// Mot de passe refusé par les règles du serveur (trop court, trop
+  /// simple).
+  motDePasseFaible,
+
+  /// Trop de tentatives ou d'e-mails envoyés : réessayer plus tard.
+  tropDeTentatives,
+
   /// Serveur injoignable (réseau, délai dépassé).
   reseau,
 
@@ -67,6 +81,17 @@ class ErreurAuth {
           'Certaines informations ont été refusées. Vérifiez le formulaire.',
         TypeErreurAuth.sessionExpiree =>
           'Votre session a expiré. Reconnectez-vous.',
+        TypeErreurAuth.confirmationEnvoyee =>
+          'Compte créé. Ouvrez l’e-mail de confirmation que nous venons de '
+              'vous envoyer, puis connectez-vous.',
+        TypeErreurAuth.emailNonConfirme =>
+          'Confirmez d’abord votre adresse e-mail grâce au lien reçu, puis '
+              'reconnectez-vous.',
+        TypeErreurAuth.motDePasseFaible =>
+          'Ce mot de passe est trop simple. Choisissez-en un plus long ou '
+              'plus varié.',
+        TypeErreurAuth.tropDeTentatives =>
+          'Trop de tentatives. Patientez quelques minutes, puis réessayez.',
         TypeErreurAuth.reseau =>
           'Impossible de joindre le serveur. Vérifiez votre connexion.',
         TypeErreurAuth.operationEnCours => 'Une opération est déjà en cours.',
