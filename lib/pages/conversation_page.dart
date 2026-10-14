@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/message_conversation.dart';
 import '../services/conversation/conversation_session.dart';
+import '../services/ecriture/ecriture_progressive.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../widgets/conversation/bulle_utilisateur.dart';
@@ -123,6 +124,10 @@ class _ConversationPageState extends State<ConversationPage> {
     _dernier = widget.session.messages.lastOrNull?.id;
     _reflexion = _attente(widget.session);
     widget.session.addListener(_surSession);
+    final dernier = widget.session.messages.lastOrNull;
+    final ecriture = dernier?.ecriture;
+    if (ecriture != null && !ecriture.termine) _suivre(ecriture, dernier!.id);
+    _defilement.addListener(_majSuspension);
   }
 
   /// Réponse en préparation ou conversation en cours de chargement : les
@@ -141,8 +146,53 @@ class _ConversationPageState extends State<ConversationPage> {
   @override
   void dispose() {
     widget.session.removeListener(_surSession);
+    _suivre(null);
     _defilement.dispose();
     super.dispose();
+  }
+
+  // Réponse en train de s'écrire en bas du fil : sa carte grandit. Fil
+  // ancré en bas : tant qu'elle est visible, le texte se construit sous les
+  // yeux de l'utilisateur. Entièrement hors de la vue (il relit plus haut),
+  // l'écriture se met en pause : rien ne bouge dans l'historique, son geste
+  // n'est jamais contrarié ; elle reprend quand il redescend.
+  EcritureProgressive? _ecritureSuivie;
+  int? _idSuivi;
+
+  void _suivre(EcritureProgressive? ecriture, [int? id]) {
+    if (identical(ecriture, _ecritureSuivie)) return;
+    final ancienne = _ecritureSuivie;
+    if (ancienne != null) {
+      ancienne.removeListener(_surEcriture);
+      ancienne.suspendue = false;
+    }
+    _ecritureSuivie = ecriture;
+    _idSuivi = id;
+    ecriture?.addListener(_surEcriture);
+    _majSuspension();
+  }
+
+  void _surEcriture() {
+    final e = _ecritureSuivie;
+    if (e == null) return;
+    if (e.termine) {
+      _suivre(null);
+      return;
+    }
+    _majSuspension();
+  }
+
+  void _majSuspension() {
+    final e = _ecritureSuivie;
+    final id = _idSuivi;
+    if (e == null || id == null || !_defilement.hasClients) return;
+    final boite = _boite(id);
+    // Liste inversée : la carte la plus récente occupe le bas du fil
+    // (positions 0 à sa hauteur, marges comprises).
+    final etendue = boite == null
+        ? ConversationPage.seuilBas
+        : boite.size.height + 2 * MesuresConversation.ecartMessages + 4;
+    e.suspendue = _defilement.offset > etendue;
   }
 
   /// Liste inversée : la position 0 est le bas du fil (le plus récent).
@@ -165,6 +215,12 @@ class _ConversationPageState extends State<ConversationPage> {
     _dernier = messages.lastOrNull?.id;
     _reflexion = _attente(session);
     if (messages.isEmpty) _cles.clear();
+    final dernier = messages.lastOrNull;
+    final ecriture = dernier?.ecriture;
+    _suivre(
+      ecriture == null || ecriture.termine ? null : ecriture,
+      dernier?.id,
+    );
     // L'utilisateur relit l'historique : un message visible sert de repère
     // pour qu'il ne bouge pas quand la réponse arrive en bas.
     final repere = !descendre && !_presDuBas ? _repere() : null;

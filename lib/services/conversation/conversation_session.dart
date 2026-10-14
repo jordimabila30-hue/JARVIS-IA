@@ -6,6 +6,8 @@ import '../../models/message_conversation.dart';
 import '../conversations/correspondance_conversations.dart';
 import '../conversations/depot_conversations.dart';
 import '../conversations/synchro_echanges_locaux.dart';
+import '../ecriture/ecriture_progressive.dart';
+import '../ecriture/texte_en_direct.dart';
 import '../voice_command_service.dart';
 import 'detecteur_conversation.dart';
 import 'detecteur_intention.dart';
@@ -19,6 +21,13 @@ import 'moteur_conversation_ia.dart';
 /// message → détection (conversation collée ? intention ?) → moteur →
 /// réponse dans le fil. Les envois sont traités dans l'ordre, un à la
 /// fois : jamais de réponse en double ni d'état bloqué.
+///
+/// Chaque réponse de JARVIS s'écrit progressivement dans sa bulle
+/// ([MessageConversation.ecriture]) : texte complet d'un coup (réponse
+/// locale) ou fragments de l'IA dès leur arrivée. Trois étapes séparées :
+/// réception (tampon [TexteEnDirect]), affichage (animation, côté écran,
+/// qui peut finir après la réception), enregistrement (réponse finale,
+/// une seule fois, indépendante de l'animation).
 ///
 /// Les détecteurs locaux ne font qu'un pré-classement : le moteur reçoit
 /// toujours le texte réel et l'historique ([DemandeJarvis]), pour qu'un
@@ -68,8 +77,12 @@ class ConversationSession extends ChangeNotifier {
 
   final List<MessageConversation> messages = [];
 
-  /// Vrai pendant que JARVIS prépare sa réponse.
-  bool get enReflexion => _enCours > 0;
+  /// Vrai pendant que JARVIS prépare sa réponse, avant que son texte
+  /// commence à arriver (ensuite, il s'écrit dans sa bulle).
+  bool get enReflexion => _enAttente > 0;
+  int _enAttente = 0;
+
+  /// Réponses en préparation ou en réception.
   int _enCours = 0;
 
   /// Vrai tant qu'aucun message n'est affiché (une conversation en cours
@@ -135,7 +148,9 @@ class ConversationSession extends ChangeNotifier {
           r == null
               ? null
               : ReponseVocale(
-                  r.texte,
+                  // Réponse interrompue : le texte reçu, puis pourquoi il
+                  // s'arrête. Toujours prononcée une seule fois, en entier.
+                  r.interrompue ? '${r.texte} ${r.incident}' : r.texte,
                   source: SourceReponse.locale,
                   terminerSession: r.terminerSession,
                 ),
@@ -206,7 +221,48 @@ class ConversationSession extends ChangeNotifier {
   }) async {
     final generation = _generation;
     _enCours++;
+    _enAttente++;
     notifyListeners();
+    // Réception : tampon des fragments de l'IA (texte mis en forme au fur
+    // et à mesure, Markdown inachevé masqué).
+    final flux = TexteEnDirect(
+      nettoyer: MoteurConversationIA.texteSimpleProvisoire,
+    );
+    final ecriture = EcritureProgressive(flux);
+    int? idBulle;
+    DateTime? heureBulle;
+    var attente = true;
+    void finAttente() {
+      if (!attente) return;
+      attente = false;
+      _enAttente--;
+    }
+
+    void surFragment(String fragment) {
+      if (_ferme) return;
+      flux.ajouter(fragment);
+      // Fil changé avant le premier fragment : aucune bulle ici, la
+      // réponse rejoindra sa conversation à la fin.
+      if (idBulle != null || generation != _generation) return;
+      // Premier fragment : la bulle de JARVIS remplace la réflexion, le
+      // texte s'y écrit pendant que la suite arrive.
+      finAttente();
+      final id = idBulle = _id++;
+      final heure = heureBulle = _horloge();
+      messages.add(
+        MessageConversation(
+          id: id,
+          auteur: AuteurMessage.jarvis,
+          heure: heure,
+          conversation: demande.conversation,
+          vocal: vocal,
+          ecriture: ecriture,
+          redaction: true,
+        ),
+      );
+      notifyListeners();
+    }
+
     ReponseJarvis reponse;
     try {
       if (!vocal) await Future<void>.delayed(delaiReflexion);
@@ -214,23 +270,48 @@ class ConversationSession extends ChangeNotifier {
       // (aucune conversation créée pour rien sur le serveur).
       if (_ferme || generation != _generation) {
         _enCours--;
+        finAttente();
+        ecriture.arreter();
         if (!_ferme) notifyListeners();
         return null;
       }
-      reponse = await moteur.repondre(demande);
+      reponse = await moteur.repondre(demande.avecFragments(surFragment));
     } catch (e) {
       debugPrint('[JARVIS conversation] réponse impossible : $e');
-      reponse = const ReponseJarvis(
-        'Je n’ai pas réussi à traiter ce message. Peux-tu reformuler ?',
-      );
+      final recu = MoteurConversationIA.texteSimple(flux.brut);
+      reponse = recu.isEmpty
+          ? const ReponseJarvis(
+              'Je n’ai pas réussi à traiter ce message. Peux-tu reformuler ?',
+              erreur: true,
+            )
+          : ReponseJarvis(
+              recu,
+              erreur: true,
+              incident:
+                  'Réponse interrompue avant la fin. Renvoyez votre message '
+                  'pour obtenir la réponse complète.',
+            );
     }
     _enCours--;
-    if (_ferme) return null;
+    finAttente();
+    if (_ferme) {
+      ecriture.arreter();
+      return null;
+    }
+    // Fin de la réception : le texte final remplace le texte reçu (jamais
+    // une réponse interrompue présentée comme complète). L'écriture
+    // continue jusqu'au bout si elle était en retard.
+    if (reponse.interrompue) {
+      flux.interrompre(reponse.texte);
+    } else {
+      flux.terminer(reponse.texte);
+    }
     final idServeur = reponse.idServeur;
     final message = MessageConversation(
-      id: _id++,
+      // Même identifiant que la bulle : une seule bulle, finalisée une fois.
+      id: idBulle ?? _id++,
       auteur: AuteurMessage.jarvis,
-      heure: _horloge(),
+      heure: heureBulle ?? _horloge(),
       texte: reponse.texte,
       // Conversation de référence (choix du ton, raccourcis).
       conversation: demande.conversation,
@@ -239,29 +320,51 @@ class ConversationSession extends ChangeNotifier {
       vocal: vocal,
       idServeur: idServeur,
       enregistre: idServeur != null,
+      ecriture: ecriture,
+      incident: reponse.incident,
     );
     if (idServeur != null) surEchangeEnregistre?.call();
     if (generation != _generation) {
       // Le fil a changé pendant la réponse (IA : plusieurs secondes). Elle
       // ne va jamais dans le fil affiché, mais rejoint sa propre
       // conversation, mise de côté ou rouverte, comme sur le serveur ;
-      // conversation supprimée : perdue. Rien à dire en vocal.
+      // conversation supprimée : perdue. Rien à dire en vocal. Jamais vue
+      // en train de s'écrire : elle sera affichée entière.
+      if (idBulle == null) ecriture.toutAfficher();
       _rangerReponseTardive(demande, message);
       notifyListeners();
       return null;
     }
     if (idServeur != null) _marquerEnregistree(messages, demande.texte);
-    messages.add(message);
-    _confierEchangeLocal(demande, reponse);
+    _placer(messages, message);
+    _confierEchangeLocal(demande, reponse, message.id);
     notifyListeners();
     return reponse;
+  }
+
+  /// Remplace le message de même identifiant (bulle en réception), ou
+  /// l'ajoute à la fin.
+  static void _placer(
+    List<MessageConversation> liste,
+    MessageConversation message,
+  ) {
+    final i = liste.lastIndexWhere((m) => m.id == message.id);
+    if (i < 0) {
+      liste.add(message);
+    } else {
+      liste[i] = message;
+    }
   }
 
   /// Réponse locale ordinaire : les deux messages reçoivent l'identifiant
   /// de leur future ligne serveur (une actualisation les reconnaîtra), et
   /// l'échange part dans la file d'enregistrement. L'affichage n'attend
   /// rien.
-  void _confierEchangeLocal(DemandeJarvis demande, ReponseJarvis reponse) {
+  void _confierEchangeLocal(
+    DemandeJarvis demande,
+    ReponseJarvis reponse,
+    int idReponse,
+  ) {
     final confier = surEchangeLocal;
     final idLocal = demande.idConversation;
     if (confier == null ||
@@ -273,7 +376,8 @@ class ConversationSession extends ChangeNotifier {
         messages.length < 2) {
       return;
     }
-    final r = messages.length - 1;
+    final r = messages.lastIndexWhere((m) => m.id == idReponse);
+    if (r < 1) return;
     var q = -1;
     for (var i = r - 1; i >= 0; i--) {
       final m = messages[i];
@@ -306,14 +410,18 @@ class ConversationSession extends ChangeNotifier {
     final enregistre = message.enregistre;
     if (id == _idCourant) {
       if (enregistre) _marquerEnregistree(messages, demande.texte);
-      messages.add(message);
+      _placer(messages, message);
       return;
     }
     final i = _archives.indexWhere((a) => a.id == id);
-    if (i < 0) return;
+    if (i < 0) {
+      message.ecriture?.arreter();
+      return;
+    }
     final liste = [..._archives[i].messages];
     if (enregistre) _marquerEnregistree(liste, demande.texte);
-    _archives[i] = _archives[i]._avec(liste..add(message));
+    _placer(liste, message);
+    _archives[i] = _archives[i]._avec(liste);
   }
 
   /// La question de l'utilisateur a été enregistrée avec la réponse de
@@ -644,6 +752,7 @@ class ConversationSession extends ChangeNotifier {
     if (id == _idCourant) {
       _generation++;
       moteur.reinitialiser();
+      _arreterEcritures(messages);
       messages.clear();
       _idCourant = null;
       _derniere = null;
@@ -652,16 +761,27 @@ class ConversationSession extends ChangeNotifier {
       notifyListeners();
       return true;
     }
-    final avant = _archives.length;
-    _archives.removeWhere((a) => a.id == id);
-    if (_archives.length == avant) return false;
+    final i = _archives.indexWhere((a) => a.id == id);
+    if (i < 0) return false;
+    _arreterEcritures(_archives.removeAt(i).messages);
     notifyListeners();
     return true;
+  }
+
+  /// Écritures des messages retirés : plus rien à animer ni à suivre.
+  static void _arreterEcritures(List<MessageConversation> liste) {
+    for (final m in liste) {
+      m.ecriture?.arreter();
+    }
   }
 
   @override
   void dispose() {
     _ferme = true;
+    _arreterEcritures(messages);
+    for (final a in _archives) {
+      _arreterEcritures(a.messages);
+    }
     super.dispose();
   }
 }

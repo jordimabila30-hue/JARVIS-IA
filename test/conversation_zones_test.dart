@@ -34,6 +34,8 @@ import 'package:ia_jarvis/widgets/conversation/signature_jarvis.dart';
 import 'package:ia_jarvis/widgets/ligne_de_commande.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
+import 'outils/ecriture.dart';
+
 class _Tts implements TtsService {
   @override
   String? voiceChoisie;
@@ -176,6 +178,8 @@ Future<void> _envoyer(WidgetTester tester, String texte) async {
   await _images(tester, 5);
   await tester.testTextInput.receiveAction(TextInputAction.send);
   await _images(tester, 45);
+  // Réponse écrite progressivement jusqu'au bout (phase 4).
+  await finirEcritures(tester);
 }
 
 /// Conversation déjà longue : discussion, conversation collée, ton choisi.

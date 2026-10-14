@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/message_conversation.dart';
+import '../../services/ecriture/ecriture_progressive.dart';
 import '../../theme/gabarit_jarvis.dart';
 import '../../theme/theme_jarvis.dart';
+import '../ecriture/texte_progressif.dart';
 import 'choix_ton.dart';
 import 'heure_message.dart';
 import 'signature_jarvis.dart';
@@ -14,12 +16,16 @@ import 'reponse_proposee.dart';
 /// de lavande, signature « • JARVIS » ([SignatureJarvis]), heure en bas à
 /// droite.
 class _CadreJarvis extends StatelessWidget {
-  const _CadreJarvis({required this.child, this.heure});
+  const _CadreJarvis({required this.child, this.heure, this.ecriture});
 
   final Widget child;
 
   /// Heure de la réponse ; aucune pendant la réflexion.
   final DateTime? heure;
+
+  /// Écriture en cours : « Tout afficher » discret, à gauche de l'heure
+  /// (posé par-dessus la ligne : la carte ne change pas de hauteur).
+  final EcritureProgressive? ecriture;
 
   @override
   Widget build(BuildContext context) {
@@ -63,9 +69,21 @@ class _CadreJarvis extends StatelessWidget {
             child,
             if (heure != null) ...[
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: HeureMessage(heure!),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: HeureMessage(heure!),
+                  ),
+                  if (ecriture case final e?)
+                    Positioned(
+                      left: -6,
+                      top: -6,
+                      bottom: -6,
+                      child: Center(child: ActionToutAfficher(ecriture: e)),
+                    ),
+                ],
               ),
             ],
           ],
@@ -93,43 +111,120 @@ class CarteJarvis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reponse = message.reponseProposee;
+    final style = TextStyle(
+      fontSize: taille,
+      height: 1.55,
+      letterSpacing: 0.1,
+      color: CouleursJarvis.texte,
+    );
+    final ecriture = message.ecriture;
+    if (ecriture == null) {
+      return _CadreJarvis(
+        heure: message.heure,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message.texte, style: style),
+            ..._suite(),
+          ],
+        ),
+      );
+    }
     return _CadreJarvis(
       heure: message.heure,
+      ecriture: ecriture,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            message.texte,
-            style: TextStyle(
-              fontSize: taille,
-              height: 1.55,
-              letterSpacing: 0.1,
-              color: CouleursJarvis.texte,
-            ),
+          TexteProgressif(ecriture: ecriture, style: style),
+          // Choix du ton, raccourcis, explication d'une interruption :
+          // une fois le texte entièrement écrit (rien ne bouge sous un
+          // texte qui s'écrit encore).
+          ValueListenableBuilder<bool>(
+            valueListenable: ecriture.finie,
+            builder: (context, finie, _) {
+              final suite = finie && !message.redaction ? _suite() : null;
+              if (suite == null || suite.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: suite,
+              );
+            },
           ),
-          if (message.choixTon) ...[
-            const SizedBox(height: 18),
-            ChoixTon(ton: message.ton, surChoix: surTon),
-          ],
-          if (reponse != null) ...[
-            const SizedBox(height: 18),
-            ReponseProposee(texte: reponse, taille: taille),
-          ],
-          if (message.actions.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final a in message.actions)
-                  _Raccourci(action: a, surAction: () => surAction(a)),
-              ],
-            ),
-          ],
         ],
       ),
+    );
+  }
+
+  /// Ce qui suit le texte : interruption, choix du ton, réponse proposée,
+  /// raccourcis.
+  List<Widget> _suite() {
+    final reponse = message.reponseProposee;
+    final incident = message.incident;
+    return [
+      if (incident != null) ...[
+        const SizedBox(height: 12),
+        _Incident(texte: incident),
+      ],
+      if (message.choixTon) ...[
+        const SizedBox(height: 18),
+        ChoixTon(ton: message.ton, surChoix: surTon),
+      ],
+      if (reponse != null) ...[
+        const SizedBox(height: 18),
+        ReponseProposee(texte: reponse, taille: taille),
+      ],
+      if (message.actions.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final a in message.actions)
+              _Raccourci(action: a, surAction: () => surAction(a)),
+          ],
+        ),
+      ],
+    ];
+  }
+}
+
+/// Réponse interrompue : pourquoi le texte s'arrête (discret, sous le
+/// texte reçu).
+class _Incident extends StatelessWidget {
+  const _Incident({required this.texte});
+
+  final String texte;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1, right: 6),
+          child: Icon(
+            Icons.info_outline_rounded,
+            size: 15,
+            color: CouleursJarvis.texteSecondaire,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            texte,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: CouleursJarvis.texteSecondaire,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,3 +1,5 @@
+import '../services/ecriture/ecriture_progressive.dart';
+
 /// Une ligne d'une conversation externe (« Sarah : Tu aurais pu me
 /// prévenir. »).
 class LigneConversation {
@@ -110,6 +112,9 @@ class MessageConversation {
     this.idServeur,
     this.enregistre = false,
     this.provisoire = false,
+    this.ecriture,
+    this.redaction = false,
+    this.incident,
   });
 
   final int id;
@@ -142,6 +147,20 @@ class MessageConversation {
   /// Message d'état temporaire (chargement impossible…), retiré dès que
   /// la conversation est chargée.
   final bool provisoire;
+
+  /// Écriture progressive de la réponse (réponse produite pendant cette
+  /// session). Null : texte affiché d'un coup (message chargé du serveur,
+  /// message de l'utilisateur).
+  final EcritureProgressive? ecriture;
+
+  /// Bulle d'une réponse encore en réception (fragments de l'IA) : son
+  /// [texte] n'est pas encore connu, il arrive par [ecriture]. Remplacée,
+  /// avec le même [id], par la réponse finale.
+  final bool redaction;
+
+  /// Réponse interrompue (coupure, erreur) : explication affichée sous le
+  /// texte déjà reçu, qui n'est jamais présenté comme complet.
+  final String? incident;
 
   bool get deJarvis => auteur == AuteurMessage.jarvis;
 
@@ -179,5 +198,8 @@ class MessageConversation {
     idServeur: idServeur ?? this.idServeur,
     enregistre: enregistre ?? this.enregistre,
     provisoire: provisoire,
+    ecriture: ecriture,
+    redaction: redaction,
+    incident: incident,
   );
 }

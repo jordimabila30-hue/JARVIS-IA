@@ -808,3 +808,24 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Alertes de sécurité Supabase antérieures à traiter à part : fonctions `SECURITY DEFINER` appelables par l'API (`handle_new_user`, `touch_conversation`, `get_my_quota`), protection contre les mots de passe divulgués désactivée.
+
+---
+
+## 2026-10-14 — Phase 4 : écriture progressive des réponses
+
+### Fait
+- **Diagnostic** : le backend diffusait déjà en vrai streaming (SSE `meta` → `delta` → `done`) et `ApiJarvis` lisait chaque fragment, mais `MoteurConversationIA` ne branchait pas `surFragment` : la réponse n'apparaissait qu'à la fin. Backend inchangé.
+- **Réception** (`services/ecriture/texte_en_direct.dart`) : tampon des fragments ou texte complet ; états en cours / terminée / interrompue.
+- **Affichage** (`services/ecriture/ecriture_progressive.dart`, logique pure pilotée par le temps) : mot par mot à 12 mots/s (rythme choisi après comparaison avec ChatGPT) ; très longues réponses plafonnées à ≈ 20 s ; mot non terminé retenu pendant la réception (jamais de mot ou d'emoji coupé) ; « Tout afficher » sans couper la réception ; `remplacer` (futures propositions de ton) ; pause quand la carte est hors de la vue ; réduction des animations respectée.
+- **Widget** (`widgets/ecriture/texte_progressif.dart`) : Ticker actif seulement quand du texte attend, curseur lavande discret, simple `Text` une fois fini ; « Tout afficher » posé à gauche de l'heure (aucun changement de hauteur).
+- **Conversation** : une bulle naît au premier fragment (`redaction: true`) puis est finalisée une seule fois avec le même identifiant ; réception, affichage et enregistrement séparés (l'enregistrement n'attend jamais l'animation). Réponses locales : même effet, aucun appel au serveur. Coupure ou erreur en cours : texte reçu gardé + explication, rattaché à l'UUID annoncé par `meta` (le serveur enregistre le partiel) → pas de doublon à l'actualisation. Changement / suppression de conversation : la réponse ne va jamais dans une autre conversation. Markdown inachevé masqué pendant l'écriture.
+- **Vocal** : lecture une seule fois, texte entier, dès la fin de la réception ; PIM inchangé (l'écriture ne déclenche pas l'état « parole »).
+- **Tests** : 568 tests Flutter (34 nouveaux dans `test/ecriture_progressive_test.dart`, flux SSE simulé fragment par fragment ; aide `test/outils/ecriture.dart`). Compilations Web, Windows et APK profile.
+- **Essai réel** sur Galaxy S10+ avec un compte connecté : questions envoyées à GroqCloud via FastAPI, réponse écrite progressivement, un seul enregistrement Supabase par échange.
+
+### Limites
+- Pas d'interruption volontaire du flux côté serveur quand une conversation est supprimée (la réponse est simplement ignorée sur l'appareil).
+- Rythme réglé sur le téléphone de test : à confirmer sur Web et Windows.
+
+### Prochaine étape
+- Valider le rythme mot par mot sur le téléphone, puis réutiliser `EcritureProgressive` dans le futur composant de choix du ton.

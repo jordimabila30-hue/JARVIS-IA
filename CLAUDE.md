@@ -184,6 +184,7 @@ lib/
 │   ├── menu_lateral.dart             # bouton menu (perle JARVIS) + panneau latéral (voile léger, EN COURS, MES CONVERSATIONS, Paramètres)
 │   ├── menu/                         # MES CONVERSATIONS : sélecteur de messageries (vrais logos), recherche, listes qui glissent, ligne (balayage : épingler / supprimer), confirmation
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure
+│   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés)
 │   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles)
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
@@ -199,6 +200,7 @@ lib/
 │   ├── prosodie.dart                 # rythme et accents des réponses (pour PIM)
 │   ├── voice_command_service.dart    # conversation locale (contexte) + futur relais IA
 │   ├── conversation/                 # LA conversation (écrit + vocal) : session, détecteurs, analyse, tons, moteurs local / IA / hybride
+│   ├── ecriture/                     # écriture progressive : TexteEnDirect (réception), EcritureProgressive (affichage)
 │   ├── api_jarvis.dart               # client FastAPI : /me, chat SSE (discuter) ; flux_sse.dart : décodage SSE
 │   ├── authentification/            # AuthService, contrat AuthRepository (non configuré), validations, session, ConfigAuth
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
@@ -284,6 +286,24 @@ Conversation IA : `ConversationSession` → `MoteurConversationHybride`
 message part ; le serveur garde l'historique (UUID rattaché à l'id local de
 la conversation). Écrit et vocal : même moteur. Conversations collées ou
 importées : jamais envoyées.
+
+Écriture progressive (phase 4) : toutes les réponses de JARVIS s'écrivent
+dans leur bulle. Trois étapes séparées : réception (`TexteEnDirect` :
+fragments SSE via `DemandeJarvis.surFragment`, ou texte local complet),
+affichage (`EcritureProgressive`, logique pure pilotée par le temps :
+mot par mot à 12 mots/s, rythme choisi par l'utilisateur (proche de
+ChatGPT) ; seules les réponses très longues accélèrent (≈ 20 s au plus) ;
+mot non terminé retenu pendant la réception ; pause quand la carte est
+hors de la vue ; « Tout afficher », `remplacer`
+pour les futures propositions de ton ; `TexteProgressif` l'anime avec un
+Ticker actif seulement quand du texte attend), enregistrement (réponse
+finale, une fois, par `ConversationSession`). Une bulle (`redaction: true`)
+naît au premier fragment, puis est remplacée avec le même `id`. Coupure :
+texte reçu gardé + `incident`, rattaché à l'UUID annoncé par `meta`
+(le serveur enregistre le partiel). Markdown inachevé masqué
+(`MoteurConversationIA.texteSimpleProvisoire`). TTS : une fois, texte
+entier, à la fin de la réception (jamais par fragment). PIM n'est pas lié
+à l'écriture. Tests : `test/outils/ecriture.dart` (`finirEcritures`).
 
 Synchronisation des conversations (compte connecté) : Supabase est la
 source des conversations enregistrées. Flutter lit et supprime avec la

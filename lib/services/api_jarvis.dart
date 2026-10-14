@@ -173,8 +173,10 @@ class ApiJarvis {
   /// Seul le nouveau message part : l'historique est gardé par le serveur,
   /// dans la conversation [conversation] (UUID ; null : le serveur en crée
   /// une). Son identifiant est donné à [surConversation] dès l'événement
-  /// `meta`, même si la génération échoue ensuite. Chaque fragment de
-  /// texte est donné à [surFragment] (affichage progressif, plus tard).
+  /// `meta`, même si la génération échoue ensuite, avec celui de la future
+  /// réponse ([surMessage] : le serveur l'enregistre même interrompue).
+  /// Chaque fragment de texte est donné à [surFragment] dès son arrivée
+  /// (affichage progressif).
   ///
   /// Une réponse interrompue ou vide est un échec : jamais un texte
   /// partiel présenté comme complet. Aucun réessai, sauf un jeton expiré
@@ -183,13 +185,21 @@ class ApiJarvis {
     String message, {
     String? conversation,
     void Function(String conversation)? surConversation,
+    void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
   }) {
     if (message.length > longueurMaxMessage) {
       return Future.value(const EchecApi(ErreurApi.messageTropLong));
     }
     return _authentifie(
-      (j) => _chat(j, message, conversation, surConversation, surFragment),
+      (j) => _chat(
+        j,
+        message,
+        conversation,
+        surConversation,
+        surMessage,
+        surFragment,
+      ),
     );
   }
 
@@ -318,6 +328,7 @@ class ApiJarvis {
     String message,
     String? conversation,
     void Function(String conversation)? surConversation,
+    void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
   ) async {
     _Reponse<ReponseChat> echec(ErreurApi e, [String? detail]) =>
@@ -384,6 +395,10 @@ class ApiJarvis {
             if (id is String && id.isNotEmpty) {
               idConversation = id;
               surConversation?.call(id);
+            }
+            final message = donnees['message_id'];
+            if (message is String && message.isNotEmpty) {
+              surMessage?.call(message);
             }
           case 'delta':
             final fragment = donnees['text'];

@@ -528,15 +528,19 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   }
 
   /// Lecture vocale activée : chaque nouvelle réponse écrite de JARVIS est
-  /// aussi prononcée (les réponses du chat vocal le sont déjà).
+  /// aussi prononcée (les réponses du chat vocal le sont déjà), une seule
+  /// fois et en entier : dès la fin de sa réception, sans attendre la fin
+  /// de son écriture à l'écran ni lire les fragments un à un.
   void _lireNouvelleReponse() {
     final messages = _conversation.messages;
     if (messages.isEmpty) return;
     final m = messages.last;
-    if (!m.deJarvis || m.id <= _derniereVue) return;
+    if (!m.deJarvis || m.redaction || m.id <= _derniereVue) return;
     _derniereVue = m.id;
     if (_lectureVocale && !_modeVocal && !m.vocal) {
-      _session.lireReponse(m.texte);
+      _session.lireReponse(
+        m.incident == null ? m.texte : '${m.texte} ${m.incident}',
+      );
     }
   }
 

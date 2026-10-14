@@ -158,7 +158,11 @@ class FournisseurJarvis extends ChangeNotifier
     List<MessageConversation> messages, {
     bool ouverte = false,
   }) {
-    final dernier = messages.last;
+    // Réponse encore en réception : son texte n'est pas encore connu.
+    final dernier = messages.lastWhere(
+      (m) => !m.redaction,
+      orElse: () => messages.last,
+    );
     // Enregistrée : le titre du serveur (le début de la conversation peut
     // ne pas être chargé).
     final serveur = _session.correspondance.serveur(id);

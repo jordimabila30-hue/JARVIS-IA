@@ -20,6 +20,7 @@ class DemandeJarvis {
     this.conversationNouvelle = false,
     this.vocale = false,
     this.idConversation,
+    this.surFragment,
   }) : texteComplet = texteComplet ?? texte;
 
   /// Ce que l'utilisateur dit à JARVIS (sans la conversation collée).
@@ -47,6 +48,25 @@ class DemandeJarvis {
   /// Identifiant local de la conversation du fil ([ConversationSession
   /// .idCourant]) : un moteur d'IA y rattache sa conversation serveur.
   final String? idConversation;
+
+  /// Reçoit chaque fragment de la réponse dès son arrivée (flux de l'IA),
+  /// pour l'affichage progressif. Un moteur qui produit sa réponse d'un
+  /// coup (règles locales) ne l'appelle pas.
+  final void Function(String fragment)? surFragment;
+
+  /// La même demande, dont les fragments de réponse vont à [surFragment].
+  DemandeJarvis avecFragments(void Function(String fragment) surFragment) =>
+      DemandeJarvis(
+        texte: texte,
+        intention: intention,
+        texteComplet: texteComplet,
+        historique: historique,
+        conversation: conversation,
+        conversationNouvelle: conversationNouvelle,
+        vocale: vocale,
+        idConversation: idConversation,
+        surFragment: surFragment,
+      );
 }
 
 /// Réponse de JARVIS dans le fil.
@@ -58,6 +78,7 @@ class ReponseJarvis {
     this.terminerSession = false,
     this.erreur = false,
     this.idServeur,
+    this.incident,
   });
 
   final String texte;
@@ -78,6 +99,14 @@ class ReponseJarvis {
   /// Réponse de l'IA enregistrée par le serveur : UUID de sa ligne. Null
   /// pour une réponse locale (qui reste sur l'appareil).
   final String? idServeur;
+
+  /// Réponse interrompue après le début de la réception : [texte] est le
+  /// texte reçu (partiel), [incident] l'explication de l'arrêt. Toujours
+  /// avec [erreur].
+  final String? incident;
+
+  /// Texte partiel d'une réponse interrompue.
+  bool get interrompue => incident != null;
 }
 
 /// Cerveau de la conversation, écrite comme vocale (une seule conversation,

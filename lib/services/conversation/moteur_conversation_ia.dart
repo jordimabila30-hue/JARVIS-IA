@@ -38,43 +38,78 @@ class MoteurConversationIA {
   /// Conversation serveur rattachée à la conversation locale [idLocal].
   String? idServeur(String idLocal) => correspondance.serveur(idLocal);
 
+  /// Les fragments de la réponse sont transmis dès leur arrivée
+  /// ([DemandeJarvis.surFragment]) : affichage progressif, jamais
+  /// d'attente de la fin de la génération. Si le flux s'arrête après le
+  /// début du texte, le texte reçu est gardé et signalé comme interrompu
+  /// ([ReponseJarvis.incident]), jamais présenté comme complet.
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
     final local = demande.idConversation;
     if (local != null) await avantEnvoi?.call(local);
-    var r = await _envoyer(demande.texte, local);
+    final recu = StringBuffer();
+    String? idReponse;
+    Future<ResultatApi<ReponseChat>> envoyer() => _api.discuter(
+      demande.texte,
+      conversation: local == null ? null : correspondance.serveur(local),
+      // Dès l'événement `meta` : même si la génération échoue ensuite,
+      // ou si le fil a changé entre-temps, la conversation locale garde
+      // sa conversation serveur.
+      surConversation: (id) {
+        if (local != null) correspondance.associer(local, id);
+      },
+      surMessage: (id) => idReponse = id,
+      surFragment: (f) {
+        recu.write(f);
+        demande.surFragment?.call(f);
+      },
+    );
+    var r = await envoyer();
     if (r case EchecApi(
       type: ErreurApi.conversationIntrouvable,
     ) when local != null) {
       // Conversation effacée côté serveur : refusée avant toute
       // génération (rien d'enregistré), on en recommence une seule fois.
       correspondance.oublier(local);
-      r = await _envoyer(demande.texte, local);
+      r = await envoyer();
     }
     switch (r) {
       case SuccesApi(:final valeur):
         return ReponseJarvis(
           texteSimple(valeur.texte),
-          idServeur: valeur.message,
+          idServeur: valeur.message ?? idReponse,
         );
       case EchecApi(:final type, :final detail):
         debugPrint(
           '[JARVIS IA] échec : ${type.name}${detail == null ? '' : ' ($detail)'}',
         );
+        final partiel = texteSimple(recu.toString());
+        if (partiel.isNotEmpty) {
+          // Le serveur enregistre le texte déjà généré sous l'identifiant
+          // annoncé par `meta` : la réponse partielle y est rattachée (une
+          // actualisation ne l'affichera pas en double).
+          return ReponseJarvis(
+            partiel,
+            erreur: true,
+            idServeur: idReponse,
+            incident: messageInterruption(type, detail),
+          );
+        }
         return ReponseJarvis(messageErreur(type, detail), erreur: true);
     }
   }
 
-  Future<ResultatApi<ReponseChat>> _envoyer(String texte, String? local) =>
-      _api.discuter(
-        texte,
-        conversation: local == null ? null : correspondance.serveur(local),
-        // Dès l'événement `meta` : même si la génération échoue ensuite,
-        // ou si le fil a changé entre-temps, la conversation locale garde
-        // sa conversation serveur.
-        surConversation: (id) {
-          if (local != null) correspondance.associer(local, id);
-        },
-      );
+  /// Explication affichée sous une réponse interrompue en cours de route.
+  static String messageInterruption(ErreurApi type, String? detail) =>
+      switch (type) {
+        ErreurApi.iaIndisponible =>
+          'Réponse interrompue : ${detail ?? type.message}',
+        ErreurApi.delaiDepasse =>
+          'Réponse interrompue : le serveur JARVIS a cessé de répondre. '
+              'Renvoyez votre message pour obtenir la suite.',
+        _ =>
+          'Réponse interrompue avant la fin (connexion perdue). Renvoyez '
+              'votre message pour obtenir la réponse complète.',
+      };
 
   /// Le modèle répond parfois en Markdown (« **Lima** ») alors que le fil
   /// affiche du texte simple et que la réponse peut être lue à voix
@@ -89,6 +124,44 @@ class MoteurConversationIA {
       .replaceAllMapped(RegExp(r'`([^`\n]+)`'), (m) => m.group(1)!)
       .replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '')
       .trim();
+
+  /// [texteSimple] d'un texte encore en réception : en plus, une syntaxe
+  /// Markdown pas encore refermée (« **Lim », « `cod », « ## » en début de
+  /// ligne) est masquée au lieu d'apparaître puis de disparaître. Le
+  /// texte affiché ne change donc pas de forme quand la suite arrive : il
+  /// se prolonge seulement.
+  static String texteSimpleProvisoire(String brut) {
+    var t = texteSimple(brut);
+    // Gras ouvert : seul le symbole est masqué, le texte reste visible.
+    for (final marque in const ['**', '__']) {
+      if (marque.allMatches(t).length.isOdd) {
+        final i = t.lastIndexOf(marque);
+        t = t.substring(0, i) + t.substring(i + marque.length);
+      }
+    }
+    final debutLigne = t.lastIndexOf('\n') + 1;
+    var ligne = t.substring(debutLigne);
+    // Code ou italique ouvert sur la dernière ligne : symbole masqué.
+    final code = RegExp(r'(?<!`)`(?!`)').allMatches(ligne).toList();
+    if (code.length.isOdd) {
+      final i = code.last.start;
+      ligne = ligne.substring(0, i) + ligne.substring(i + 1);
+    }
+    final italique = RegExp(r'(?<![\w*])\*(?=[^\s*])').allMatches(ligne);
+    for (final m in italique.toList().reversed) {
+      if (!ligne.substring(m.end).contains('*')) {
+        ligne = ligne.substring(0, m.start) + ligne.substring(m.end);
+      }
+      break;
+    }
+    // Symbole isolé en toute fin (« ## » d'un titre pas encore écrit,
+    // « * ») : peut-être le début d'une marque.
+    ligne = ligne.replaceFirstMapped(
+      RegExp(r'(^|\s)[*_`#]+$'),
+      (m) => m.group(1)!,
+    );
+    return (t.substring(0, debutLigne) + ligne).trimRight();
+  }
 
   /// Explication affichée (et dite en vocal) à la place d'une réponse.
   static String messageErreur(ErreurApi type, String? detail) => switch (type) {
