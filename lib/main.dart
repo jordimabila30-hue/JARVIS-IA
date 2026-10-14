@@ -7,9 +7,12 @@ import 'services/api_jarvis.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
 import 'theme/theme_jarvis.dart';
+import 'utils/chrono_perf.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Mesures de performance (JARVIS_PERF) : rien hors mesure.
+  ChronoPerf.enregistrerExtension();
   var config = ConfigAuth.compilation();
   try {
     // Supabase : session gardée sur l'appareil, lien de récupération.

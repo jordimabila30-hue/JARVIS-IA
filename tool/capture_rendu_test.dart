@@ -9,6 +9,9 @@
 //
 // PRINCIPALE=cube|tetraedre|reacteur : même série avec cette forme
 // principale (fichiers suffixés), pour vérifier ses réactions vocales.
+//
+// AVEC=variante (et --dart-define=JARVIS_PERF=true) : même série
+// avec une variante de rendu, pour la comparer pixel par pixel.
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
 import 'dart:io';
@@ -19,6 +22,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/models/signal_vocal.dart';
 import 'package:ia_jarvis/models/voice_state.dart';
+import 'package:ia_jarvis/utils/chrono_perf.dart';
 import 'package:ia_jarvis/widgets/fond_jarvis_anime.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
@@ -26,6 +30,9 @@ void main() {
   final dossier = Platform.environment['CAPTURE_DIR'];
   final principale = FormePim.values
       .asNameMap()[Platform.environment['PRINCIPALE']];
+  // AVEC=… (avec --dart-define=JARVIS_PERF=true) : variante de rendu à
+  // comparer à la série de référence.
+  ChronoPerf.ajouter(Platform.environment['AVEC']?.split(',') ?? const []);
 
   const formats = {
     'ordi': (Size(1280, 800), 1.5, 520.0),

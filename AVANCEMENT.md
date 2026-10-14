@@ -773,3 +773,38 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Test sur le Galaxy S10+, décision sur les épingles, puis affichage progressif des réponses.
+
+---
+
+## 2026-10-14 — Performances : mesures réelles (Galaxy S10+, Windows, Web) et PIM
+
+### Fait
+- **Backend local** vérifié (Docker : `jarvis-api` 8000, `jarvis-redis` 6379, sains ; `/health`, `/health/ready`, `/health/clock`, routes protégées en 401 sans jeton). Téléphone relié par `adb reverse tcp:8000 tcp:8000` et `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000` ; mode profile : HTTP autorisé seulement vers 127.0.0.1 et localhost (`android/app/src/profile/res/xml/reseau_developpement.xml`), mode release inchangé. Requêtes du téléphone reçues par FastAPI (`local-exchanges` → 201).
+- **Outils de mesure** : banc `tool/banc_perf.dart` en suite (`--dart-define=JARVIS_SUITE=accueil|pim|experience`, tous les états puis chaque effet retiré) ; application réelle mesurée par son service VM (`ext.jarvis.chrono` : sections du moteur, `ext.jarvis.variante` : comparaison A/B à chaud), actifs seulement avec `JARVIS_PERF=true`.
+- **PIM, clavier et redimensionnement** : les points flous et halos pré-rendus ne sont plus refaits à chaque image d'une transition ; ils sont recopiés à la taille du moment puis refaits exactement une fois la taille stable, par morceaux (12 plans × styles par image) ; les deux niveaux de qualité gardent leurs images. Rendu au repos identique au pixel près (16 captures).
+- **PIM, points nets et reflets en atlas** (décision de l'utilisateur) : plus aucun point dessiné un par un. Bords des petites particules très légèrement plus doux (PSNR 39–44 dB, écart moyen 0,15–0,38 / 255).
+
+### Mesures (mode profile)
+- Galaxy S10+ (Impeller OpenGL ES, 1440×3040) : banc PIM, rasterisation moyenne avant → après : repos 12,0 → 5,7 ms ; écoute 13,8 → 6,6 ; réflexion 15,4 → 5,5 ; frappe 14,0 → 5,9 (49,9 → 60 i/s) ; p99 ≤ 9,7 ms partout après. Application réelle : A/B dans la même session non concluant (variations de fréquence GPU / cœurs bien plus fortes que l'écart entre variantes).
+- Windows (même session, PC chargé) : pas de régression ni de gain au repos (raster 10,3 ms dans les deux cas) ; dessin PIM +0,4 ms sur le fil d'interface.
+- Web (même compilation, A/B) : rasterisation PIM seul 4,8–5,0 → 2,9 ms ; accueil 4,9–5,6 → 3,7–4,1 ms.
+
+### Limites
+- Le Galaxy S10+ est réglé en WQHD+ : environ 78 % de pixels de plus qu'en FHD+, principal facteur de charge GPU.
+- Pendant l'animation du clavier, le fond (dont la taille suit la place disponible) est redessiné à chaque image.
+
+### Prochaine étape
+- Mesures répétées sur un appareil à fréquence plus stable ; pistes : coût du fond pendant les transitions, reste du fil d'interface de l'accueil.
+
+---
+
+## 2026-10-14 — Supabase : vues administratives lisibles
+
+### Fait
+- Trois vues de consultation dans un schéma dédié `admin` (migration `vues_admin_lisibles`, reprise dans `supabase/schema.sql`) : `conversations_lisibles`, `messages_lisibles`, `quotas_lisibles`. Elles ajoutent `display_name` et `email` (lus dans `public.users` par jointure, rien n'est copié) à côté de `user_id`.
+- Sécurité : schéma non exposé par l'API (vérifié : PostgREST répond « Invalid schema: admin »), aucun droit sur le schéma ni sur les vues pour `PUBLIC`, `anon`, `authenticated`, `service_role` ; `security_invoker = true`. Compte connecté simulé : accès refusé. Tables, RLS et droits d'origine inchangés.
+- Contrôles : 9 / 34 / 3 lignes comme les tables sources, noms et e-mails conformes pour toutes les lignes, empreintes des données identiques avant / après.
+- Aucun changement Flutter ni FastAPI.
+
+### Prochaine étape
+- Alertes de sécurité Supabase antérieures à traiter à part : fonctions `SECURITY DEFINER` appelables par l'API (`handle_new_user`, `touch_conversation`, `get_my_quota`), protection contre les mots de passe divulgués désactivée.

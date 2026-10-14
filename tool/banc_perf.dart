@@ -1,14 +1,23 @@
-// Banc de mesure des performances de l'accueil (Web).
+// Banc de mesure des performances de l'accueil.
 //
+// Web :
 //   flutter build web -t tool/banc_perf.dart --dart-define=JARVIS_PERF=true
+//   puis ouvrir `?scene=…&etat=…&sans=…` :
+//     scene : accueil (page réelle, défaut), fond, pim, vide
+//     etat  : repos (défaut), frappe, ecoute, reflexion, parole, cube
+//     sans  : parties retirées (pim.halos, pim.flou, pim.reflets,
+//             pim.lumieres…)
+//   Après 4 s de chauffe, mesure pendant 10 s et écrit le résultat (JSON)
+//   dans la console.
 //
-// Puis ouvrir `?scene=…&etat=…` :
-//   scene : accueil (page réelle, défaut), fond, pim, vide
-//   etat  : repos (défaut), frappe, ecoute, reflexion, parole, cube
+// Téléphone ou bureau (pas d'adresse de page) : suite complète, une
+// mesure par état puis par partie retirée, dans le même lancement :
+//   flutter run --profile -t tool/banc_perf.dart --dart-define=JARVIS_PERF=true
+//     --dart-define=JARVIS_SUITE=pim     (ou accueil)
 //
-// Après 4 s de chauffe, mesure pendant 10 s et écrit le résultat (JSON)
-// dans la console : temps des images (FrameTiming) et sections du moteur
-// (ChronoPerf).
+// Chaque mesure : temps des images (FrameTiming : fil d'interface, fil de
+// rasterisation, durée totale), images en retard (> 16,7 ms) et sections
+// du moteur (ChronoPerf).
 // ignore_for_file: invalid_use_of_visible_for_testing_member, avoid_print
 
 import 'dart:async';
@@ -25,19 +34,89 @@ import 'package:ia_jarvis/utils/chrono_perf.dart';
 import 'package:ia_jarvis/widgets/fond_jarvis_anime.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
-void main() {
+const _suite = String.fromEnvironment('JARVIS_SUITE');
+
+/// Une mesure : scène, état, parties retirées, variantes.
+typedef _Config = ({
+  String scene,
+  String etat,
+  List<String> sans,
+  List<String> avec,
+});
+
+List<_Config> _configs() {
   final p = Uri.base.queryParameters;
-  final scene = p['scene'] ?? 'accueil';
-  final etat = p['etat'] ?? 'repos';
-  runApp(_Banc(scene: scene, etat: etat));
-  _Mesure(scene, etat).lancer();
+  if (_suite.isEmpty) {
+    return [
+      (
+        scene: p['scene'] ?? 'accueil',
+        etat: p['etat'] ?? 'repos',
+        sans: p['sans']?.split(',') ?? const [],
+        avec: p['avec']?.split(',') ?? const [],
+      ),
+    ];
+  }
+  if (_suite == 'experience') {
+    // Coût des points au repos, et variante en atlas : chaque mesure deux
+    // fois, en alternance (la fréquence du GPU varie).
+    const variantes = <(List<String>, List<String>)>[
+      ([], []),
+      (['pim.points'], []),
+      (['pim.particules'], []),
+    ];
+    return [
+      for (var tour = 0; tour < 2; tour++)
+        for (final (sans, avec) in variantes)
+          (scene: 'accueil', etat: 'repos', sans: sans, avec: avec),
+    ];
+  }
+  final scene = _suite;
+  return [
+    for (final etat in const [
+      'repos',
+      'ecoute',
+      'reflexion',
+      'parole',
+      'cube',
+      'frappe',
+    ])
+      (scene: scene, etat: etat, sans: const <String>[], avec: const []),
+    for (final sans in const [
+      ['pim.halos'],
+      ['pim.flou'],
+      ['pim.reflets'],
+      ['pim.lumieres'],
+      ['pim.halos', 'pim.flou', 'pim.reflets', 'pim.lumieres'],
+    ])
+      (scene: scene, etat: 'repos', sans: sans, avec: const <String>[]),
+  ];
+}
+
+void main() {
+  final configs = _configs();
+  final courante = ValueNotifier(0);
+  runApp(
+    ValueListenableBuilder<int>(
+      valueListenable: courante,
+      builder: (_, i, _) {
+        final c = configs[i];
+        // Nouvelle clé : PIM et la page repartent de zéro pour chaque mesure.
+        return _Banc(key: ValueKey(i), scene: c.scene, etat: c.etat);
+      },
+    ),
+  );
+  _Mesure(configs, courante).lancer();
 }
 
 class _Mesure {
-  _Mesure(this.scene, this.etat);
-  final String scene, etat;
+  _Mesure(this.configs, this.courante);
+  final List<_Config> configs;
+  final ValueNotifier<int> courante;
   final _build = <double>[], _raster = <double>[], _total = <double>[];
   bool _actif = false;
+
+  static const _chauffe = Duration(seconds: 4);
+  static const _duree = Duration(seconds: 10);
 
   void lancer() {
     SchedulerBinding.instance.addTimingsCallback((liste) {
@@ -48,10 +127,27 @@ class _Mesure {
         _total.add(f.totalSpan.inMicroseconds / 1000);
       }
     });
-    Timer(const Duration(seconds: 4), () {
+    _mesurer(0);
+  }
+
+  void _mesurer(int i) {
+    courante.value = i;
+    ChronoPerf.retirer(configs[i].sans);
+    ChronoPerf.ajouter(configs[i].avec);
+    Timer(_chauffe, () {
       ChronoPerf.reinitialiser();
+      _build.clear();
+      _raster.clear();
+      _total.clear();
       _actif = true;
-      Timer(const Duration(seconds: 10), _rapport);
+      Timer(_duree, () {
+        _rapport(configs[i]);
+        if (i + 1 < configs.length) {
+          _mesurer(i + 1);
+        } else {
+          print('BANC_FIN');
+        }
+      });
     });
   }
 
@@ -63,18 +159,24 @@ class _Mesure {
       'n': v.length,
       'moyenneMs': _arrondi(moyenne),
       'p90Ms': _arrondi(t[(t.length * 0.9).floor().clamp(0, t.length - 1)]),
+      'p99Ms': _arrondi(t[(t.length * 0.99).floor().clamp(0, t.length - 1)]),
       'maxMs': _arrondi(t.last),
     };
   }
 
   static double _arrondi(num v) => (v * 1000).round() / 1000;
 
-  void _rapport() {
+  void _rapport(_Config c) {
     _actif = false;
     final r = {
-      'scene': scene,
-      'etat': etat,
+      'scene': c.scene,
+      'etat': c.etat,
+      if (c.sans.isNotEmpty) 'sans': c.sans,
+      if (c.avec.isNotEmpty) 'avec': c.avec,
       'images': _build.length,
+      'imagesParSeconde': _arrondi(_build.length / _duree.inSeconds),
+      // Une image prête après plus d'un intervalle d'écran (60 Hz).
+      'enRetard': _total.where((t) => t > 1000 / 60).length,
       'build': _stats(_build),
       'raster': _stats(_raster),
       'total': _stats(_total),
@@ -87,7 +189,7 @@ class _Mesure {
 }
 
 class _Banc extends StatefulWidget {
-  const _Banc({required this.scene, required this.etat});
+  const _Banc({super.key, required this.scene, required this.etat});
   final String scene, etat;
 
   @override
@@ -112,6 +214,7 @@ class _BancState extends State<_Banc> {
   }
 
   void _piloter() {
+    if (!mounted) return;
     _pim
       ..amplitude = _amplitude
       ..signal = _signal;

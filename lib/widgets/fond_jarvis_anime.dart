@@ -248,7 +248,9 @@ class _PeintreFond extends CustomPainter {
         // La mise en page change (clavier, transition) : dessin direct, et
         // on revient à l'image suivante voir si elle s'est stabilisée.
         _derniereCle = cle;
+        final direct = ChronoPerf.debut();
         _dessiner(canvas, size);
+        ChronoPerf.fin('fond.direct', direct);
         SchedulerBinding.instance.addPostFrameCallback(
           (_) => _signal.signaler(),
         );
@@ -268,6 +270,7 @@ class _PeintreFond extends CustomPainter {
 
   /// Dessine le fond une fois, à la résolution réelle de l'écran.
   void _memoriser(_CleFond cle) {
+    final chrono = ChronoPerf.debut();
     final d = cle.densite;
     final largeur = (cle.taille.width * d).ceil();
     final hauteur = (cle.taille.height * d).ceil();
@@ -284,6 +287,7 @@ class _PeintreFond extends CustomPainter {
     _precedente = _image;
     _image = image;
     _cleImage = cle;
+    ChronoPerf.fin('fond.memoriser', chrono);
   }
 
   @override

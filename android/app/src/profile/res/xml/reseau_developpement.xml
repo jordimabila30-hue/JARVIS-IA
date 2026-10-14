@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mode profile seulement (mesures de performance sur un vrai téléphone) :
+     HTTP non chiffré autorisé uniquement vers le backend local du PC,
+     joint par `adb reverse tcp:8000 tcp:8000`. Tout le reste reste en
+     HTTPS obligatoire ; le mode release n'est pas concerné. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

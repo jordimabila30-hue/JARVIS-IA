@@ -392,6 +392,36 @@ create policy "documents_delete_own" on storage.objects
   );
 
 -- =============================================================================
+-- Vues de consultation administrative (Supabase Dashboard uniquement)
+-- =============================================================================
+-- Schéma dédié `admin` : jamais exposé par l'API (PostgREST n'expose que public
+-- et graphql_public) et sans aucun droit pour anon, authenticated, service_role.
+-- Lecture : Dashboard > Table Editor > schéma « admin » (rôle postgres).
+create schema if not exists admin authorization postgres;
+revoke all on schema admin from public, anon, authenticated, service_role;
+
+create or replace view admin.conversations_lisibles with (security_invoker = true) as
+select c.id, c.user_id, u.display_name, u.email,
+       c.title, c.persona, c.archived, c.created_at, c.updated_at, c.last_message_at
+from public.conversations c
+left join public.users u on u.id = c.user_id;
+
+create or replace view admin.messages_lisibles with (security_invoker = true) as
+select m.id, m.conversation_id, m.user_id, u.display_name, u.email,
+       m.role, m.content, m.attachments, m.model, m.tokens_input, m.tokens_output, m.created_at
+from public.messages m
+left join public.users u on u.id = m.user_id;
+
+create or replace view admin.quotas_lisibles with (security_invoker = true) as
+select q.user_id, u.display_name, u.email,
+       q.usage_date, q.messages_used, q.tokens_used, q.updated_at
+from public.quota_usage q
+left join public.users u on u.id = q.user_id;
+
+revoke all on admin.conversations_lisibles, admin.messages_lisibles, admin.quotas_lisibles
+  from public, anon, authenticated, service_role;
+
+-- =============================================================================
 -- Administration (exemples, à exécuter manuellement avec un rôle admin)
 -- =============================================================================
 -- Passer un utilisateur en Pro illimité :

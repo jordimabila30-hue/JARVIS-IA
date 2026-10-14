@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Mesures en mode profile : backend local joint par adb reverse
+         (HTTP vers 127.0.0.1 et localhost seulement). -->
+    <application android:networkSecurityConfig="@xml/reseau_developpement"/>
 </manifest>

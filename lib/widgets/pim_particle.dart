@@ -2107,12 +2107,13 @@ class _SimulationPim extends ChangeNotifier {
 /// la sphère ; l'avant est plus grand, net et contrasté. Les dégradés et
 /// les flous sont créés une seule fois, pas à chaque image.
 ///
-/// Les points flous (plan du fond, halos) ne sont pas floutés un par un à
-/// chaque image : chaque plan × style a son point flou pré-rendu une fois
-/// (même pinceau, même flou) dans une petite image, recopiée à la position
-/// de chaque particule en un seul appel ([Canvas.drawRawAtlas]). Skia
-/// dessinait déjà ces points un par un, superposés : le rendu est le même,
-/// pour une fraction du coût.
+/// Aucun point n'est dessiné un par un à chaque image : chaque plan ×
+/// style a son point (net ou flou), son halo et son reflet pré-rendus une
+/// fois (même pinceau, même flou) dans de petites images, recopiées à la
+/// position de chaque particule en un seul appel ([Canvas.drawRawAtlas]).
+/// Pour les points flous, le rendu est le même ; pour les points nets, les
+/// bords sont rééchantillonnés (très légèrement plus doux), pour une
+/// fraction du coût sur téléphone.
 class _PeintrePim extends CustomPainter {
   _PeintrePim(this.simulation) : super(repaint: simulation);
 
@@ -2125,7 +2126,8 @@ class _PeintrePim extends CustomPainter {
   set densite(double valeur) {
     if (valeur == _densite) return;
     _densite = valeur;
-    _echelleFlous = -1;
+    _echelleSprites = -1;
+    _prochainARefaire = -1;
   }
 
   // Pinceaux réutilisés.
@@ -2169,18 +2171,24 @@ class _PeintrePim extends CustomPainter {
     const [0, 0.4, 0.75, 1],
   );
 
-  // Flous (profondeur de champ, halos), recréés seulement si la taille de
-  // la sphère ou le niveau de qualité change.
-  double _echelleFlous = -1;
-  bool _qualiteReduite = false;
-  final _flouPoint = List<MaskFilter?>.filled(
-    PimRendu.plans.length * PimRendu.styles.length,
-    null,
-  );
-  final _flouHalo = List<MaskFilter?>.filled(
-    PimRendu.plans.length * PimRendu.styles.length,
-    null,
-  );
+  // Points flous pré-rendus (profondeur de champ, halos). Ils sont rendus
+  // à une échelle de la sphère ([_echelleSprites]) puis recopiés à la
+  // taille du moment : pendant une transition (clavier, redimensionnement)
+  // ils ne sont pas refaits à chaque image ; ils le sont, exactement, une
+  // fois la taille stable, répartis sur quelques images. Ceux des deux
+  // niveaux de qualité sont gardés : changer de niveau ne refait rien.
+  double _echelleSprites = -1;
+  double _echelleVue = -1;
+  int _imagesStables = 0;
+  double _echelleCible = 0, _facteurCible = 1;
+  int _prochainARefaire = -1;
+  bool _couleursPretes = false;
+
+  /// Taille stable depuis ce nombre d'images avant de refaire les points.
+  static const _stabiliteRequise = 12;
+
+  /// Plans × styles refaits par image (sans pic de rendu).
+  static const _refaitsParImage = 12;
   // Couleur de chaque plan × style (brume et contraste appliqués), avec
   // l'opacité du plan, et couleur de son reflet : calculées une fois.
   final _couleurs = List<Color>.filled(
@@ -2205,6 +2213,18 @@ class _PeintrePim extends CustomPainter {
     PimRendu.plans.length * PimRendu.styles.length,
     null,
   );
+  // Points nets et reflets, recopiés comme les points flous : sous
+  // Impeller (OpenGL ES), un point rond dessiné directement est découpé en
+  // triangles par le processeur, particule par particule ; recopier une
+  // image est bien moins coûteux.
+  final _spriteNet = List<_Sprite?>.filled(
+    PimRendu.plans.length * PimRendu.styles.length,
+    null,
+  );
+  final _spriteReflet = List<_Sprite?>.filled(
+    PimRendu.plans.length * PimRendu.styles.length,
+    null,
+  );
   // Transformations de l'atlas (4 valeurs par particule), réutilisées.
   final _transformes = Float32List(_SimulationPim.n * 4);
   final _atlas = Paint()..filterQuality = FilterQuality.low;
@@ -2216,7 +2236,7 @@ class _PeintrePim extends CustomPainter {
   _Sprite _sprite(
     Color couleur,
     double largeur,
-    MaskFilter flou,
+    MaskFilter? flou,
     double sigma,
     int capacite,
   ) {
@@ -2244,32 +2264,16 @@ class _PeintrePim extends CustomPainter {
     return _Sprite(image, largeur, rects);
   }
 
-  void _preparer(double echelle, bool qualiteReduite, double facteurHalo) {
-    if ((echelle - _echelleFlous).abs() < 0.02 &&
-        qualiteReduite == _qualiteReduite) {
-      return;
-    }
-    _echelleFlous = echelle;
-    _qualiteReduite = qualiteReduite;
+  /// Couleurs de chaque plan × style : elles ne dépendent ni de la taille
+  /// ni de la qualité, calculées une seule fois.
+  void _preparerCouleurs() {
     const styles = PimRendu.styles;
     const plans = PimRendu.plans;
     for (var d = 0; d < plans.length; d++) {
       final plan = plans[d];
       for (var s = 0; s < styles.length; s++) {
         final style = styles[s];
-        final taille = style.taille * echelle * plan.taille;
         final k = d * styles.length + s;
-        // Flou de fond : sur téléphone, seulement pour les particules
-        // moyennes et lumineuses (les micro-particules y sont trop petites
-        // pour que la différence se voie).
-        final flou = plan.flou > 0 && !(qualiteReduite && style.micro);
-        _flouPoint[k] = flou
-            ? MaskFilter.blur(BlurStyle.normal, taille * plan.flou)
-            : null;
-        final halo = style.lueur > 0 && !(qualiteReduite && style.lueur < 0.5);
-        _flouHalo[k] = halo
-            ? MaskFilter.blur(BlurStyle.normal, taille * style.halo * 0.28)
-            : null;
         final fondu = Color.lerp(
           style.couleur,
           PimRendu.fondBrume,
@@ -2280,30 +2284,90 @@ class _PeintrePim extends CustomPainter {
         _couleursReflet[k] = PimRendu.reflet.withValues(
           alpha: plan.reflet * (style.lueur >= 0.7 ? 0.95 : 0.6),
         );
-
-        final capacite = simulation._parStyle[s];
-        _spritePoint[k]?.image.dispose();
-        _spritePoint[k] = flou
-            ? _sprite(
-                _couleurs[k],
-                taille,
-                _flouPoint[k]!,
-                taille * plan.flou,
-                capacite,
-              )
-            : null;
-        _spriteHalo[k]?.image.dispose();
-        _spriteHalo[k] = halo
-            ? _sprite(
-                PimRendu.lumiere,
-                taille * style.halo * facteurHalo,
-                _flouHalo[k]!,
-                taille * style.halo * 0.28,
-                capacite,
-              )
-            : null;
       }
     }
+  }
+
+  void _preparer(double echelle, double facteurHalo) {
+    if (!_couleursPretes) {
+      _preparerCouleurs();
+      _couleursPretes = true;
+    }
+    if ((echelle - _echelleVue).abs() > 0.001) {
+      _echelleVue = echelle;
+      _imagesStables = 0;
+    } else {
+      _imagesStables++;
+    }
+    // Mesure seulement : ancien comportement (tout refaire dès que la
+    // taille change), pour comparer dans la même session.
+    final premiere =
+        _echelleSprites < 0 ||
+        (ChronoPerf.sans('pim.differe') &&
+            (echelle - _echelleSprites).abs() >= 0.02);
+    if (premiere) _prochainARefaire = -1;
+    if (_prochainARefaire < 0) {
+      if (!premiere &&
+          ((echelle - _echelleSprites).abs() < 0.02 ||
+              _imagesStables < _stabiliteRequise)) {
+        return;
+      }
+      _prochainARefaire = 0;
+      _echelleCible = echelle;
+      _facteurCible = facteurHalo;
+    } else if ((echelle - _echelleCible).abs() > 0.001) {
+      // La taille bouge de nouveau : on reprendra une fois stable.
+      _prochainARefaire = -1;
+      return;
+    }
+    final chrono = ChronoPerf.debut();
+    const styles = PimRendu.styles;
+    const plans = PimRendu.plans;
+    final total = plans.length * styles.length;
+    // Premier dessin : tout de suite (rien à recopier en attendant).
+    final dernier = premiere
+        ? total
+        : math.min(total, _prochainARefaire + _refaitsParImage);
+    for (var k = _prochainARefaire; k < dernier; k++) {
+      final plan = plans[k ~/ styles.length];
+      final s = k % styles.length;
+      final style = styles[s];
+      final taille = style.taille * _echelleCible * plan.taille;
+      final capacite = simulation._parStyle[s];
+      _spritePoint[k]?.image.dispose();
+      _spritePoint[k] = plan.flou > 0
+          ? _sprite(
+              _couleurs[k],
+              taille,
+              MaskFilter.blur(BlurStyle.normal, taille * plan.flou),
+              taille * plan.flou,
+              capacite,
+            )
+          : null;
+      _spriteNet[k]?.image.dispose();
+      _spriteNet[k] = _sprite(_couleurs[k], taille, null, 0, capacite);
+      _spriteReflet[k]?.image.dispose();
+      _spriteReflet[k] = style.relief && plan.reflet > 0
+          ? _sprite(_couleursReflet[k], taille * 0.42, null, 0, capacite)
+          : null;
+      _spriteHalo[k]?.image.dispose();
+      _spriteHalo[k] = style.lueur > 0
+          ? _sprite(
+              PimRendu.lumiere,
+              taille * style.halo * _facteurCible,
+              MaskFilter.blur(BlurStyle.normal, taille * style.halo * 0.28),
+              taille * style.halo * 0.28,
+              capacite,
+            )
+          : null;
+    }
+    if (dernier >= total) {
+      _prochainARefaire = -1;
+      _echelleSprites = _echelleCible;
+    } else {
+      _prochainARefaire = dernier;
+    }
+    ChronoPerf.fin('pim.preparer', chrono);
   }
 
   /// Recopie [sprite] centré sur chacun des [nombre] [points], à la
@@ -2314,8 +2378,10 @@ class _PeintrePim extends CustomPainter {
     Float32List points,
     int nombre,
     double largeur,
-    double opacite,
-  ) {
+    double opacite, {
+    double dx = 0,
+    double dy = 0,
+  }) {
     final echelle = largeur / sprite.largeur / _densite;
     final demi = sprite.image.width / 2 * echelle;
     final t = _transformes;
@@ -2323,8 +2389,8 @@ class _PeintrePim extends CustomPainter {
       final j = i * 4;
       t[j] = echelle;
       t[j + 1] = 0;
-      t[j + 2] = points[i * 2] - demi;
-      t[j + 3] = points[i * 2 + 1] - demi;
+      t[j + 2] = points[i * 2] - demi + dx;
+      t[j + 3] = points[i * 2 + 1] - demi + dy;
     }
     _atlas.color = Color.fromRGBO(255, 255, 255, opacite.clamp(0.0, 1.0));
     canvas.drawRawAtlas(
@@ -2372,7 +2438,7 @@ class _PeintrePim extends CustomPainter {
     // Halos un peu plus serrés sur une petite sphère.
     final ample = ((rayon - 80) / 90).clamp(0.0, 1.0);
     final facteurHalo = 0.8 + 0.2 * ample;
-    _preparer(echelle, qualiteReduite, facteurHalo);
+    _preparer(echelle, facteurHalo);
 
     // Ombre portée : la sphère monte → ombre plus large et plus pâle ;
     // elle descend → plus petite et un peu plus marquée.
@@ -2412,6 +2478,10 @@ class _PeintrePim extends CustomPainter {
     }
 
     final eclat = sim.eclat;
+    if (ChronoPerf.sans('pim.particules')) {
+      ChronoPerf.fin('pim.peinture', chrono);
+      return;
+    }
     const styles = PimRendu.styles;
     const plans = PimRendu.plans;
     for (var d = 0; d < plans.length; d++) {
@@ -2424,7 +2494,12 @@ class _PeintrePim extends CustomPainter {
         final points = Float32List.sublistView(sim.tampons[k], 0, nombre * 2);
         final taille = style.taille * echelle * plan.taille;
 
-        final halo = _spriteHalo[k];
+        // Sur téléphone (qualité réduite), pas de halo pour les styles peu
+        // lumineux ni de flou de fond pour les micro-particules (trop
+        // petites pour que la différence se voie).
+        final halo = style.lueur > 0 && !(qualiteReduite && style.lueur < 0.5)
+            ? _spriteHalo[k]
+            : null;
         if (halo != null && !ChronoPerf.sans('pim.halos')) {
           _dessinerSprites(
             canvas,
@@ -2436,10 +2511,23 @@ class _PeintrePim extends CustomPainter {
           );
         }
 
-        final flou = _spritePoint[k];
+        final flou = plan.flou > 0 && !(qualiteReduite && style.micro)
+            ? _spritePoint[k]
+            : null;
         if (flou != null && !ChronoPerf.sans('pim.flou')) {
           _dessinerSprites(canvas, flou, points, nombre, taille, plan.opacite);
-        } else {
+        } else if (_spriteNet[k] != null &&
+            !ChronoPerf.sans('pim.points') &&
+            !ChronoPerf.sans('pim.atlasNets')) {
+          _dessinerSprites(
+            canvas,
+            _spriteNet[k]!,
+            points,
+            nombre,
+            taille,
+            plan.opacite,
+          );
+        } else if (!ChronoPerf.sans('pim.points')) {
           _point
             ..color = _couleursPoint[k]
             ..strokeWidth = taille;
@@ -2451,6 +2539,22 @@ class _PeintrePim extends CustomPainter {
             !ChronoPerf.sans('pim.reflets')) {
           // Reflet en haut à gauche : la particule paraît sphérique ; plus
           // marqué au premier plan.
+          final reflet = ChronoPerf.sans('pim.atlasNets')
+              ? null
+              : _spriteReflet[k];
+          if (reflet != null) {
+            _dessinerSprites(
+              canvas,
+              reflet,
+              points,
+              nombre,
+              taille * 0.42,
+              1,
+              dx: -taille * 0.17,
+              dy: -taille * 0.2,
+            );
+            continue;
+          }
           canvas.save();
           canvas.translate(-taille * 0.17, -taille * 0.2);
           _reflet
