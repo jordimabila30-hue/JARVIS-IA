@@ -127,8 +127,9 @@ enum CoteBulle { gauche, droite }
 /// l'export à gauche, l'autre à droite ; en groupe, tous à gauche, chacun
 /// avec sa couleur.
 class DispositionAuteurs {
-  DispositionAuteurs(ConversationWhatsApp c) : groupe = c.estGroupe {
-    if (!groupe) {
+  DispositionAuteurs(ConversationWhatsApp c, {this.moi})
+    : groupe = c.estGroupe {
+    if (!groupe && moi == null) {
       for (final m in c.messages) {
         final a = m.auteur;
         if (a != null && m.type != TypeMessageWhatsApp.systeme) {
@@ -143,6 +144,10 @@ class DispositionAuteurs {
   }
 
   final bool groupe;
+
+  /// Utilisateur confirmé (pièce jointe) : ses messages à droite, ceux des
+  /// autres à gauche, même en groupe. Null : disposition par défaut.
+  final String? moi;
   String? _premier;
   final _couleurs = <String, Color>{};
 
@@ -156,8 +161,10 @@ class DispositionAuteurs {
     Color(0xFFA8743A),
   ];
 
-  CoteBulle cote(String? auteur) =>
-      groupe || auteur == _premier ? CoteBulle.gauche : CoteBulle.droite;
+  CoteBulle cote(String? auteur) {
+    if (moi != null) return auteur == moi ? CoteBulle.droite : CoteBulle.gauche;
+    return groupe || auteur == _premier ? CoteBulle.gauche : CoteBulle.droite;
+  }
 
   Color couleur(String? auteur) => _couleurs[auteur] ?? CouleursJarvis.signal;
 }
@@ -208,6 +215,10 @@ class SeparateurJour extends StatelessWidget {
 /// Cadre commun des bulles : largeur adaptée au contenu (bornée), côté,
 /// couleur, coin marqué en tête de suite, nom de l'auteur si utile.
 class _Bulle extends StatelessWidget {
+  /// Espace au-dessus d'une bulle (plus grand en tête de suite) : la bulle
+  /// elle-même commence en dessous.
+  static double margeHaut(bool debutSuite) => debutSuite ? 8 : 2;
+
   const _Bulle({
     required this.cote,
     required this.debutSuite,
@@ -232,7 +243,7 @@ class _Bulle extends StatelessWidget {
     const rayon = Radius.circular(18);
     const coin = Radius.circular(5);
     return Padding(
-      padding: EdgeInsets.only(top: debutSuite ? 8 : 2),
+      padding: EdgeInsets.only(top: margeHaut(debutSuite)),
       child: Align(
         alignment: droite ? Alignment.centerRight : Alignment.centerLeft,
         child: LayoutBuilder(
@@ -310,18 +321,45 @@ class _Heure extends StatelessWidget {
   final MessageWhatsApp message;
 
   @override
-  Widget build(BuildContext context) => switch (message.date) {
-    final d? => HeureMessage(d),
-    null => Text(
-      message.dateBrute,
-      style: const TextStyle(fontSize: 11, color: HeureMessage.couleur),
-    ),
-  };
+  Widget build(BuildContext context) {
+    final heure = switch (message.date) {
+      final d? => HeureMessage(d),
+      null => Text(
+        message.dateBrute,
+        style: const TextStyle(fontSize: 11, color: HeureMessage.couleur),
+      ),
+    };
+    if (!message.ajoute) return heure;
+    // Provenance toujours visible : collé par l'utilisateur.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'ajouté à la main',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontStyle: FontStyle.italic,
+            color: HeureMessage.couleur,
+          ),
+        ),
+        if (message.date != null || message.dateBrute.isNotEmpty) ...[
+          const Text(
+            ' · ',
+            style: TextStyle(fontSize: 11, color: HeureMessage.couleur),
+          ),
+          heure,
+        ],
+      ],
+    );
+  }
 }
 
 /// Un message de l'aperçu : texte (retours à la ligne d'origine), média
 /// non importé (petite bulle), message supprimé, ou événement système.
 class BulleApercu extends StatelessWidget {
+  /// Espace au-dessus de la bulle (pour aligner un élément sur la bulle).
+  static double margeHaut(bool debutSuite) => _Bulle.margeHaut(debutSuite);
+
   const BulleApercu({
     super.key,
     required this.message,

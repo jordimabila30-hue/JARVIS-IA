@@ -1,0 +1,350 @@
+{
+  "avertissement": "Données FICTIVES. Manifeste de vérification : ne jamais l'envoyer à l'IA.",
+  "vous_etes": "Alex Martin",
+  "conversations": [
+    {
+      "zip": "JARVIS_TEST_SENTIMENTAL.zip",
+      "fichier_texte": "Discussion WhatsApp avec Lina Moreau.txt",
+      "contact": "Lina Moreau",
+      "groupe": false,
+      "participants": [
+        "Alex Martin",
+        "Lina Moreau"
+      ],
+      "vous_etes": "Alex Martin",
+      "lignes_export": 97,
+      "messages": 96,
+      "messages_systeme": 1,
+      "debut": "01/09/2026 19:17",
+      "fin": "08/10/2026 23:03",
+      "dernier_auteur": "Lina Moreau",
+      "dernier_message": "Alors on va devoir continuer le traitement. Tous les soirs. C'est pas une blague hein 😊",
+      "ancres": {
+        "diner_reserve": {
+          "rang": 15,
+          "auteur": "Lina Moreau",
+          "texte": "Parfait, je réserve pour samedi 20h",
+          "date": "02/09/2026 21:32"
+        },
+        "incomprehension": {
+          "rang": 29,
+          "auteur": "Lina Moreau",
+          "texte": "Tu fais ce que tu veux de toute façon",
+          "date": "09/09/2026 18:29"
+        },
+        "clarification": {
+          "rang": 32,
+          "auteur": "Alex Martin",
+          "texte": "Pas du tout. J'étais en réunion jusqu'à 21h et j'avais la tête ailleurs. Je suis désolé, j'aurais dû te prévenir",
+          "date": "09/09/2026 18:36"
+        },
+        "dernier": {
+          "rang": 96,
+          "auteur": "Lina Moreau",
+          "texte": "Alors on va devoir continuer le traitement. Tous les soirs. C'est pas une blague hein 😊",
+          "date": "08/10/2026 23:03"
+        }
+      },
+      "attendus": {
+        "sujet": "relation affective naissante : sorties (restaurant La Petite Ourse, parc), taquineries, une incompréhension clarifiée",
+        "incomprehension": "Lina écrit « Tu fais ce que tu veux de toute façon » (vexée), Alex clarifie (réunion jusqu'à 21h)",
+        "dernier_message": "Lina, ton affectueux et joueur ; « c'est pas une blague » : ambigu entre humour et sincérité → interprétation prudente",
+        "action_attendue": "répondre (Lina a écrit en dernier)"
+      }
+    },
+    {
+      "zip": "JARVIS_TEST_PROFESSIONNEL.zip",
+      "fichier_texte": "Discussion WhatsApp avec Nora Laurent.txt",
+      "contact": "Nora Laurent",
+      "groupe": false,
+      "participants": [
+        "Alex Martin",
+        "Nora Laurent"
+      ],
+      "vous_etes": "Alex Martin",
+      "lignes_export": 249,
+      "messages": 248,
+      "messages_systeme": 1,
+      "debut": "09/05/2026 09:58",
+      "fin": "25/07/2026 17:54",
+      "dernier_auteur": "Nora Laurent",
+      "dernier_message": "Bravo. Peux-tu m'envoyer le compte rendu de la recette avant jeudi 17h ? Je le transmets au client",
+      "ancres": {
+        "reunion_cadrage": {
+          "rang": 1,
+          "auteur": "Nora Laurent",
+          "texte": "Bonjour Alex, le client valide le lancement du projet Atlas. Réunion de cadrage jeudi 7 mai à 10h ?",
+          "date": "09/05/2026 09:58"
+        },
+        "echeance_initiale": {
+          "rang": 22,
+          "auteur": "Nora Laurent",
+          "texte": "Compte rendu : livraison de la V1 fixée au 30 juin",
+          "date": "17/05/2026 09:23"
+        },
+        "desaccord_base": {
+          "rang": 54,
+          "auteur": "Nora Laurent",
+          "texte": "Je ne suis pas d'accord. Les rapports financiers demandent des jointures, PostgreSQL serait plus adapté",
+          "date": "28/05/2026 09:49"
+        },
+        "decision_base": {
+          "rang": 83,
+          "auteur": "Nora Laurent",
+          "texte": "Décision actée : on part sur PostgreSQL. Je préviens le client",
+          "date": "06/06/2026 09:28"
+        },
+        "repartition": {
+          "rang": 105,
+          "auteur": "Nora Laurent",
+          "texte": "Répartition : tu prends le module d'authentification de l'API, Karim le front, moi la revue de code",
+          "date": "16/06/2026 09:51"
+        },
+        "echeance_decalee": {
+          "rang": 136,
+          "auteur": "Nora Laurent",
+          "texte": "Le client demande deux écrans en plus. On décale la livraison au 15 juillet",
+          "date": "25/06/2026 09:34"
+        },
+        "retard_question": {
+          "rang": 164,
+          "auteur": "Nora Laurent",
+          "texte": "Combien de jours ?",
+          "date": "02/07/2026 09:29"
+        },
+        "reunion_deplacee": {
+          "rang": 185,
+          "auteur": "Nora Laurent",
+          "texte": "Réunion de suivi déplacée à vendredi 14h, la salle Turing est prise",
+          "date": "04/07/2026 09:52"
+        },
+        "desaccord_tests": {
+          "rang": 207,
+          "auteur": "Nora Laurent",
+          "texte": "Non, les tests passent avant la recette. C'est la règle pour tout le monde",
+          "date": "09/07/2026 09:42"
+        },
+        "dernier": {
+          "rang": 248,
+          "auteur": "Nora Laurent",
+          "texte": "Bravo. Peux-tu m'envoyer le compte rendu de la recette avant jeudi 17h ? Je le transmets au client",
+          "date": "25/07/2026 17:54"
+        }
+      },
+      "attendus": {
+        "decision": "PostgreSQL retenu au lieu de MongoDB (proposé par Nora, accepté par Alex après chiffrage)",
+        "delais": "V1 au 30 juin, puis décalée au 15 juillet (deux écrans en plus) ; retard OAuth de 2 jours",
+        "taches": "Alex : module d'authentification ; Karim : front ; Nora : revue de code",
+        "action_attendue": "répondre à Nora (compte rendu avant jeudi 17h)"
+      }
+    },
+    {
+      "zip": "JARVIS_TEST_AMITIE.zip",
+      "fichier_texte": "Discussion WhatsApp avec Samuel Petit.txt",
+      "contact": "Samuel Petit",
+      "groupe": false,
+      "participants": [
+        "Alex Martin",
+        "Samuel Petit"
+      ],
+      "vous_etes": "Alex Martin",
+      "lignes_export": 783,
+      "messages": 782,
+      "messages_systeme": 1,
+      "debut": "03/03/2026 13:52",
+      "fin": "23/09/2026 19:52",
+      "dernier_auteur": "Alex Martin",
+      "dernier_message": "Alors, toujours partant pour l'escalade samedi ?",
+      "ancres": {
+        "moment_serieux": {
+          "rang": 168,
+          "auteur": "Samuel Petit",
+          "texte": "Merci mec. Ça me fait du bien d'en parler",
+          "date": "13/04/2026 20:41"
+        },
+        "genie_sarcastique": {
+          "rang": 227,
+          "auteur": "Samuel Petit",
+          "texte": "T'es vraiment un génie",
+          "date": "03/05/2026 13:48"
+        },
+        "genie_sincere": {
+          "rang": 403,
+          "auteur": "Alex Martin",
+          "texte": "Tu m'as aidé à préparer mon entretien, t'es vraiment un génie",
+          "date": "15/06/2026 20:26"
+        },
+        "dernier": {
+          "rang": 782,
+          "auteur": "Alex Martin",
+          "texte": "Alors, toujours partant pour l'escalade samedi ?",
+          "date": "23/09/2026 19:52"
+        }
+      },
+      "attendus": {
+        "humour": "très fréquent, lancé par les deux ; Samuel plus souvent sur l'autodérision (pâtes au ketchup, clés perdues)",
+        "ironie": "« T'es vraiment un génie » : sarcastique quand Samuel le dit (étagère, vis en trop), sincère quand Alex le dit (entretien)",
+        "serieux": "Samuel envisage de quitter son travail ; la grand-mère d'Alex à l'hôpital",
+        "action_attendue": "relancer (Alex a écrit en dernier, sans réponse)"
+      }
+    },
+    {
+      "zip": "JARVIS_TEST_FAMILLE.zip",
+      "fichier_texte": "Discussion WhatsApp avec Maya Martin.txt",
+      "contact": "Maya Martin",
+      "groupe": false,
+      "participants": [
+        "Alex Martin",
+        "Maya Martin"
+      ],
+      "vous_etes": "Alex Martin",
+      "lignes_export": 1494,
+      "messages": 1493,
+      "messages_systeme": 1,
+      "debut": "05/11/2025 08:39",
+      "fin": "21/09/2026 20:40",
+      "dernier_auteur": "Maya Martin",
+      "dernier_message": "Oui, vers midi. Et j'apporte le gâteau cette fois, promis",
+      "ancres": {
+        "fete_premiere_mention": {
+          "rang": 61,
+          "auteur": "Maya Martin",
+          "texte": "Idée : on organise une fête surprise pour les 30 ans de mariage de papa et maman ?",
+          "date": "16/11/2025 12:53"
+        },
+        "repartition_fete": {
+          "rang": 302,
+          "auteur": "Maya Martin",
+          "texte": "Parfait, je m'occupe des invitations",
+          "date": "13/01/2026 20:04"
+        },
+        "question_sans_reponse": {
+          "rang": 401,
+          "auteur": "Maya Martin",
+          "texte": "Tu sais si mamie viendra à la fête ?",
+          "date": "01/02/2026 12:28"
+        },
+        "date_initiale": {
+          "rang": 562,
+          "auteur": "Maya Martin",
+          "texte": "La salle est réservée pour le samedi 12 juin",
+          "date": "12/03/2026 18:07"
+        },
+        "correction_date": {
+          "rang": 621,
+          "auteur": "Maya Martin",
+          "texte": "Attends, erreur : le 12 juin c'est un vendredi. La salle est réservée le samedi 13 juin",
+          "date": "22/03/2026 18:18"
+        },
+        "changement_decision": {
+          "rang": 861,
+          "auteur": "Alex Martin",
+          "texte": "Finalement on déplace la fête au samedi 20 juin, papa a un séminaire le 13",
+          "date": "20/05/2026 20:28"
+        },
+        "rappel_ancien": {
+          "rang": 1302,
+          "auteur": "Maya Martin",
+          "texte": "Tu te souviens de la fête ? Maman en parle encore 😄",
+          "date": "14/08/2026 18:18"
+        },
+        "dernier": {
+          "rang": 1493,
+          "auteur": "Maya Martin",
+          "texte": "Oui, vers midi. Et j'apporte le gâteau cette fois, promis",
+          "date": "21/09/2026 20:40"
+        }
+      },
+      "attendus": {
+        "evenement": "fête surprise des 30 ans de mariage des parents",
+        "premiere_mention": "première mention par Maya (ancre fete_premiere_mention)",
+        "dates": "annoncée le 14 juin, salle d'abord « samedi 12 juin » (erreur), corrigée en samedi 13 juin, puis déplacée au samedi 20 juin",
+        "question_sans_reponse": "« Tu sais si mamie viendra à la fête ? » (Maya) : pas de réponse d'Alex"
+      }
+    },
+    {
+      "zip": "JARVIS_TEST_GROUPE.zip",
+      "fichier_texte": "Discussion WhatsApp avec Projet Nova.txt",
+      "contact": "Projet Nova",
+      "groupe": true,
+      "participants": [
+        "Alex Martin",
+        "Nora Laurent",
+        "Samuel Petit",
+        "Lina Moreau",
+        "Maya Martin"
+      ],
+      "vous_etes": "Alex Martin",
+      "lignes_export": 4795,
+      "messages": 4792,
+      "messages_systeme": 3,
+      "debut": "02/02/2026 09:04",
+      "fin": "01/09/2026 18:50",
+      "dernier_auteur": "Nora Laurent",
+      "dernier_message": "Merci Lina. Point d'équipe demain 9h comme d'habitude ?",
+      "ancres": {
+        "desaccord_samuel_nora": {
+          "rang": 906,
+          "auteur": "Nora Laurent",
+          "texte": "Je préfère Svelte, plus léger pour les mobiles",
+          "date": "02/04/2026 10:33"
+        },
+        "accord_samuel_nora": {
+          "rang": 1303,
+          "auteur": "Samuel Petit",
+          "texte": "Bon, j'ai testé Svelte ce week-end. Nora a raison, on part dessus",
+          "date": "15/04/2026 10:31"
+        },
+        "decision_svelte": {
+          "rang": 1305,
+          "auteur": "Alex Martin",
+          "texte": "Décision prise alors : Svelte",
+          "date": "15/04/2026 10:41"
+        },
+        "changement_responsabilite": {
+          "rang": 2003,
+          "auteur": "Maya Martin",
+          "texte": "Je laisse la responsabilité du design à Lina à partir de lundi, je passe sur les tests",
+          "date": "24/05/2026 10:18"
+        },
+        "proposition_reunion": {
+          "rang": 2606,
+          "auteur": "Nora Laurent",
+          "texte": "Je propose une réunion de lancement de la phase 2 mardi prochain à 10h",
+          "date": "12/06/2026 10:59"
+        },
+        "confirmation_horaire": {
+          "rang": 2609,
+          "auteur": "Alex Martin",
+          "texte": "Confirmé pour mardi prochain à 10h, je réserve la salle",
+          "date": "12/06/2026 11:15"
+        },
+        "echeance_ancienne": {
+          "rang": 3106,
+          "auteur": "Nora Laurent",
+          "texte": "Le rendu final est fixé au 30 novembre",
+          "date": "05/07/2026 10:49"
+        },
+        "echeance_mise_a_jour": {
+          "rang": 3905,
+          "auteur": "Nora Laurent",
+          "texte": "Mise à jour : le financeur accepte un report, rendu final au 15 décembre",
+          "date": "27/07/2026 10:44"
+        },
+        "dernier": {
+          "rang": 4794,
+          "auteur": "Nora Laurent",
+          "texte": "Merci Lina. Point d'équipe demain 9h comme d'habitude ?",
+          "date": "01/09/2026 18:50"
+        }
+      },
+      "attendus": {
+        "reunion": "proposée par Nora (ancre proposition_reunion), horaire confirmé par Alex (ancre confirmation_horaire)",
+        "samuel_nora": "désaccord React/Svelte, puis Samuel se range à l'avis de Nora (Svelte)",
+        "responsabilite": "Maya passe le design à Lina",
+        "echeance": "30 novembre puis 15 décembre (mise à jour)",
+        "action_attendue": "répondre (Nora a écrit en dernier)"
+      }
+    }
+  ]
+}

@@ -2,17 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../models/conversations/source_conversation.dart';
+import '../../models/importation/piece_jointe_whatsapp.dart';
+import '../../models/importation/propositions_reponse.dart';
+import '../../models/importation/reference_whatsapp.dart';
 import '../../models/message_conversation.dart';
 import '../conversations/correspondance_conversations.dart';
 import '../conversations/depot_conversations.dart';
 import '../conversations/synchro_echanges_locaux.dart';
+import '../api_jarvis.dart';
+import '../importation/actualisation_whatsapp.dart';
+import '../importation/pieces_jointes_serveur.dart';
 import '../ecriture/ecriture_progressive.dart';
 import '../ecriture/texte_en_direct.dart';
 import '../voice_command_service.dart';
+import 'consentement_analyse.dart';
 import 'detecteur_conversation.dart';
 import 'detecteur_intention.dart';
 import 'moteur_conversation.dart';
 import 'moteur_conversation_ia.dart';
+import 'reponses_envoyees.dart';
 
 /// Conversation écrite avec JARVIS : une seule discussion, dans laquelle
 /// l'utilisateur peut parler normalement, coller une conversation externe,
@@ -38,6 +47,10 @@ class ConversationSession extends ChangeNotifier {
     this.delaiReflexion = const Duration(milliseconds: 450),
     DateTime Function()? horloge,
     this.depot,
+    this.piecesJointes,
+    this.reponsesEnvoyees,
+    this.actualisation,
+    this.consentement,
     CorrespondanceConversations? correspondance,
   }) : moteur = moteur ?? MoteurConversationLocal(),
        _horloge = horloge ?? DateTime.now,
@@ -48,6 +61,28 @@ class ConversationSession extends ChangeNotifier {
   /// Conversations enregistrées sur le serveur (null : aucun compte, tout
   /// reste en mémoire).
   final DepotConversations? depot;
+
+  /// Pièces jointes WhatsApp enregistrées par le serveur (compte connecté).
+  /// Null : elles restent en mémoire sur l'appareil.
+  final ServicePiecesJointes? piecesJointes;
+
+  /// Phase 4 : réponses déclarées envoyées (appui long), enregistrées par
+  /// le serveur ; null sans compte.
+  final ServiceReponsesEnvoyees? reponsesEnvoyees;
+
+  /// Phase 5 / 5.1 : messages WhatsApp collés, affichés en bulles dans le
+  /// fil (relus du serveur à l'ouverture du chat).
+  final ServiceActualisationWhatsApp? actualisation;
+
+  /// Accord de l'utilisateur pour l'analyse distante des conversations
+  /// WhatsApp jointes (demandé dans le fil, révocable dans les
+  /// Paramètres). Null : jamais enregistré.
+  final ConsentementAnalyse? consentement;
+
+  /// Appelé avant d'enregistrer une pièce jointe dans la conversation
+  /// locale [idLocal] (échanges locaux encore en route : la conversation
+  /// serveur doit être connue d'abord).
+  Future<void> Function(String idLocal)? avantPieceJointe;
 
   /// Conversation du fil <-> conversation serveur (partagée avec le moteur
   /// IA, qui l'établit à la première réponse).
@@ -131,6 +166,638 @@ class ConversationSession extends ChangeNotifier {
     return _file = _file.then((_) => _traiter(t, generation));
   }
 
+  /// Message de pièce jointe sans compte : la consigne est reçue, mais
+  /// rien n'a quitté l'appareil, donc aucune analyse n'est possible.
+  static String reponsePieceJointe(PieceJointeWhatsApp p) {
+    final n = p.nombre;
+    final messages = '$n message${n > 1 ? 's' : ''}';
+    return 'J’ai bien reçu votre consigne avec la conversation WhatsApp '
+        '« ${p.titre} » ($messages). Pour que je l’analyse, connectez-vous à '
+        'votre compte : ces messages restent pour l’instant sur cet appareil '
+        'et n’ont été envoyés à aucun serveur.';
+  }
+
+  /// Réponse au refus de l'analyse distante (locale, jamais enregistrée).
+  static const refusAnalyse =
+      'Entendu : je n’envoie rien à l’IA. La conversation reste enregistrée '
+      'dans votre compte et consultable avec « Voir les messages ». Vous '
+      'pourrez autoriser l’analyse plus tard dans les Paramètres, rubrique '
+      'Confidentialité.';
+
+  // Demandes à relancer depuis un bouton (accord donné, nouvel essai),
+  // par identifiant du message de JARVIS qui porte le bouton.
+  final _aRelancer = <int, DemandeJarvis>{};
+
+  /// La conversation [id] a des conversations WhatsApp jointes.
+  bool _contexteImporte(String? id) =>
+      id != null && _classements[id]?.source == SourceConversation.whatsapp;
+
+  // Pièces jointes déjà envoyées : un double appui n'envoie rien de plus.
+  final _piecesEnvoyees = <String>{};
+
+  /// Conversations classées sous une source par une pièce jointe envoyée
+  /// (en mémoire ; l'enregistrement attend le stockage définitif).
+  final _classements = <String, ClassementConversation>{};
+
+  /// Classement d'une conversation (null : JARVIS, inchangé).
+  ClassementConversation? classement(String idConversation) =>
+      _classements[idConversation];
+
+  /// Une consigne vient d'être envoyée avec sa pièce jointe : tout ce qu'un
+  /// futur dépôt devra enregistrer (rien ne l'est pour l'instant).
+  void Function(EnvoiPieceJointe envoi)? surPieceJointe;
+
+  // Pièces jointes relues du serveur, par conversation locale.
+  final _contextesConnus = <String, List<ContexteServeur>>{};
+
+  // Ton regardé dans les dernières propositions de réponse, par
+  // conversation locale (« pourquoi la deuxième ? » vise ce ton).
+  final _tonsRegardes = <String, String>{};
+
+  /// L'utilisateur affiche le ton [ton] des propositions de réponse du
+  /// message [idMessage] (aucun appel à l'IA : tous les tons sont déjà là).
+  void regarderTon(int idMessage, String ton, {LongueurProposition? longueur}) {
+    final id = _idCourant;
+    if (id == null) return;
+    if (longueur != null && _dernieresPropositions()?.id == idMessage) {
+      _longueursRegardees[id] = longueur;
+    }
+    // Seules les propositions les plus récentes du fil comptent.
+    if (_dernieresPropositions()?.id != idMessage) return;
+    _tonsRegardes[id] = ton;
+  }
+
+  /// Pièces jointes WhatsApp du chat affiché (phase 5 : quel contexte
+  /// actualiser) : relues du serveur, ou jointes pendant cette session.
+  List<ContexteServeur> get contextesCourants {
+    final id = _idCourant;
+    if (id == null) return const [];
+    final connus = [...?_contextesConnus[id]];
+    for (final m in messages) {
+      final p = m.pieceJointe;
+      if (p == null || connus.any((c) => c.id == p.id)) continue;
+      connus.add(
+        ContexteServeur(
+          id: p.id,
+          consigne: p.idConsigne,
+          contact: p.titre,
+          nombre: p.messages.length,
+          creeLe: p.creeLe,
+          participants: p.participants,
+          moi: p.moi,
+          groupe: p.groupe,
+        ),
+      );
+    }
+    return connus;
+  }
+
+  /// Ton regardé dans les propositions du message [idMessage] (les plus
+  /// récentes du fil), pour que la carte le réaffiche quand la liste la
+  /// reconstruit : ce que voit l'utilisateur = ce que « pourquoi la
+  /// deuxième ? » vise.
+  String? tonRegarde(int idMessage) {
+    final id = _idCourant;
+    if (id == null || _dernieresPropositions()?.id != idMessage) return null;
+    return _tonsRegardes[id];
+  }
+
+  /// Longueur regardée (phase 5.1), même règle que [tonRegarde].
+  LongueurProposition? longueurRegardee(int idMessage) {
+    final id = _idCourant;
+    if (id == null || _dernieresPropositions()?.id != idMessage) return null;
+    return _longueursRegardees[id];
+  }
+
+  final _longueursRegardees = <String, LongueurProposition>{};
+
+  /// Contact WhatsApp du chat affiché (bulle de la réponse retenue).
+  String? get contactPropositions {
+    final c = contextesCourants;
+    return c.length == 1 ? c.single.contact : null;
+  }
+
+  /// Le dialogue avec JARVIS, sans les bulles de messages WhatsApp collés
+  /// (jamais données aux moteurs comme historique du chat).
+  List<MessageConversation> get _dialogue => [
+    for (final m in messages)
+      if (m.ajoutWhatsApp == null) m,
+  ];
+
+  /// Bulles des messages WhatsApp que l'utilisateur vient d'ajouter (le
+  /// serveur les a enregistrés) : à la fin du fil, sans réponse de l'IA.
+  void afficherAjouts(ContexteServeur contexte, List<MessageAjoute> ajouts) {
+    // Contexte d'un autre chat : enregistré, mais pas dans CE fil.
+    if (!contextesCourants.any((c) => c.id == contexte.id)) return;
+    final connus = {for (final m in messages) ?m.idServeur};
+    for (final a in ajouts) {
+      if (connus.contains('ajout:${a.id}')) continue;
+      messages.add(_bulleAjout(contexte, a, heure: _horloge()));
+    }
+    notifyListeners();
+  }
+
+  MessageConversation _bulleAjout(
+    ContexteServeur c,
+    MessageAjoute a, {
+    DateTime? heure,
+  }) => MessageConversation(
+    id: _id++,
+    auteur: a.sens == SensMessage.envoye
+        ? AuteurMessage.utilisateur
+        : AuteurMessage.jarvis,
+    heure: heure ?? a.ajouteLe ?? _horloge(),
+    idServeur: 'ajout:${a.id}',
+    enregistre: true,
+    ajoutWhatsApp: AjoutDansLeFil(
+      contexte: c.id,
+      contact: c.contact,
+      message: a,
+    ),
+  );
+
+  /// Chat restauré : les bulles des ajouts, à leur place (moment de
+  /// l'ajout), sans doublon.
+  Future<void> _chargerAjouts(
+    String idLocal,
+    List<ContexteServeur> contextes,
+  ) async {
+    final service = actualisation;
+    if (service == null || contextes.isEmpty) return;
+    for (final c in contextes) {
+      final r = await service.ajoutes(c.id);
+      if (_ferme || idLocal != _idCourant) return;
+      if (r is! SuccesApi<List<MessageAjoute>>) continue;
+      final serveur = {for (final a in r.valeur) 'ajout:${a.id}': a};
+      var change = false;
+      // Corrigés ou supprimés ailleurs : la bulle suit.
+      for (var i = messages.length - 1; i >= 0; i--) {
+        final b = messages[i].ajoutWhatsApp;
+        if (b == null || b.contexte != c.id) continue;
+        final a = serveur[messages[i].idServeur];
+        if (a == null) {
+          messages.removeAt(i);
+          change = true;
+        } else if (a.texte != b.message.texte) {
+          messages[i] = messages[i].avecAjout(b.avecMessage(a));
+          change = true;
+        }
+      }
+      final connus = {for (final m in messages) ?m.idServeur};
+      for (final a in r.valeur) {
+        if (connus.contains('ajout:${a.id}')) continue;
+        final bulle = _bulleAjout(c, a);
+        final i = messages.indexWhere((m) => m.heure.isAfter(bulle.heure));
+        messages.insert(i < 0 ? messages.length : i, bulle);
+        change = true;
+      }
+      if (change) notifyListeners();
+    }
+  }
+
+  /// Corrige (texte) ou supprime une bulle d'ajout ; vrai si le serveur l'a
+  /// enregistré. Les messages importés ne passent jamais par ici.
+  Future<bool> corrigerAjout(int idMessage, String texte) async {
+    final i = messages.indexWhere((m) => m.id == idMessage);
+    final b = i < 0 ? null : messages[i].ajoutWhatsApp;
+    final service = actualisation;
+    if (b == null || service == null || texte.trim().isEmpty) return false;
+    final r = await service.modifier(
+      b.contexte,
+      b.message.id,
+      texte: texte.trim(),
+    );
+    if (r is! SuccesApi || _ferme) return false;
+    final j = messages.indexWhere((m) => m.id == idMessage);
+    if (j >= 0) {
+      messages[j] = messages[j].avecAjout(
+        b.avecMessage(b.message.avecTexte(texte.trim())),
+      );
+      notifyListeners();
+    }
+    return true;
+  }
+
+  Future<bool> supprimerAjout(int idMessage) async {
+    final i = messages.indexWhere((m) => m.id == idMessage);
+    final b = i < 0 ? null : messages[i].ajoutWhatsApp;
+    final service = actualisation;
+    if (b == null || service == null) return false;
+    final r = await service.supprimer(b.contexte, b.message.id);
+    if (r is! SuccesApi || _ferme) return false;
+    messages.removeWhere((m) => m.id == idMessage);
+    notifyListeners();
+    return true;
+  }
+
+  // Reprises en cours (identifiants locaux de messages) : un double appui
+  // n'envoie rien de plus.
+  final _reprisesEnCours = <int>{};
+
+  /// Vrai pendant la reprise des propositions du message [idMessage].
+  bool repriseEnCours(int idMessage) => _reprisesEnCours.contains(idMessage);
+
+  /// « Reprendre » : le serveur complète SEULEMENT les combinaisons
+  /// manquantes du même ensemble (aucun nouveau message, aucune consigne
+  /// renvoyée). Vrai si l'ensemble est désormais complet.
+  Future<bool> reprendrePropositions(int idMessage) async {
+    final service = reponsesEnvoyees;
+    final conversation = idServeurCourant;
+    final i = messages.indexWhere((m) => m.id == idMessage);
+    if (service == null || conversation == null || i < 0) return false;
+    final serveur = messages[i].idServeur;
+    if (serveur == null || !_reprisesEnCours.add(idMessage)) return false;
+    notifyListeners();
+    try {
+      final r = await service.completer(
+        conversation: conversation,
+        message: serveur,
+      );
+      if (_ferme) return false;
+      switch (r) {
+        case EchecApi(:final type):
+          debugPrint('[JARVIS propositions] reprise impossible : ${type.name}');
+          return false;
+        case SuccesApi(:final valeur):
+          final j = messages.indexWhere((m) => m.id == idMessage);
+          if (valeur == null || j < 0) return false;
+          messages[j] = messages[j].avecPropositions(valeur);
+          return !valeur.incomplet;
+      }
+    } finally {
+      _reprisesEnCours.remove(idMessage);
+      if (!_ferme) notifyListeners();
+    }
+  }
+
+  // Bulles dont le texte est fini mais dont les propositions se préparent
+  // encore côté serveur (événement `preparation`).
+  final _preparations = <int>{};
+
+  /// Vrai tant que le serveur prépare les propositions de la bulle [id].
+  bool preparationEnCours(int id) => _preparations.contains(id);
+
+  MessageConversation? _dernieresPropositions() {
+    final i = messages.lastIndexWhere((m) => m.propositions != null);
+    return i < 0 ? null : messages[i];
+  }
+
+  // Déclarations en cours (identifiants de propositions) : un double appui
+  // n'envoie rien de plus.
+  final _declarationsEnCours = <String>{};
+
+  /// Phase 4 : l'utilisateur DÉCLARE avoir envoyé (ou n'avoir finalement
+  /// pas envoyé : [envoyee] faux) la proposition [idProposition] du message
+  /// [idMessage]. Le statut ne change qu'après confirmation du serveur ;
+  /// rien n'est envoyé à WhatsApp. Faux en cas d'échec (statut inchangé).
+  Future<bool> declarerEnvoyee(
+    int idMessage,
+    String idProposition, {
+    bool envoyee = true,
+  }) async {
+    final service = reponsesEnvoyees;
+    final conversation = idServeurCourant;
+    final i = messages.indexWhere((m) => m.id == idMessage);
+    if (service == null || conversation == null || i < 0) return false;
+    final message = messages[i];
+    final serveur = message.idServeur;
+    if (serveur == null ||
+        idProposition.isEmpty ||
+        !_declarationsEnCours.add(idProposition)) {
+      return false;
+    }
+    try {
+      final r = await service.statut(
+        conversation: conversation,
+        message: serveur,
+        proposition: idProposition,
+        envoyee: envoyee,
+      );
+      if (_ferme) return false;
+      switch (r) {
+        case EchecApi(:final type, :final detail):
+          debugPrint('[JARVIS envoyée] non enregistrée : ${type.name}');
+          // Un autre appareil a déjà choisi dans cet ensemble : son choix
+          // est relu (un seul choix actif, garanti par le serveur).
+          if ((detail ?? '').contains('deja_choisi')) {
+            final local = _idCourant;
+            if (local != null) {
+              unawaited(_chargerReferences(local, conversation));
+            }
+          }
+          return false;
+        case SuccesApi(:final valeur):
+          final j = messages.indexWhere((m) => m.id == idMessage);
+          final p = j < 0 ? null : messages[j].propositions;
+          final local = _idCourant;
+          if (p != null && envoyee && local != null) {
+            // Réponse retenue : à l'annulation, ce ton et cette longueur
+            // reviennent.
+            for (final t in p.tons) {
+              for (final x in t.propositions) {
+                if (x.id != idProposition) continue;
+                _tonsRegardes[local] = t.nom;
+                if (x.longueur case final l?) _longueursRegardees[local] = l;
+              }
+            }
+          }
+          if (p != null) {
+            messages[j] = messages[j].avecPropositions(
+              p.avecEnvoyee(idProposition, valeur),
+            );
+            notifyListeners();
+          }
+          return true;
+      }
+    } finally {
+      _declarationsEnCours.remove(idProposition);
+    }
+  }
+
+  // Références relues du serveur, par conversation locale puis par UUID
+  // de réponse (gardées pour les messages plus anciens chargés ensuite).
+  final _referencesConnues = <String, Map<String, ReferencesReponse>>{};
+
+  /// Références d'un chat WhatsApp restauré : relues sur le serveur, qui
+  /// les vérifie de nouveau dans Supabase (jamais reconstruites ici).
+  Future<void> _chargerReferences(String idLocal, String serveur) async {
+    final service = piecesJointes;
+    if (service == null) return;
+    final r = await service.references(serveur);
+    if (_ferme || idLocal != _idCourant) return;
+    switch (r) {
+      case EchecApi(:final type):
+        debugPrint('[JARVIS références] non chargées : ${type.name}');
+      case SuccesApi(:final valeur):
+        _referencesConnues[idLocal] = valeur;
+        if (_appliquerReferences(idLocal)) notifyListeners();
+    }
+  }
+
+  /// Rattache les références connues aux réponses affichées qui n'en ont
+  /// pas encore. Vrai si un message a changé.
+  bool _appliquerReferences(String idLocal) {
+    final connues = _referencesConnues[idLocal];
+    if (connues == null || connues.isEmpty) return false;
+    var change = false;
+    for (var i = 0; i < messages.length; i++) {
+      final m = messages[i];
+      final r = m.idServeur == null ? null : connues[m.idServeur];
+      // Déjà rattachées : seuls les statuts « envoyée » peuvent avoir
+      // changé (autre appareil, actualisation).
+      if (r == null ||
+          !m.deJarvis ||
+          (m.references.isNotEmpty || m.propositions != null) &&
+              m.propositions?.statuts == r.propositions?.statuts) {
+        continue;
+      }
+      messages[i] = m.avecReferences(r);
+      change = true;
+    }
+    return change;
+  }
+
+  // Pièces jointes en cours d'enregistrement : un double appui attend.
+  final _piecesEnCours = <String>{};
+
+  /// Envoie une [consigne] avec la conversation WhatsApp [piece], liées
+  /// dans un seul message. Consigne vide : rien n'est envoyé. Une même
+  /// pièce jointe n'est envoyée qu'une fois.
+  ///
+  /// Avec un compte ([piecesJointes]), le serveur enregistre d'abord
+  /// consigne et pièce jointe (une transaction, jamais l'IA) ; le message
+  /// n'apparaît qu'une fois l'enregistrement confirmé. Échec : rien n'est
+  /// ajouté, [PieceJointeNonEnvoyee] l'explique, et un nouvel essai avec
+  /// la même pièce jointe réutilise ses identifiants (aucun doublon).
+  ///
+  /// La conversation affichée est gardée (ses anciens échanges restent) ;
+  /// sur l'accueil vide, elle commence ici. Une fois enregistrée, la
+  /// consigne est envoyée au moteur ([DemandeJarvis.repondreA] : jamais
+  /// réinsérée) : le serveur analyse la conversation jointe si
+  /// l'utilisateur l'a accepté, sinon JARVIS demande son accord dans le
+  /// fil. Les messages WhatsApp ne sont jamais des commandes pour JARVIS.
+  Future<ResultatPieceJointe> envoyerAvecPieceJointe(
+    String consigne,
+    PieceJointeWhatsApp piece,
+  ) async {
+    final t = consigne.trim();
+    if (t.isEmpty ||
+        _ferme ||
+        _piecesEnvoyees.contains(piece.id) ||
+        !_piecesEnCours.add(piece.id)) {
+      return const PieceJointeIgnoree();
+    }
+    try {
+      final generation = _generation;
+      PieceJointeEnregistree? enregistree;
+      final service = piecesJointes;
+      if (service != null) {
+        final local = _idCourant;
+        if (local != null) await avantPieceJointe?.call(local);
+        if (_ferme) return const PieceJointeIgnoree();
+        final r = await service.enregistrer(
+          piece: piece,
+          consigne: t,
+          conversation: local == null ? null : correspondance.serveur(local),
+        );
+        switch (r) {
+          case EchecApi(:final type, :final detail):
+            debugPrint(
+              '[JARVIS pièce jointe] non enregistrée : ${type.name}'
+              '${detail == null ? '' : ' ($detail)'}',
+            );
+            return PieceJointeNonEnvoyee(type.message);
+          case SuccesApi(:final valeur):
+            enregistree = valeur;
+        }
+        if (_ferme) return const PieceJointeIgnoree();
+        _piecesEnvoyees.add(piece.id);
+        surEchangeEnregistre?.call();
+        if (generation != _generation) {
+          // Fil changé pendant l'enregistrement : la conversation est sur
+          // le serveur, le menu la retrouvera.
+          return const PieceJointeEnvoyee(enregistree: true);
+        }
+      } else {
+        _piecesEnvoyees.add(piece.id);
+      }
+      final enregistreeFinale = enregistree;
+      final ajoute = Completer<void>();
+      _file = _file.then(
+        (_) => _traiterPieceJointe(
+          t,
+          piece,
+          generation,
+          enregistreeFinale,
+          ajoute,
+        ),
+      );
+      // Rendu dès que le message est dans le fil ; la réponse suit.
+      await ajoute.future;
+      return PieceJointeEnvoyee(enregistree: enregistree != null);
+    } finally {
+      _piecesEnCours.remove(piece.id);
+    }
+  }
+
+  Future<void> _traiterPieceJointe(
+    String consigne,
+    PieceJointeWhatsApp piece,
+    int generation,
+    PieceJointeEnregistree? enregistree,
+    Completer<void> ajoute,
+  ) async {
+    try {
+      await _ajouterPieceJointe(
+        consigne,
+        piece,
+        generation,
+        enregistree,
+        ajoute,
+      );
+    } finally {
+      if (!ajoute.isCompleted) ajoute.complete();
+    }
+  }
+
+  Future<void> _ajouterPieceJointe(
+    String consigne,
+    PieceJointeWhatsApp piece,
+    int generation,
+    PieceJointeEnregistree? enregistree,
+    Completer<void> ajoute,
+  ) async {
+    if (_ferme || generation != _generation) return;
+    final nouvelle = _idCourant == null;
+    final idConversation = _idCourant ??= _nouvelIdentifiant();
+    if (enregistree != null) {
+      correspondance.associer(idConversation, enregistree.conversation);
+    }
+    final heure = _horloge();
+    final id = _id++;
+    messages.add(
+      MessageConversation(
+        id: id,
+        auteur: AuteurMessage.utilisateur,
+        heure: heure,
+        texte: consigne,
+        pieceJointe: piece,
+        idServeur: enregistree?.consigne,
+        enregistre: enregistree != null,
+      ),
+    );
+    _classements[idConversation] = ClassementConversation(
+      source: piece.source,
+      titre: piece.titre,
+      pieceJointe: piece.id,
+    );
+    surPieceJointe?.call(
+      EnvoiPieceJointe(
+        idConversation: idConversation,
+        idMessage: id,
+        consigne: consigne,
+        pieceJointe: piece,
+        nouvelleConversation: nouvelle,
+        envoyeLe: heure,
+      ),
+    );
+    if (enregistree != null) {
+      notifyListeners();
+      ajoute.complete();
+      // La consigne enregistrée devient la question : la réponse de l'IA
+      // s'écrit dans le fil et le serveur l'enregistre dans ce chat.
+      await _repondre(
+        DemandeJarvis(
+          texte: consigne,
+          intention: IntentionMessage.discussion,
+          historique: List<MessageConversation>.unmodifiable(_dialogue),
+          idConversation: idConversation,
+          repondreA: enregistree.consigne,
+          contexteImporte: true,
+        ),
+      );
+      return;
+    }
+    _enAttente++;
+    notifyListeners();
+    ajoute.complete();
+    await Future<void>.delayed(delaiReflexion);
+    _enAttente--;
+    if (_ferme) return;
+    final texte = reponsePieceJointe(piece);
+    final flux = TexteEnDirect()..terminer(texte);
+    final reponse = MessageConversation(
+      id: _id++,
+      auteur: AuteurMessage.jarvis,
+      heure: _horloge(),
+      texte: texte,
+      ecriture: EcritureProgressive(flux),
+    );
+    if (generation != _generation) {
+      // Fil changé pendant la réflexion : la réponse rejoint sa
+      // conversation, mise de côté.
+      reponse.ecriture?.toutAfficher();
+      final i = _archives.indexWhere((a) => a.id == idConversation);
+      if (i >= 0) {
+        _archives[i] = _archives[i]._avec([..._archives[i].messages, reponse]);
+      } else {
+        reponse.ecriture?.arreter();
+      }
+      notifyListeners();
+      return;
+    }
+    messages.add(reponse);
+    notifyListeners();
+  }
+
+  /// Rattache aux consignes relues du serveur leurs pièces jointes
+  /// (métadonnées ; messages lus à la demande) et classe la conversation
+  /// sous WhatsApp si elle en a.
+  void _rattacherPiecesJointes(
+    String idLocal,
+    List<ContexteServeur> contextes,
+  ) {
+    if (contextes.isEmpty) return;
+    // Gardés pour les messages plus anciens chargés ensuite.
+    _contextesConnus[idLocal] = contextes;
+    final service = piecesJointes;
+    for (final c in contextes) {
+      final consigne = c.consigne;
+      if (consigne == null) continue;
+      final i = messages.indexWhere((m) => m.idServeur == consigne);
+      if (i < 0 || messages[i].pieceJointe != null) continue;
+      messages[i] = messages[i].avecPieceJointe(
+        PieceJointeWhatsApp.enregistree(
+          id: c.id,
+          idConsigne: consigne,
+          titre: c.contact,
+          participants: c.participants,
+          moi: c.moi,
+          groupe: c.groupe,
+          dateIncertaine: c.datesIncertaines,
+          nombre: c.nombre,
+          creeLe: c.creeLe,
+          debut: c.debut,
+          fin: c.fin,
+          chargerMessages: service == null
+              ? null
+              : () async => switch (await service.messages(c.id)) {
+                  SuccesApi(:final valeur) => valeur,
+                  EchecApi(:final type) => throw EchecChargementPieceJointe(
+                    type.message,
+                  ),
+                },
+        ),
+      );
+    }
+    final dernier = contextes.last;
+    _classements[idLocal] = ClassementConversation(
+      source: SourceConversation.whatsapp,
+      titre: dernier.contact,
+      pieceJointe: dernier.id,
+    );
+  }
+
   /// Phrase validée du mode vocal : ajoutée au fil comme un message, la
   /// réponse aussi (même moteur, même contexte). Renvoie la réponse à
   /// prononcer, ou null si la conversation a été effacée entre-temps.
@@ -188,7 +855,7 @@ class ConversationSession extends ChangeNotifier {
     _questionAttendue = false;
     if (nouvelle != null) _derniere = nouvelle;
 
-    final historique = List<MessageConversation>.unmodifiable(messages);
+    final historique = List<MessageConversation>.unmodifiable(_dialogue);
     _idCourant ??= _nouvelIdentifiant();
     messages.add(
       MessageConversation(
@@ -210,6 +877,10 @@ class ConversationSession extends ChangeNotifier {
         conversationNouvelle: nouvelle != null,
         vocale: vocal,
         idConversation: _idCourant,
+        contexteImporte: _contexteImporte(_idCourant),
+        tonPropose: _tonsRegardes[_idCourant],
+        longueurPropose: _longueursRegardees[_idCourant]?.name,
+        propositionsMessage: _dernieresPropositions()?.idServeur,
       ),
       vocal: vocal,
     );
@@ -275,7 +946,16 @@ class ConversationSession extends ChangeNotifier {
         if (!_ferme) notifyListeners();
         return null;
       }
-      reponse = await moteur.repondre(demande.avecFragments(surFragment));
+      reponse = await moteur.repondre(
+        demande.avecFragments(
+          surFragment,
+          surPreparation: () {
+            final id = idBulle;
+            if (_ferme || id == null || !_preparations.add(id)) return;
+            notifyListeners();
+          },
+        ),
+      );
     } catch (e) {
       debugPrint('[JARVIS conversation] réponse impossible : $e');
       final recu = MoteurConversationIA.texteSimple(flux.brut);
@@ -294,6 +974,7 @@ class ConversationSession extends ChangeNotifier {
     }
     _enCours--;
     finAttente();
+    if (idBulle != null) _preparations.remove(idBulle);
     if (_ferme) {
       ecriture.arreter();
       return null;
@@ -307,6 +988,15 @@ class ConversationSession extends ChangeNotifier {
       flux.terminer(reponse.texte);
     }
     final idServeur = reponse.idServeur;
+    // Décision attendue : accord pour l'analyse distante, ou nouvel essai
+    // d'une analyse qui a échoué (aucun texte reçu : rien d'enregistré).
+    final choix = reponse.accordRequis
+        ? const [ChoixJarvis.autoriserAnalyse, ChoixJarvis.refuserAnalyse]
+        : reponse.erreur &&
+              !reponse.interrompue &&
+              (demande.repondreA != null || demande.contexteImporte)
+        ? const [ChoixJarvis.reessayer]
+        : const <ChoixJarvis>[];
     final message = MessageConversation(
       // Même identifiant que la bulle : une seule bulle, finalisée une fois.
       id: idBulle ?? _id++,
@@ -322,7 +1012,12 @@ class ConversationSession extends ChangeNotifier {
       enregistre: idServeur != null,
       ecriture: ecriture,
       incident: reponse.incident,
+      choix: choix,
+      references: reponse.references.references,
+      noteReferences: reponse.references.note,
+      propositions: reponse.references.propositions,
     );
+    if (choix.isNotEmpty) _aRelancer[message.id] = demande;
     if (idServeur != null) surEchangeEnregistre?.call();
     if (generation != _generation) {
       // Le fil a changé pendant la réponse (IA : plusieurs secondes). Elle
@@ -335,7 +1030,9 @@ class ConversationSession extends ChangeNotifier {
       notifyListeners();
       return null;
     }
-    if (idServeur != null) _marquerEnregistree(messages, demande.texte);
+    if (idServeur != null && demande.repondreA == null) {
+      _marquerEnregistree(messages, demande.texte);
+    }
     _placer(messages, message);
     _confierEchangeLocal(demande, reponse, message.id);
     notifyListeners();
@@ -456,6 +1153,47 @@ class ConversationSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Bouton sous une réponse de JARVIS : accord (ou refus) pour l'analyse
+  /// distante des conversations WhatsApp jointes, ou nouvel essai d'une
+  /// analyse échouée. La question n'est jamais renvoyée comme un nouveau
+  /// message : ni consigne ni pièce jointe en double.
+  Future<void> choisir(int id, ChoixJarvis choix) {
+    final i = messages.indexWhere((m) => m.id == id);
+    if (_ferme || i < 0 || !messages[i].choix.contains(choix)) {
+      return Future<void>.value();
+    }
+    final demande = _aRelancer.remove(id);
+    messages[i] = messages[i].sansChoix();
+    notifyListeners();
+    final generation = _generation;
+    return _file = _file.then((_) async {
+      if (_ferme || generation != _generation) return;
+      switch (choix) {
+        case ChoixJarvis.autoriserAnalyse:
+          await consentement?.accorder();
+        case ChoixJarvis.refuserAnalyse:
+          await consentement?.refuser();
+          if (_ferme || generation != _generation) return;
+          final flux = TexteEnDirect()..terminer(refusAnalyse);
+          messages.add(
+            MessageConversation(
+              id: _id++,
+              auteur: AuteurMessage.jarvis,
+              heure: _horloge(),
+              texte: refusAnalyse,
+              ecriture: EcritureProgressive(flux),
+            ),
+          );
+          notifyListeners();
+          return;
+        case ChoixJarvis.reessayer:
+          break;
+      }
+      if (demande == null || _ferme || generation != _generation) return;
+      await _repondre(demande);
+    });
+  }
+
   /// Raccourci discret sous une réponse de JARVIS.
   Future<void> action(int id, ActionRapide action) {
     final message = messages.where((m) => m.id == id).firstOrNull;
@@ -481,7 +1219,7 @@ class ConversationSession extends ChangeNotifier {
     return _file = _file.then((_) async {
       if (_ferme || generation != _generation) return;
       _questionAttendue = false;
-      final historique = List<MessageConversation>.unmodifiable(messages);
+      final historique = List<MessageConversation>.unmodifiable(_dialogue);
       _idCourant ??= _nouvelIdentifiant();
       messages.add(
         MessageConversation(
@@ -640,6 +1378,8 @@ class ConversationSession extends ChangeNotifier {
         for (final r in page.messages)
           if (r.role != 'system' && !connus.contains(r.id)) _depuisServeur(r),
       ]);
+      _rattacherPiecesJointes(id, _contextesConnus[id] ?? const []);
+      _appliquerReferences(id);
       _plusAnciens = page.plusAnciens;
     } on EchecSynchro catch (e) {
       debugPrint('[JARVIS synchro] messages anciens non chargés : $e');
@@ -671,7 +1411,14 @@ class ConversationSession extends ChangeNotifier {
       messages.removeWhere((m) => m.provisoire);
       final premierChargement = messages.isEmpty;
       _fusionner(page.messages);
+      _rattacherPiecesJointes(id, page.contextes);
+      _appliquerReferences(id);
       if (premierChargement) _plusAnciens = page.plusAnciens;
+      // Chat WhatsApp : les cartes de références de ses réponses.
+      if (page.contextes.isNotEmpty) {
+        unawaited(_chargerReferences(id, serveur));
+        unawaited(_chargerAjouts(id, page.contextes));
+      }
     } on EchecSynchro catch (e) {
       if (_ferme || generation != _generation || id != _idCourant) return;
       debugPrint('[JARVIS synchro] conversation non chargée : $e');
@@ -749,6 +1496,7 @@ class ConversationSession extends ChangeNotifier {
   /// conversation affichée, l'accueil revient vide, et une réponse encore
   /// en préparation n'y arrive jamais. Faux si [id] est inconnu.
   bool supprimer(String id) {
+    _classements.remove(id);
     if (id == _idCourant) {
       _generation++;
       moteur.reinitialiser();
@@ -818,4 +1566,37 @@ class ConversationArchivee {
         contexte: contexte,
         plusAnciens: plusAnciens,
       );
+}
+
+/// Issue de [ConversationSession.envoyerAvecPieceJointe].
+sealed class ResultatPieceJointe {
+  const ResultatPieceJointe();
+}
+
+/// Envoyée : enregistrée dans le compte ([enregistree]) ou gardée sur
+/// l'appareil (aucun compte).
+final class PieceJointeEnvoyee extends ResultatPieceJointe {
+  const PieceJointeEnvoyee({required this.enregistree});
+  final bool enregistree;
+}
+
+/// Enregistrement impossible : rien n'a été ajouté au fil ; la pièce
+/// jointe et la consigne peuvent être renvoyées telles quelles.
+final class PieceJointeNonEnvoyee extends ResultatPieceJointe {
+  const PieceJointeNonEnvoyee(this.raison);
+  final String raison;
+}
+
+/// Rien à faire (consigne vide, déjà envoyée ou en cours d'envoi).
+final class PieceJointeIgnoree extends ResultatPieceJointe {
+  const PieceJointeIgnoree();
+}
+
+/// Lecture des messages d'une pièce jointe enregistrée impossible.
+class EchecChargementPieceJointe implements Exception {
+  const EchecChargementPieceJointe(this.raison);
+  final String raison;
+
+  @override
+  String toString() => raison;
 }

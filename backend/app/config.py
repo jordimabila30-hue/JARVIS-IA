@@ -29,6 +29,39 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Contextes WhatsApp joints (voir app/contextes.py).
+    whatsapp_context_max_messages: int = 5000
+    whatsapp_context_max_chars: int = 2_000_000   # texte total des messages
+    whatsapp_context_max_bytes: int = 8_000_000   # corps de la requête
+    whatsapp_context_page_max: int = 500          # messages par page
+    whatsapp_context_timeout: float = 30.0        # enregistrement (secondes)
+
+    # Moteur de compréhension conversationnelle (app/comprehension/).
+    # Budget de la requête envoyée au modèle (tokens estimés) : le compte
+    # GroqCloud actuel limite à 8 000 tokens PAR MINUTE (en-tête
+    # x-ratelimit-limit-tokens), bien en dessous de la fenêtre du modèle
+    # (131 072). À relever si la limite du compte augmente.
+    comprehension_budget_tokens: int = 6000
+    comprehension_history_tokens: int = 1200      # historique du chat, dans ce budget
+    comprehension_max_output_tokens: int = 1500   # raisonnement du modèle compris
+    # Aide à répondre probable : part du budget d'entrée de la réponse
+    # principale laissée aux LOTS de propositions qui la suivent dans la
+    # même minute (correction finale 5.1, app/comprehension/generation.py).
+    comprehension_extra_output_tokens: int = 2500
+    # Génération des propositions par lots : tons par requête, requêtes au
+    # plus par génération (reprises comprises), sortie maximale d'un lot,
+    # attente maximale cumulée sur les 429 (limite par minute) avant de
+    # s'arrêter en « Génération incomplète ».
+    propositions_tons_par_lot: int = 2
+    propositions_max_requetes: int = 5
+    propositions_lot_max_tokens: int = 2600
+    propositions_attente_max: float = 45.0
+    comprehension_cache_ttl: int = 3600           # messages des pièces jointes (Redis)
+
+    # Limite de débit du fournisseur (429) : attente maximale avant d'abandonner,
+    # pendant laquelle le flux reste ouvert (commentaires SSE).
+    llm_rate_limit_max_wait: float = 25.0
+
     # Page de test http://localhost:8000/console (désactiver en production).
     enable_console: bool = True
 

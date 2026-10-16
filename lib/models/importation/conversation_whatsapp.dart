@@ -48,7 +48,12 @@ class MessageWhatsApp {
     required this.type,
     this.typeMedia,
     this.nomFichierMedia,
+    this.ajoute = false,
   });
+
+  /// Phase 5 : message collé par l'utilisateur après l'import (reçu ou
+  /// envoyé), jamais une réception vérifiée sur WhatsApp.
+  final bool ajoute;
 
   /// Position dans l'export (0, 1, 2…) : l'ordre d'origine.
   final int ordre;
@@ -156,4 +161,18 @@ class ConversationWhatsApp {
 
   /// Plus de deux auteurs : conversation de groupe.
   bool get estGroupe => participants.length > 2;
+
+  /// Identifiant de la conversation source, stable pour un même export
+  /// (fichier lu, nombre de messages, premier et dernier message) : il
+  /// accompagne les messages choisis jusqu'à l'enregistrement.
+  String get identifiant {
+    final cle = [
+      nomFichier,
+      messages.length,
+      if (messages.isNotEmpty) messages.first.empreinte,
+      if (messages.isNotEmpty) messages.last.empreinte,
+    ].join('\u0000');
+    return 'wa-${MessageWhatsApp._fnv1a(cle, 0x811c9dc5)}'
+        '${MessageWhatsApp._fnv1a(cle, 0x01000193)}';
+  }
 }

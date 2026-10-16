@@ -3,6 +3,11 @@
          service de reconnaissance du système quand il n'est pas hors ligne. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- JARVIS Touch : bulle au-dessus des autres applications, gardée par
+         un service au premier plan (aucun micro, aucune capture). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <application
         android:label="ia_jarvis"
         android:name="${applicationName}"
@@ -54,6 +59,15 @@
                 <data android:mimeType="*/*"/>
             </intent-filter>
         </activity>
+        <!-- JARVIS Touch : bulle flottante (type AssistiveTouch). -->
+        <service
+            android:name=".touch.ServiceJarvisTouch"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Bulle d’accès rapide à l'assistant, affichée au-dessus des autres applications à la demande de l'utilisateur."/>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

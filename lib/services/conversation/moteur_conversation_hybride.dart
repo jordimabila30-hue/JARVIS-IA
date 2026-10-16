@@ -10,6 +10,9 @@ import 'moteur_conversation_ia.dart';
 ///     l'appareil, jamais envoyée), heure, date, calcul, prénom, notions,
 ///     « au revoir »… instantané, sans réseau ni quota ;
 ///   → sinon [MoteurConversationIA] → ApiJarvis → FastAPI → GroqCloud.
+///     Chat avec conversations WhatsApp jointes ([DemandeJarvis
+///     .contexteImporte]) : seules les commandes restent locales ; le
+///     serveur joint les extraits utiles (avec l'accord de l'utilisateur).
 ///
 /// Le même moteur sert l'écrit et le vocal (une seule conversation, un
 /// seul contexte) ; une erreur du serveur devient un message clair, et
@@ -31,8 +34,11 @@ class MoteurConversationHybride implements MoteurConversation {
   @override
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
     final fil = _fil;
-    final locale = await _local.repondreLocalement(demande, avecIA: true);
-    if (locale != null) return locale;
+    // Consigne d'une pièce jointe WhatsApp : toujours l'analyse du serveur.
+    if (demande.repondreA == null) {
+      final locale = await _local.repondreLocalement(demande, avecIA: true);
+      if (locale != null) return locale;
+    }
     final r = await _ia.repondre(demande);
     if (!r.erreur && fil == _fil) _local.retenirReponseDistante(r.texte);
     return r;

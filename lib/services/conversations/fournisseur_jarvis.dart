@@ -7,6 +7,7 @@ import '../../models/conversations/source_conversation.dart';
 import '../../models/message_conversation.dart';
 import '../conversation/conversation_session.dart';
 import '../api_jarvis.dart';
+import 'depot_conversations.dart';
 import 'fournisseur_conversations.dart';
 import 'synchro_echanges_locaux.dart';
 import 'synchronisation_conversations.dart';
@@ -15,6 +16,11 @@ import 'synchronisation_conversations.dart';
 /// « Nouvelle conversation » (en mémoire), et — avec un compte — celles
 /// enregistrées sur le serveur ([synchronisation]), créées sur cet
 /// appareil ou sur un autre.
+///
+/// Une conversation classée sous une autre source par une pièce jointe
+/// envoyée (WhatsApp…) n'est plus listée ici : elle l'est sous sa source
+/// ([conversationsDe], [FournisseurSourceClassee]), avec le nom du contact,
+/// sans que son historique bouge.
 ///
 /// Une conversation présente à la fois en mémoire et sur le serveur n'est
 /// listée qu'une fois (la version en mémoire, à jour) : la correspondance
@@ -50,6 +56,12 @@ class FournisseurJarvis extends ChangeNotifier
       _session.messages.length,
       _session.chargement,
       for (final a in _session.archives) '${a.id}:${a.messages.length}',
+      // Un reclassement change la liste, même sans nouveau message.
+      for (final id in [
+        _session.idCourant,
+        ..._session.archives.map((a) => a.id),
+      ])
+        if (id != null) _session.classement(id)?.titre ?? '',
     ].join('|');
     if (s == _signature) return;
     _signature = s;
@@ -86,7 +98,17 @@ class FournisseurJarvis extends ChangeNotifier
   }
 
   @override
-  List<ApercuConversation> get conversations {
+  List<ApercuConversation> get conversations =>
+      conversationsDe(SourceConversation.jarvis);
+
+  /// Conversations listées sous [source] : JARVIS (non classées), ou une
+  /// messagerie à laquelle une pièce jointe envoyée les a rattachées.
+  List<ApercuConversation> conversationsDe(SourceConversation source) => [
+    for (final c in _toutes())
+      if (c.source == source) c,
+  ];
+
+  List<ApercuConversation> _toutes() {
     final courante = _session.idCourant;
     final locales = <ApercuConversation>[
       if (courante != null && _session.messages.isNotEmpty)
@@ -95,7 +117,7 @@ class FournisseurJarvis extends ChangeNotifier
         ?_apercuServeur(courante, ouverte: true),
       for (final a in _session.archives) _apercu(a.id, a.messages),
     ];
-    // Déjà en mémoire : la version locale suffit.
+    // Déjà en mémoire (classée ou non) : la version locale suffit.
     final dejaListees = {
       for (final c in locales) _session.correspondance.serveur(c.id) ?? c.id,
     };
@@ -144,7 +166,11 @@ class FournisseurJarvis extends ChangeNotifier
     final c = synchronisation?.conversation(id);
     if (c == null) return null;
     return ApercuConversation(
-      source: SourceConversation.jarvis,
+      // Une pièce jointe WhatsApp enregistrée : classée sous WhatsApp
+      // (titre déjà au nom du contact), sur tous les appareils.
+      source: c.contextes.isEmpty
+          ? SourceConversation.jarvis
+          : SourceConversation.whatsapp,
       id: id,
       titre: c.titre.isEmpty ? 'Conversation' : _uneLigne(c.titre),
       apercu: _uneLigne(c.apercu),
@@ -169,10 +195,26 @@ class FournisseurJarvis extends ChangeNotifier
     final titreServeur = serveur == null
         ? null
         : synchronisation?.conversation(serveur)?.titre;
+    // Classée par une pièce jointe : sa source et le nom du contact
+    // (envoyée ici, ou relue du serveur).
+    final classement = _session.classement(id);
+    final contextesServeur = serveur == null
+        ? const <ContexteServeur>[]
+        : synchronisation?.conversation(serveur)?.contextes ?? const [];
+    final source =
+        classement?.source ??
+        (contextesServeur.isEmpty
+            ? SourceConversation.jarvis
+            : SourceConversation.whatsapp);
+    final titreClasse =
+        classement?.titre ??
+        (contextesServeur.isEmpty ? null : contextesServeur.last.contact);
     return ApercuConversation(
-      source: SourceConversation.jarvis,
+      source: source,
       id: id,
-      titre: titreServeur == null || titreServeur.isEmpty
+      titre: titreClasse != null
+          ? _uneLigne(titreClasse)
+          : titreServeur == null || titreServeur.isEmpty
           ? titre(messages)
           : _uneLigne(titreServeur),
       apercu: _uneLigne(
@@ -206,6 +248,43 @@ class FournisseurJarvis extends ChangeNotifier
     if (_session.surConversationIntrouvable == synchronisation?.oublier) {
       _session.surConversationIntrouvable = null;
     }
+    super.dispose();
+  }
+}
+
+/// Conversations JARVIS rangées sous une autre messagerie (WhatsApp…) par
+/// une pièce jointe envoyée : même session, même identifiant, même
+/// historique ; seul le classement change. L'ouverture et la suppression
+/// passent par [FournisseurJarvis] (mémoire et serveur). En mémoire
+/// seulement : le classement n'est pas encore enregistré.
+class FournisseurSourceClassee extends ChangeNotifier
+    implements FournisseurConversations {
+  FournisseurSourceClassee(this.source, this._jarvis) {
+    _jarvis.addListener(notifyListeners);
+  }
+
+  @override
+  final SourceConversation source;
+  final FournisseurJarvis _jarvis;
+
+  @override
+  List<ApercuConversation> get conversations => _jarvis.conversationsDe(source);
+
+  @override
+  bool ouvrir(String id) => _jarvis.ouvrir(id);
+
+  @override
+  Future<bool> supprimer(String id) => _jarvis.supprimer(id);
+
+  @override
+  String? get avertissement => null;
+
+  @override
+  Future<void> actualiser({bool force = false}) => Future.value();
+
+  @override
+  void dispose() {
+    _jarvis.removeListener(notifyListeners);
     super.dispose();
   }
 }

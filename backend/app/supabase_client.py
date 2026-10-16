@@ -150,6 +150,21 @@ class SupabaseAdmin:
         rows = resp.json()
         return rows[0] if rows else None
 
+    async def get_user_message(self, message_id: str, user_id: str) -> dict | None:
+        """Un message `user` de ce compte (consigne d'une pièce jointe)."""
+        resp = await self._http.get(
+            "/messages",
+            params={
+                "id": f"eq.{message_id}",
+                "user_id": f"eq.{user_id}",
+                "role": "eq.user",
+                "select": "id,conversation_id,content",
+            },
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
     async def insert_messages(self, rows: list[dict]) -> None:
         # Insertion groupée : PostgREST exige les mêmes clés dans chaque
         # objet (sinon 400 PGRST102), or le message utilisateur n'a ni
@@ -163,6 +178,262 @@ class SupabaseAdmin:
             headers={"Prefer": "return=minimal,missing=default"},
         )
         resp.raise_for_status()
+
+    # Contextes WhatsApp (conversation_contexts, context_messages) ------------
+    # Toujours filtrés par user_id : la clé service_role contourne la RLS.
+
+    CONTEXT_FIELDS = (
+        "id,conversation_id,message_id,source,contact_name,is_group,"
+        "current_user_name,participants,period_start,period_end,"
+        "dates_uncertain,created_at"
+    )
+    # Nombre réel de messages, calculé par PostgREST (jamais stocké).
+    CONTEXT_SELECT = CONTEXT_FIELDS + ",context_messages(count)"
+    CONTEXT_MESSAGE_FIELDS = (
+        "id,message_order,source_order,author,content,kind,media_type,sent_at,sent_at_raw,"
+        "origin,edited_at,declared_proposition_id,created_at"
+    )
+
+    async def save_whatsapp_context(self, params: dict, *, timeout: float = 30.0) -> dict:
+        """Appelle `enregistrer_contexte_whatsapp` : conversation, consigne,
+        contexte et messages en UNE transaction (tout ou rien)."""
+        resp = await self._http.post(
+            "/rpc/enregistrer_contexte_whatsapp", json=params, timeout=timeout
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def list_contexts(self, conversation_id: str, user_id: str) -> list[dict]:
+        resp = await self._http.get(
+            "/conversation_contexts",
+            params={
+                "conversation_id": f"eq.{conversation_id}",
+                "user_id": f"eq.{user_id}",
+                "select": self.CONTEXT_SELECT,
+                "order": "created_at.asc,id.asc",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # --- Phase 5 : messages ajoutés à la main (origin manual_*) ------------
+
+    async def add_context_messages(self, user_id: str, context_id: str, messages: list[dict]) -> list[dict]:
+        """`ajouter_messages_contexte` : ajout atomique à la suite du contexte
+        (verrou du contexte, rangs suivants, idempotent par identifiant)."""
+        resp = await self._http.post(
+            "/rpc/ajouter_messages_contexte",
+            json={"p_user_id": user_id, "p_context_id": context_id, "p_messages": messages},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def update_manual_message(
+        self, message_id: str, context_id: str, user_id: str, champs: dict
+    ) -> list[dict]:
+        """Corrige un message AJOUTÉ (jamais un message d'export : filtre et
+        déclencheur en base). Lignes modifiées (vide : introuvable)."""
+        resp = await self._http.patch(
+            "/context_messages",
+            params={"id": f"eq.{message_id}", "context_id": f"eq.{context_id}",
+                    "user_id": f"eq.{user_id}", "origin": "neq.export",
+                    "select": self.CONTEXT_MESSAGE_FIELDS},
+            json=champs,
+            headers={"Prefer": "return=representation"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def delete_manual_message(self, message_id: str, context_id: str, user_id: str) -> bool:
+        resp = await self._http.delete(
+            "/context_messages",
+            params={"id": f"eq.{message_id}", "context_id": f"eq.{context_id}",
+                    "user_id": f"eq.{user_id}", "origin": "neq.export", "select": "id"},
+            headers={"Prefer": "return=representation"},
+        )
+        resp.raise_for_status()
+        return bool(resp.json())
+
+    async def get_context_message(self, message_id: str, context_id: str, user_id: str) -> dict | None:
+        resp = await self._http.get(
+            "/context_messages",
+            params={"id": f"eq.{message_id}", "context_id": f"eq.{context_id}",
+                    "user_id": f"eq.{user_id}", "select": self.CONTEXT_MESSAGE_FIELDS},
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def list_last_context_messages(self, context_id: str, user_id: str, limit: int) -> list[dict]:
+        """Les derniers messages (doublons d'un ajout), du plus récent au plus ancien."""
+        resp = await self._http.get(
+            "/context_messages",
+            params={"context_id": f"eq.{context_id}", "user_id": f"eq.{user_id}",
+                    "select": self.CONTEXT_MESSAGE_FIELDS, "order": "message_order.desc",
+                    "limit": str(limit)},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def list_user_contexts(self, user_id: str, *, limit: int = 50) -> list[dict]:
+        """Toutes les pièces jointes du compte (les plus récentes d'abord)."""
+        resp = await self._http.get(
+            "/conversation_contexts",
+            params={"user_id": f"eq.{user_id}", "select": self.CONTEXT_SELECT,
+                    "order": "created_at.desc", "limit": str(limit)},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_context(self, context_id: str, user_id: str) -> dict | None:
+        resp = await self._http.get(
+            "/conversation_contexts",
+            params={
+                "id": f"eq.{context_id}",
+                "user_id": f"eq.{user_id}",
+                "select": self.CONTEXT_SELECT,
+            },
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def list_context_messages(
+        self, context_id: str, user_id: str, *, after: int, limit: int, manuels: bool = False
+    ) -> list[dict]:
+        """Une page de messages, dans l'ordre original (pagination par rang,
+        index unique (context_id, message_order))."""
+        resp = await self._http.get(
+            "/context_messages",
+            params={
+                "context_id": f"eq.{context_id}",
+                "user_id": f"eq.{user_id}",
+                "message_order": f"gt.{after}",
+                "select": self.CONTEXT_MESSAGE_FIELDS,
+                "order": "message_order.asc",
+                "limit": str(limit),
+                **({"origin": "neq.export"} if manuels else {}),
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_context_messages_by_ids(self, ids: list[str], user_id: str) -> list[dict]:
+        """Messages WhatsApp désignés par leur identifiant, de ce compte
+        seulement (un identifiant d'un autre compte ne renvoie rien)."""
+        if not ids:
+            return []
+        resp = await self._http.get(
+            "/context_messages",
+            params={
+                "id": f"in.({','.join(ids)})",
+                "user_id": f"eq.{user_id}",
+                "select": "context_id," + self.CONTEXT_MESSAGE_FIELDS,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # Références vérifiées : rangées avec la réponse, dans
+    # `messages.attachments` (colonne JSON existante), entrées de type
+    # « reference_whatsapp ».
+
+    async def get_assistant_attachments(
+        self, conversation_id: str, user_id: str, *, limit: int | None = None
+    ) -> list[dict]:
+        """Réponses de JARVIS qui portent des références (les plus récentes
+        d'abord) : [{id, attachments}]."""
+        params = {
+            "conversation_id": f"eq.{conversation_id}",
+            "user_id": f"eq.{user_id}",
+            "role": "eq.assistant",
+            "attachments": "neq.[]",
+            "select": "id,attachments",
+            "order": "created_at.desc",
+        }
+        if limit is not None:
+            params["limit"] = str(limit)
+        resp = await self._http.get("/messages", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    # Réponses déclarées envoyées (phase 4) : dans `messages.attachments` de
+    # la réponse de JARVIS qui porte les propositions, type
+    # « reponse_envoyee ». Jamais dans `context_messages` (messages WhatsApp
+    # originaux).
+
+    async def get_assistant_message(
+        self, message_id: str, conversation_id: str, user_id: str
+    ) -> dict | None:
+        """Une réponse de JARVIS de CE chat et de CE compte, ou None."""
+        resp = await self._http.get(
+            "/messages",
+            params={
+                "id": f"eq.{message_id}",
+                "conversation_id": f"eq.{conversation_id}",
+                "user_id": f"eq.{user_id}",
+                "role": "eq.assistant",
+                "select": "id,conversation_id,content,attachments",
+            },
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def update_message_attachments(
+        self, message_id: str, user_id: str, attachments: list[dict]
+    ) -> None:
+        resp = await self._http.patch(
+            "/messages",
+            params={"id": f"eq.{message_id}", "user_id": f"eq.{user_id}"},
+            json={"attachments": attachments},
+        )
+        resp.raise_for_status()
+
+    async def declare_reply(self, user_id: str, conversation_id: str, message_id: str, entree: dict) -> dict:
+        """`declarer_reponse_envoyee` : un seul choix actif par ensemble,
+        réponse verrouillée (deux appareils simultanés : un seul gagne)."""
+        resp = await self._http.post("/rpc/declarer_reponse_envoyee", json={
+            "p_user_id": user_id, "p_conversation_id": conversation_id,
+            "p_message_id": message_id, "p_entree": entree})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def cancel_reply(self, user_id: str, conversation_id: str, message_id: str,
+                           proposition_id: str, quand: str) -> dict:
+        resp = await self._http.post("/rpc/annuler_reponse_envoyee", json={
+            "p_user_id": user_id, "p_conversation_id": conversation_id,
+            "p_message_id": message_id, "p_proposition_id": proposition_id, "p_annulee_le": quand})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def list_declared_replies(self, user_id: str, *, limit: int = 100) -> list[dict]:
+        """Réponses de JARVIS du compte qui portent une réponse déclarée
+        envoyée (tous chats), les plus récentes d'abord."""
+        resp = await self._http.get(
+            "/messages",
+            params={
+                "user_id": f"eq.{user_id}",
+                "role": "eq.assistant",
+                "attachments": 'cs.[{"type":"reponse_envoyee"}]',
+                "select": "id,conversation_id,attachments",
+                "order": "created_at.desc",
+                "limit": str(limit),
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def delete_context(self, context_id: str, user_id: str) -> bool:
+        """Supprime le contexte (ses messages suivent par cascade). Faux si
+        aucun contexte de ce compte ne porte cet identifiant."""
+        resp = await self._http.delete(
+            "/conversation_contexts",
+            params={"id": f"eq.{context_id}", "user_id": f"eq.{user_id}", "select": "id"},
+            headers={"Prefer": "return=representation"},
+        )
+        resp.raise_for_status()
+        return bool(resp.json())
 
     async def aclose(self) -> None:
         await self._http.aclose()

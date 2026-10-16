@@ -610,4 +610,75 @@ void main() {
       expect(c.archives, isEmpty);
     });
   });
+
+  group('Propositions en préparation (aucun écran figé)', () {
+    test('événement `preparation` : signalé, texte final inchangé', () async {
+      final s = _Serveur(
+        (_, _) => _sse(
+          [
+            _evenement('meta', {'conversation_id': _uuidA, 'message_id': 'm1'}),
+            _evenement('delta', {'text': 'Voici des idées.'}),
+            _evenement('preparation', {'message_id': 'm1', 'etape': 'propositions'}),
+            _evenement('evenement_inconnu', {'x': 1}),
+            _evenement('done', {'message_id': 'm1', 'usage': {}, 'quota': {}}),
+          ].join(),
+        ),
+      );
+      var preparations = 0;
+      final r = await s.api().discuter(
+        'Propose-moi des réponses',
+        surPreparation: () => preparations++,
+      );
+      expect((r as SuccesApi<ReponseChat>).valeur.texte, 'Voici des idées.');
+      expect(preparations, 1);
+    });
+
+    test('la bulle garde un indicateur vivant jusqu’à la fin du flux', () async {
+      final flux = StreamController<List<int>>();
+      final client = MockClient.streaming(
+        (_, _) async => http.StreamedResponse(
+          flux.stream,
+          200,
+          headers: {'content-type': 'text/event-stream; charset=utf-8'},
+        ),
+      );
+      final c = ConversationSession(
+        delaiReflexion: Duration.zero,
+        moteur: MoteurConversationHybride(
+          ia: MoteurConversationIA(
+            ApiJarvis(
+              adresse: Uri.parse('http://localhost:8000'),
+              jeton: () async => 'jeton-acces',
+              client: client,
+            ),
+          ),
+        ),
+      );
+      final envoi = c.envoyer('Propose-moi des réponses pour Lina');
+      flux.add(
+        utf8.encode(
+          _evenement('meta', {'conversation_id': _uuidA, 'message_id': 'm1'}) +
+              _evenement('delta', {'text': 'Voici des idées.'}),
+        ),
+      );
+      await pumpEventQueue();
+      final bulle = c.messages.last;
+      expect(bulle.auteur, AuteurMessage.jarvis);
+      expect(c.preparationEnCours(bulle.id), isFalse);
+      // Texte fini, lots en cours côté serveur : indicateur, chat vivant.
+      flux.add(utf8.encode(_evenement('preparation', {'message_id': 'm1'})));
+      await pumpEventQueue();
+      expect(c.preparationEnCours(bulle.id), isTrue);
+      expect(c.messages.last.redaction, isTrue);
+      flux.add(
+        utf8.encode(
+          _evenement('done', {'message_id': 'm1', 'usage': {}, 'quota': {}}),
+        ),
+      );
+      await flux.close();
+      await envoi;
+      expect(c.preparationEnCours(bulle.id), isFalse);
+      expect(c.messages.last.texte, 'Voici des idées.');
+    });
+  });
 }

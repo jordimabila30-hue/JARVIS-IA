@@ -144,14 +144,14 @@ void main() {
 
     await tester.tap(find.text('Confidentialité'));
     await tester.pump();
-    expect(find.text('Bientôt'), findsOneWidget);
+    expect(find.text('Analyse par l’IA'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(find.text('Profil vocal'), findsNothing);
-    expect(find.text('Bientôt'), findsNothing);
+    expect(find.text('Analyse par l’IA'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

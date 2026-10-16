@@ -60,6 +60,18 @@ class EpinglesConversations extends ChangeNotifier {
     _enregistrer();
   }
 
+  /// La même conversation change de clé (reclassée sous une autre
+  /// source) : son épingle la suit, au même rang.
+  void deplacer(String ancienne, String nouvelle) {
+    final i = _cles.indexOf(ancienne);
+    if (i < 0 || ancienne == nouvelle) return;
+    _cles
+      ..remove(nouvelle)
+      ..[_cles.indexOf(ancienne)] = nouvelle;
+    notifyListeners();
+    _enregistrer();
+  }
+
   Future<void> _enregistrer() async {
     try {
       await _stockage.ecrire(jsonEncode(_cles));

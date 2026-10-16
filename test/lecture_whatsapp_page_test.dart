@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/models/importation/export_whatsapp.dart';
+import 'package:ia_jarvis/pages/filtrage_whatsapp_page.dart';
 import 'package:ia_jarvis/pages/importation_whatsapp_page.dart';
 import 'package:ia_jarvis/pages/resume_whatsapp_page.dart';
 import 'package:ia_jarvis/services/importation/depot_fichiers.dart';
@@ -22,6 +23,8 @@ import 'package:ia_jarvis/widgets/importation/accueil_import_whatsapp.dart';
 import 'package:ia_jarvis/widgets/importation/apercu_discussion.dart';
 import 'package:ia_jarvis/widgets/importation/carte_export_choisi.dart';
 import 'package:ia_jarvis/widgets/importation/choix_fichiers_recus.dart';
+import 'package:ia_jarvis/widgets/importation/filtrage/barre_selection.dart';
+import 'package:ia_jarvis/widgets/importation/filtrage/selecteur_mode_filtrage.dart';
 import 'package:ia_jarvis/widgets/importation/lecture_whatsapp_widgets.dart';
 import 'package:ia_jarvis/widgets/importation/logo_whatsapp.dart';
 
@@ -73,6 +76,20 @@ FichierBrut _brut(
     yield octets;
   }(),
 );
+
+/// Capsule du mode « Par période » (liste horizontale : amenée à l'écran).
+Future<void> _capsule(WidgetTester tester, String libelle) async {
+  await tester.dragUntilVisible(
+    find.text(libelle),
+    find.byWidgetPredicate(
+      (w) => w is ListView && w.scrollDirection == Axis.horizontal,
+    ),
+    const Offset(-120, 0),
+  );
+  await tester.ensureVisible(find.text(libelle));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(libelle));
+}
 
 Future<void> _images(WidgetTester tester, [int n = 40]) async {
   for (var i = 0; i < n; i++) {
@@ -218,7 +235,7 @@ void main() {
 
   group('lecture automatique', () {
     testWidgets('partage reçu : lu sans rien toucher, « Conversation prête », '
-        'filtrage non disponible, une seule lecture', (tester) async {
+        '« Filtrer » actif, une seule lecture', (tester) async {
       final lectures = <int>[];
       await afficher(
         tester,
@@ -240,8 +257,8 @@ void main() {
           matching: find.byType(FilledButton),
         ),
       );
-      expect(filtrer.onPressed, isNull);
-      expect(find.text(CarteExportChoisi.filtrageAVenir), findsOneWidget);
+      expect(filtrer.onPressed, isNotNull);
+      expect(find.text(CarteExportChoisi.filtrageAVenir), findsNothing);
       // Au moins la taille de la carte du premier écran (identique avec
       // les vraies polices ; la police des tests est plus large).
       expect(
@@ -434,6 +451,87 @@ void main() {
       await _images(tester, 60);
       expect(find.textContaining('déposé'), findsOneWidget);
       expect(find.text(CarteExportChoisi.pret), findsOneWidget);
+    });
+  });
+
+  group('filtrage (interface 2)', () {
+    testWidgets('« Filtrer » ouvre l’interface 2 avec la conversation lue, '
+        'sans relecture ; le retour garde l’état', (tester) async {
+      final lectures = <int>[];
+      await afficher(
+        tester,
+        fichier: _brut(
+          'Discussion WhatsApp avec Tony Stark.txt',
+          utf8.encode(_texte),
+          lectures: lectures,
+        ),
+      );
+      await tester.tap(find.text(CarteExportChoisi.filtrer));
+      await _images(tester, 30);
+      expect(find.byType(FiltrageWhatsAppPage), findsOneWidget);
+      expect(find.text(FiltrageWhatsAppPage.titre), findsOneWidget);
+      expect(find.text('Tony Stark · 5 messages'), findsOneWidget);
+      expect(find.text(SelecteurModeFiltrage.parPeriode), findsOneWidget);
+      expect(find.text(BarreSelection.aucun), findsOneWidget);
+      // Les 4 messages des participants (l'avis de chiffrement n'en est
+      // pas un).
+      await _capsule(tester, 'Derniers messages');
+      await _images(tester, 20);
+      expect(find.text('Tous (4)'), findsOneWidget);
+      expect(find.text(BarreSelection.compteur(4)), findsOneWidget);
+      // Décocher un message : il reste visible.
+      await tester.tap(find.textContaining('Salut Tony.'));
+      await _images(tester, 20);
+      expect(find.text(BarreSelection.compteur(3)), findsOneWidget);
+      expect(find.textContaining('Salut Tony.'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Retour'));
+      await _images(tester, 30);
+      expect(find.byType(FiltrageWhatsAppPage), findsNothing);
+      expect(find.text(CarteExportChoisi.pret), findsOneWidget);
+      await tester.tap(find.text(CarteExportChoisi.filtrer));
+      await _images(tester, 30);
+      expect(find.text(BarreSelection.compteur(3)), findsOneWidget);
+      expect(lectures, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('autre fichier : jamais les filtres de l’ancien', (
+      tester,
+    ) async {
+      final partages = StreamController<PartageRecu>();
+      addTearDown(partages.close);
+      await afficher(
+        tester,
+        fichier: _brut('premier.txt', utf8.encode(_texte)),
+        partages: partages.stream,
+      );
+      await tester.tap(find.text(CarteExportChoisi.filtrer));
+      await _images(tester, 30);
+      await _capsule(tester, 'Derniers messages');
+      await _images(tester, 20);
+      expect(find.text(BarreSelection.compteur(4)), findsOneWidget);
+      await tester.tap(find.byTooltip('Retour'));
+      await _images(tester, 30);
+      partages.add(
+        PartageRecu(
+          id: 'q',
+          fichiers: [_brut('second.txt', utf8.encode(_texte))],
+        ),
+      );
+      await _images(tester, 60);
+      await tester.tap(find.text(CarteExportChoisi.filtrer));
+      await _images(tester, 30);
+      expect(find.text(BarreSelection.aucun), findsOneWidget);
+    });
+
+    testWidgets('lecture échouée : pas de passage au filtrage', (tester) async {
+      await afficher(
+        tester,
+        fichier: _brut('chat.txt', utf8.encode('rien de lisible ici')),
+      );
+      expect(find.text(CarteExportChoisi.pret), findsNothing);
+      expect(find.byType(ActionFiltrer), findsNothing);
     });
   });
 

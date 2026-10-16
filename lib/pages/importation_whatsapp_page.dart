@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../models/importation/conversation_whatsapp.dart';
 import '../models/importation/export_whatsapp.dart';
+import '../models/importation/filtre_whatsapp.dart';
+import '../models/importation/piece_jointe_whatsapp.dart';
 import '../services/importation/depot_fichiers.dart';
 import '../services/importation/export_local.dart';
 import '../services/importation/identite_whatsapp.dart';
@@ -13,6 +15,7 @@ import '../services/importation/import_en_cours.dart';
 import '../services/importation/lecture_whatsapp.dart';
 import '../services/importation/pont_android_importation.dart';
 import '../services/importation/selection_export_whatsapp.dart';
+import '../services/importation/selection_whatsapp.dart';
 import '../theme/theme_jarvis.dart';
 import '../widgets/authentification/bandeau_auth.dart';
 import '../widgets/defilement_sans_barre.dart';
@@ -21,6 +24,8 @@ import '../widgets/importation/carte_export_choisi.dart';
 import '../widgets/importation/choix_fichiers_recus.dart';
 import '../widgets/importation/lecture_whatsapp_widgets.dart';
 import '../widgets/importation/logo_whatsapp.dart';
+import 'filtrage_whatsapp_page.dart';
+import 'joindre_whatsapp_page.dart';
 import 'resume_whatsapp_page.dart';
 
 /// Ouvre l'import WhatsApp par-dessus l'accueil, qui reste intact
@@ -30,14 +35,17 @@ import 'resume_whatsapp_page.dart';
 /// [partageInitial] : fichier(s) reçu(s) par le partage Android, déjà
 /// sélectionné(s) à l'ouverture. [partages] : partages arrivant pendant
 /// que la page est ouverte (ils remplacent le fichier affiché).
-Future<void> ouvrirImportationWhatsApp(
+///
+/// Renvoie la pièce jointe préparée par « Joindre la conversation »
+/// (interface 3), ou null si l'utilisateur est revenu sans joindre.
+Future<PieceJointeWhatsApp?> ouvrirImportationWhatsApp(
   BuildContext context, {
   SelectionExportWhatsApp? selection,
   PartageRecu? partageInitial,
   Stream<PartageRecu>? partages,
 }) {
   return Navigator.of(context).push(
-    PageRouteBuilder<void>(
+    PageRouteBuilder<PieceJointeWhatsApp>(
       transitionDuration: const Duration(milliseconds: 260),
       reverseTransitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (_, _, _) => ImportationWhatsAppPage(
@@ -85,8 +93,8 @@ enum ParcoursImport {
 
 /// Import d'une conversation WhatsApp, sur une seule page : aucun fichier,
 /// fichier reçu et lecture (automatique), conversation prête, erreur. Le
-/// résumé est une vue facultative ; le filtrage (étape suivante) n'est
-/// pas encore disponible.
+/// résumé est une vue facultative ; « Filtrer les messages » ouvre
+/// l'interface 2 avec la conversation déjà lue.
 class ImportationWhatsAppPage extends StatefulWidget {
   ImportationWhatsAppPage({
     super.key,
@@ -165,6 +173,10 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
   List<EntreeArchive>? _candidats;
   ConversationWhatsApp? _conversation;
 
+  /// Filtrage de la conversation lue (interface 2) : gardé au retour,
+  /// oublié avec elle (jamais réutilisé pour un autre fichier).
+  SelectionWhatsApp? _filtrage;
+
   @override
   void initState() {
     super.initState();
@@ -187,6 +199,7 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
     _annulation?.annuler();
     _lecteur?.liberer();
     _choisi?.liberer();
+    _filtrage?.dispose();
     // Rien n'est enregistré : la conversation lue est oubliée.
     importWhatsAppEnCours.value = null;
     super.dispose();
@@ -286,6 +299,8 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
     _lecteur?.liberer();
     _lecteur = null;
     _conversation = null;
+    _filtrage?.dispose();
+    _filtrage = null;
     _candidats = null;
     _etat = const FichierNonLu();
     importWhatsAppEnCours.value = null;
@@ -364,6 +379,58 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
             _transitionDouce(animation, enfant),
       ),
     );
+  }
+
+  /// Interface 2 : la conversation déjà lue, sans relecture. Son état de
+  /// filtrage est créé une fois, puis retrouvé à chaque ouverture.
+  void _filtrer() {
+    final conversation = _conversation;
+    if (conversation == null) return;
+    var filtrage = _filtrage;
+    if (filtrage == null || !identical(filtrage.conversation, conversation)) {
+      filtrage?.dispose();
+      filtrage = _filtrage = SelectionWhatsApp(conversation);
+    }
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 240),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, _, _) => FiltrageWhatsAppPage(
+          selection: filtrage!,
+          surContinuer: (choisis) => _joindre(conversation, choisis),
+        ),
+        transitionsBuilder: (_, animation, _, enfant) =>
+            _transitionDouce(animation, enfant),
+      ),
+    );
+  }
+
+  /// Interface 3 : « Joindre la conversation ». Pièce jointe prête : tout
+  /// l'import se referme et la renvoie au chat (rien n'est envoyé).
+  Future<void> _joindre(
+    ConversationWhatsApp conversation,
+    MessagesChoisisWhatsApp choisis,
+  ) async {
+    if (choisis.messages.isEmpty) return;
+    final piece = await Navigator.of(context).push<PieceJointeWhatsApp>(
+      PageRouteBuilder<PieceJointeWhatsApp>(
+        transitionDuration: const Duration(milliseconds: 240),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, _, _) => JoindreWhatsAppPage(
+          conversation: conversation,
+          choisis: choisis,
+          identite: widget.identite,
+          moiConnu: importWhatsAppEnCours.value?.moi,
+        ),
+        transitionsBuilder: (_, animation, _, enfant) =>
+            _transitionDouce(animation, enfant),
+      ),
+    );
+    if (piece == null || !mounted) return;
+    final route = ModalRoute.of(context);
+    final navigateur = Navigator.of(context);
+    navigateur.popUntil((r) => r == route);
+    navigateur.pop(piece);
   }
 
   void _retour() => Navigator.of(context).maybePop();
@@ -550,9 +617,12 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
                                   marge,
                                   4,
                                 ),
-                                // Branché à l'étape du filtrage.
-                                child: const _Colonne(
-                                  child: ActionFiltrer(surFiltrer: null),
+                                child: _Colonne(
+                                  child: ActionFiltrer(
+                                    surFiltrer: _conversation == null
+                                        ? null
+                                        : _filtrer,
+                                  ),
                                 ),
                               ),
                             )

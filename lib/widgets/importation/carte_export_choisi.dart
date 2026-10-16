@@ -278,8 +278,8 @@ class _ActionCarte extends StatelessWidget {
 }
 
 /// Action principale de l'import, hors de la carte, en bas de l'écran :
-/// « Filtrer les messages ». Inactive tant que le filtrage n'existe pas
-/// ([surFiltrer] null) ; violette dès qu'il sera branché.
+/// « Filtrer les messages ». Violette quand la conversation est lue ;
+/// inactive sinon ([surFiltrer] null).
 class ActionFiltrer extends StatelessWidget {
   const ActionFiltrer({super.key, required this.surFiltrer});
 

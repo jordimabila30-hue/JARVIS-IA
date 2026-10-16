@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from types import SimpleNamespace
 
@@ -55,10 +56,49 @@ class FakeSupabase:
     async def insert_messages(self, rows):
         self.inserted.extend(rows)
 
+    async def list_contexts(self, conversation_id, user_id):
+        # Chat JARVIS ordinaire : aucune conversation WhatsApp jointe.
+        return []
+
 
 def chunk(text=None, usage=None):
     choices = [SimpleNamespace(delta=SimpleNamespace(content=text))] if text is not None else []
     return SimpleNamespace(choices=choices, usage=usage)
+
+
+_DEMANDE_LOT = re.compile(r"^- (.+?) : ((?:(?:court|moyen|long) ×\d(?:, )?)+)", re.M)
+
+
+def demandes_lot(messages):
+    """Ce qu'un lot demande : [(ton, {longueur: nombre})]."""
+    texte = messages[-1]["content"]
+    return [(t, {lo: int(n) for lo, n in re.findall(r"(court|moyen|long) ×(\d)", parts)})
+            for t, parts in _DEMANDE_LOT.findall(texte)]
+
+
+def texte_lot(ton, longueur, i, graine=""):
+    """Texte déterministe, au vocabulaire propre (jamais « trop proche »)."""
+    mots = {"court": 6, "moyen": 18, "long": 40}[longueur]
+    base = f"{ton[:3]}{longueur[:2]}{i}{graine}".lower()
+    return " ".join(f"{base}m{k}" for k in range(mots)) + "."
+
+
+def json_lot(messages, *, tronquer=None, graine=""):
+    tons = []
+    for ton, par in demandes_lot(messages):
+        t = {"nom": ton}
+        for lo, n in par.items():
+            n = tronquer(ton, lo, n) if tronquer else n
+            t[lo] = [{"approche": f"approche {i}", "texte": texte_lot(ton, lo, i, graine), "appuis": [1]}
+                     for i in range(1, n + 1)]
+        tons.append(t)
+    return json.dumps({"tons": tons}, ensure_ascii=False)
+
+
+def reponse_lot(messages, contenu=None):
+    contenu = json_lot(messages) if contenu is None else contenu
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=contenu))],
+                           usage=SimpleNamespace(prompt_tokens=700, completion_tokens=500))
 
 
 class FakeOpenAI:
@@ -75,6 +115,9 @@ class FakeOpenAI:
         self.calls.append(kwargs)
         if self._fail:
             raise RuntimeError("OpenAI down")
+        if not kwargs.get("stream"):
+            # Lot de propositions (generation.py) : JSON valide et distinct.
+            return reponse_lot(kwargs["messages"])
 
         async def gen():
             for c in self._chunks:

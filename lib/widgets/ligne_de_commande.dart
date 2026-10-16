@@ -92,6 +92,8 @@ class LigneDeCommande extends StatefulWidget {
     this.lectureVocale,
     this.surLecture,
     this.surImporterWhatsApp,
+    this.surAjouterMessageWhatsApp,
+    this.pieceJointe,
   });
 
   final TextEditingController controleur;
@@ -114,6 +116,17 @@ class LigneDeCommande extends StatefulWidget {
   /// « + » → « Importer une conversation » (export WhatsApp) ; null :
   /// l'entrée est indisponible.
   final VoidCallback? surImporterWhatsApp;
+
+  /// Phase 5 : « Ajouter une réponse reçue » (actualiser un contexte
+  /// WhatsApp par copier-coller) ; null : indisponible (sans compte).
+  final VoidCallback? surAjouterMessageWhatsApp;
+
+  /// Pièce jointe en attente d'envoi, posée au-dessus du texte dans la
+  /// barre (dépliée tant qu'elle est là). Null : aucune.
+  final Widget? pieceJointe;
+
+  /// Invite quand une pièce jointe attend sa consigne.
+  static const inviteConsigne = 'Écrivez votre consigne à JARVIS…';
 
   /// Invite : la mission de JARVIS (comprendre une conversation, aider à
   /// répondre).
@@ -147,7 +160,9 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
   /// Dépliée dès que le champ a le focus ou contient du texte ; au repos
   /// seulement s'il est vide et sans focus.
   bool get _depliee =>
-      widget.focus.hasFocus || widget.controleur.text.isNotEmpty;
+      widget.focus.hasFocus ||
+      widget.controleur.text.isNotEmpty ||
+      widget.pieceJointe != null;
 
   /// Barre dépliée ou en train de se déplier (pour les tests).
   @visibleForTesting
@@ -302,7 +317,9 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
       cursorRadius: const Radius.circular(2),
       style: Theme.of(context).textTheme.bodyLarge?.merge(texte),
       decoration: InputDecoration(
-        hintText: compacte
+        hintText: widget.pieceJointe != null
+            ? LigneDeCommande.inviteConsigne
+            : compacte
             ? LigneDeCommande.inviteCourte
             : LigneDeCommande.invite,
         hintMaxLines: 1,
@@ -325,6 +342,7 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
       child: _BoutonAjouter(
         surColler: _coller,
         surImporter: widget.surImporterWhatsApp,
+        surAjouterMessage: widget.surAjouterMessageWhatsApp,
         feuille: compacte,
       ),
     );
@@ -442,6 +460,24 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Toujours présent (même vide) : le champ garde sa
+                        // place dans la colonne et n'est jamais recréé.
+                        AnimatedSize(
+                          duration: MesuresBarre.dureeDepliage,
+                          curve: Curves.easeOutCubic,
+                          alignment: Alignment.bottomLeft,
+                          child: widget.pieceJointe == null
+                              ? const SizedBox(width: double.infinity)
+                              : Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    4,
+                                    2,
+                                    4,
+                                    6,
+                                  ),
+                                  child: widget.pieceJointe,
+                                ),
+                        ),
                         Padding(
                           padding: EdgeInsets.only(
                             left: lerpDouble(gaucheRepos, margeDeplie, t)!,
@@ -539,11 +575,13 @@ class _BoutonAjouter extends StatefulWidget {
   const _BoutonAjouter({
     required this.surColler,
     this.surImporter,
+    this.surAjouterMessage,
     this.feuille = false,
   });
 
   final VoidCallback surColler;
   final VoidCallback? surImporter;
+  final VoidCallback? surAjouterMessage;
   final bool feuille;
 
   @override
@@ -554,7 +592,10 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
   bool _appui = false;
 
   Future<void> _ouvrirFeuille() async {
-    final choix = await afficherFeuilleAjout(context);
+    final choix = await afficherFeuilleAjout(
+      context,
+      actualisation: widget.surAjouterMessage != null,
+    );
     // La feuille est fermée avant de lire le presse-papiers.
     if (!mounted) return;
     switch (choix) {
@@ -562,6 +603,8 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
         widget.surColler();
       case ChoixAjout.importerWhatsApp:
         widget.surImporter?.call();
+      case ChoixAjout.ajouterMessageWhatsApp:
+        widget.surAjouterMessage?.call();
       case null:
         break;
     }
@@ -598,6 +641,21 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
           onPressed: widget.surImporter,
           child: const Text('Importer une conversation'),
         ),
+        // Ordinateur : action secondaire discrète, juste sous l'import
+        // (le glissement reste réservé à l'écran tactile).
+        if (widget.surAjouterMessage case final ajouter?)
+          MenuItemButton(
+            key: const Key('menu-ajouter-message'),
+            leadingIcon: const Padding(
+              padding: EdgeInsets.only(left: 18),
+              child: Icon(Icons.add_comment_outlined, size: 16),
+            ),
+            onPressed: ajouter,
+            child: const Text(
+              LigneImportGlissante.action,
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
       ],
       builder: (context, menu, _) => Listener(
         onPointerDown: (_) => setState(() => _appui = true),

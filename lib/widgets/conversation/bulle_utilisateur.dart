@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/message_conversation.dart';
 import '../../theme/theme_jarvis.dart';
 import 'carte_conversation_externe.dart';
+import 'carte_piece_jointe.dart';
 import 'heure_message.dart';
 
 /// Message de l'utilisateur : bulle pastel lavande-bleu très douce, à
@@ -17,6 +18,7 @@ class BulleUtilisateur extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final conversation = message.conversation;
+    final piece = message.pieceJointe;
     return Align(
       alignment: Alignment.centerRight,
       child: LayoutBuilder(
@@ -24,7 +26,8 @@ class BulleUtilisateur extends StatelessWidget {
           // Une conversation collée prend plus de place qu'une phrase.
           constraints: BoxConstraints(
             maxWidth:
-                contraintes.maxWidth * (conversation == null ? 0.82 : 0.92),
+                contraintes.maxWidth *
+                (conversation == null && piece == null ? 0.82 : 0.92),
           ),
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 14, 8),
@@ -63,7 +66,13 @@ class BulleUtilisateur extends StatelessWidget {
                         conversation: conversation,
                         taille: taille - 0.5,
                       ),
-                    if (conversation != null && message.texte.isNotEmpty)
+                    if (piece != null)
+                      CartePieceJointeEnvoyee(
+                        piece: piece,
+                        taille: taille - 0.5,
+                      ),
+                    if ((conversation != null || piece != null) &&
+                        message.texte.isNotEmpty)
                       const SizedBox(height: 10),
                     if (message.texte.isNotEmpty)
                       Text(
