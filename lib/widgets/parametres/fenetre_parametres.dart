@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/api_jarvis.dart';
 import '../../services/authentification/auth_service.dart';
+import '../../services/conversation/consentement_analyse.dart';
 import '../../services/voice_session.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../models/forme_pim.dart';
@@ -13,6 +14,7 @@ import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
 import 'panneau_chat_vocal.dart';
 import 'panneau_compte.dart';
+import 'panneau_confidentialite.dart';
 
 /// Sections du panneau Paramètres.
 enum SectionParametres {
@@ -49,6 +51,7 @@ Future<void> ouvrirParametres(
   AuthService? compte,
   ApiJarvis? api,
   VoidCallback? surConnexion,
+  ConsentementAnalyse? consentement,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < largeurParametresCompacte;
   final route = RawDialogRoute<void>(
@@ -63,6 +66,7 @@ Future<void> ouvrirParametres(
       compte: compte,
       api: api,
       surConnexion: surConnexion,
+      consentement: consentement,
     ),
     transitionBuilder: (context, animation, _, enfant) {
       final courbe = CurvedAnimation(
@@ -113,9 +117,14 @@ class FenetreParametres extends StatefulWidget {
     this.compte,
     this.api,
     this.surConnexion,
+    this.consentement,
   });
 
   final VoiceSession session;
+
+  /// Accord pour l'analyse distante des conversations WhatsApp (null :
+  /// sans compte).
+  final ConsentementAnalyse? consentement;
 
   /// Préférences des particules PIM (forme principale). Créées sur place
   /// si absentes.
@@ -237,6 +246,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             compte: widget.compte,
                             api: widget.api,
                             surConnexion: widget.surConnexion,
+                            consentement: widget.consentement,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -289,6 +299,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           compte: widget.compte,
                           api: widget.api,
                           surConnexion: widget.surConnexion,
+                          consentement: widget.consentement,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -660,10 +671,12 @@ class _Contenu extends StatelessWidget {
     this.compte,
     this.api,
     this.surConnexion,
+    this.consentement,
     this.avecTitre = true,
   });
 
   final SectionParametres section;
+  final ConsentementAnalyse? consentement;
   final VoiceSession session;
   final PreferencesPimService formes;
   final AuthService? compte;
@@ -723,6 +736,9 @@ class _Contenu extends StatelessWidget {
                 ),
                 SectionParametres.particules => _FormePrincipale(
                   formes: formes,
+                ),
+                SectionParametres.confidentialite => PanneauConfidentialite(
+                  consentement: consentement,
                 ),
                 SectionParametres.compte => PanneauCompte(
                   compte: compte,
@@ -818,17 +834,7 @@ class _SectionAVenir extends StatelessWidget {
         'D’autres thèmes pourront être proposés.',
         [('Thème', 'Ivoire'), ('Couleur signature', 'Bleu-violet')],
       ),
-      SectionParametres.confidentialite => (
-        'Votre compte (adresse e-mail, nom) est géré par le serveur '
-            'JARVIS. Les conversations et les réglages restent sur cet '
-            'appareil. La reconnaissance vocale du navigateur ou du système '
-            'peut utiliser son propre service en ligne.',
-        [
-          ('Compte', 'Serveur JARVIS'),
-          ('Réglages', 'Enregistrés sur l’appareil'),
-          ('Assistant en ligne', 'Non connecté'),
-        ],
-      ),
+      SectionParametres.confidentialite ||
       SectionParametres.chatVocal ||
       SectionParametres.particules ||
       SectionParametres.compte => ('', const []),

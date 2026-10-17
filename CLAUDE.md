@@ -168,7 +168,9 @@ lib/
 │   ├── accueil_page.dart             # PIM + mode texte / mode vocal (+ bascule conversation)
 │   ├── conversation_page.dart        # fil (zone qui défile) + zone PIM réservée au-dessus de la barre
 │   ├── importation_whatsapp_page.dart # import WhatsApp : recevoir un export ZIP / TXT, le lire (étape 2), résumé + aperçu
-│   ├── resume_whatsapp_page.dart     # résumé facultatif : nom, « N messages · période », discussion en bulles (sans « Vous êtes »)
+│   ├── resume_whatsapp_page.dart     # « Voir les messages » : discussion en bulles ; .surMessage : ouverte sur un message (référence), éclairé
+│   ├── filtrage_whatsapp_page.dart   # interface 2 : filtrer (par période / par messages), aperçu cochable, compteur, « Continuer vers l'enregistrement »
+│   ├── joindre_whatsapp_page.dart    # interface 3 : nom, nombre, période, participants, « Vous êtes : », « Joindre la conversation »
 │   └── authentification/            # parcours (authentification_page), connexion, inscription, mot de passe oublié
 ├── widgets/
 │   ├── pim_particle.dart             # PIM : particules 3D (CustomPainter), forme principale, aperçus
@@ -183,10 +185,10 @@ lib/
 │   ├── defilement_sans_barre.dart    # défilement actif, aucune barre visible (accueil, fil, saisie)
 │   ├── menu_lateral.dart             # bouton menu (perle JARVIS) + panneau latéral (voile léger, EN COURS, MES CONVERSATIONS, Paramètres)
 │   ├── menu/                         # MES CONVERSATIONS : sélecteur de messageries (vrais logos), recherche, listes qui glissent, ligne (balayage : épingler / supprimer), confirmation
-│   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure
+│   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
-│   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés)
-│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles)
+│   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
+│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp)
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
@@ -230,14 +232,16 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), échanges locaux (/api/v1/conversations/local-exchanges), quotas Redis, horloge.py
-├── tests/                            # pytest (60)
+├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py
+├── tests/                            # pytest (269) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
+supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages)
+supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
-docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE
+docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE
 config_locale.json                    # URL + clé PUBLIQUE Supabase pour Flutter (non versionné ; modèle : config_locale.example.json)
 ```
 
@@ -255,6 +259,8 @@ tool/
 ├── capture_auth_test.dart            # captures des trois pages d'authentification
 ├── capture_parametres_test.dart      # captures des Paramètres (Chat vocal, formes PIM)
 ├── capture_importation_test.dart     # captures du menu « + » et de la page d'import WhatsApp (réception, lecture, résultat)
+├── capture_filtrage_test.dart        # captures de l'interface 2 « Filtrer les messages » (téléphone, ordinateur)
+├── capture_joindre_test.dart         # captures de l'interface 3 (page, pièce jointe dans la barre et dans l'historique)
 └── diag_tts.dart                     # diagnostic direct de la synthèse vocale sur appareil
 ```
 
@@ -358,6 +364,241 @@ ordre jour/mois déduit des nombres > 12 puis de l'ordre chronologique,
 sinon `dateIncertaine` (date brute toujours gardée). Résultat en mémoire
 (`importWhatsAppEnCours`) pour le filtrage (étape 3) ; « Moi » mémorisé
 par `IdentiteWhatsApp`. Aucune IA, aucun réseau.
+
+Filtrage (étape 3, interface 2) : « Filtrer les messages » ouvre
+`FiltrageWhatsAppPage` avec la conversation lue. État : `SelectionWhatsApp`
+(`services/importation/selection_whatsapp.dart`), créé et gardé par la page
+d'import pour CETTE conversation (retour sans perte ; autre fichier → état
+neuf). Moteur pur : `IndexWhatsApp` (index chronologique, comptes par jour,
+filtres → positions) ; filtres et résultat : `models/importation/
+filtre_whatsapp.dart` (`FiltreJourRelatif`, `FiltreDerniers`,
+`FiltrePeriode` à la minute, bornes comprises, `FiltrePlage`,
+`MessagesChoisisWhatsApp`). Sélection par identifiants `m<ordre>`, jamais
+l'index affiché ; événements WhatsApp non sélectionnables ; dates nulles
+jamais dans une période. Widgets : `widgets/importation/filtrage/`. Pas de
+traductions Material : dates par le calendrier, heures par un sélecteur
+maison (roues / clavier). « Continuer vers l'enregistrement » ouvre l'interface 3 (`surContinuer`
+branché par la page d'import) ; rien n'est enregistré.
+
+Pièce jointe (interface 3) : `JoindreWhatsAppPage` → `PieceJointeWhatsApp`
+(`models/importation/piece_jointe_whatsapp.dart` : id temporaire, source,
+titre, participants, « moi » confirmé, messages originaux choisis). Trois
+choses distinctes : messages WhatsApp originaux / pièce jointe / consigne.
+L'import se referme et `ouvrirImportationWhatsApp` renvoie la pièce
+jointe à l'accueil (`AccueilPage._pieceJointe`, en mémoire) : carte
+`PieceJointeEnAttente` dans `LigneDeCommande(pieceJointe:)`, croix =
+abandon (texte et chat gardés). Envoi : consigne non vide obligatoire,
+`ConversationSession.envoyerAvecPieceJointe` (un seul message
+`MessageConversation.pieceJointe`, une seule fois par pièce jointe).
+Analyse : voir « Moteur de compréhension conversationnelle » plus bas
+(sans compte : JARVIS dit qu'il faut se connecter, rien ne part). Conversation commencée à l'envoi
+seulement (accueil vide) ; chat existant gardé. Classement préparé en
+mémoire (`classement(id)`, `ClassementConversation`) + événement
+`surPieceJointe(EnvoiPieceJointe)` ; contrat `DepotPiecesJointes` sans
+implémentation (aucune persistance). Historique :
+`CartePieceJointeEnvoyee` + « Voir les messages » (`ResumeWhatsAppPage`,
+« moi » à droite).
+Panneau : le chat reclassé quitte la liste JARVIS et apparaît sous
+WhatsApp, au nom du contact (`FournisseurJarvis.conversationsDe(source)`
+d'après `ConversationSession.classement(id)`, identifiant stable, jamais
+le titre ; `FournisseurSourceClassee(whatsapp)` délègue ouverture et
+suppression à `FournisseurJarvis`). Même chat, même historique, aucune
+copie ; l'épingle suit (`EpinglesConversations.deplacer`). En mémoire
+seulement : perdu au redémarrage tant que le stockage n'existe pas.
+
+Stockage WhatsApp, phase 1 (base, appliquée le 2026-10-15) :
+`conversation_contexts` (contexte joint : propriétaire, conversation,
+message JARVIS, contact, groupe, « moi », participants, période sans
+fuseau, empreinte) et `context_messages` (messages sélectionnés : rang,
+auteur, contenu, type, trace de média, date locale + texte d'origine).
+Clés composites (x, user_id) : propriété garantie même pour le backend
+(service_role) ; client : lecture et suppression de ses lignes (RLS) ;
+écriture par le backend seulement (phase 2 : user_id pris dans le JWT).
+Nombre de messages calculé (`admin.contextes_lisibles`), jamais stocké.
+Flutter n'écrit pas encore dans ces tables. Reporté volontairement :
+retrait du privilège TRUNCATE de `authenticated` sur les anciennes tables.
+
+Phase 2 (backend) : `docs/backend/CONTEXTES_WHATSAPP.md`. Routes
+`POST /api/v1/conversations/contexts` (consigne + pièce jointe, chat
+existant ou créé), `GET /conversations/{id}/contexts`, `GET /contexts/{id}`,
+`GET /contexts/{id}/messages` (pages par rang), `DELETE /contexts/{id}`.
+Compte = JWT ; filtres explicites par compte (service_role) ; écriture en
+UNE transaction par la fonction `enregistrer_contexte_whatsapp` ;
+idempotence par `context_id` choisi par l'appareil. Aucun appel à l'IA.
+Tests backend : lancer pytest dans l'image `backend-api` (le `.venv` local
+n'existe plus) avec `OPENAI_MODEL=gpt-4o-mini`.
+
+Phase 3 (Flutter, synchronisation) : à l'envoi, `ConversationSession`
+appelle `ServicePiecesJointes` (`PiecesJointesApi`, compte connecté) ; le
+message n'apparaît qu'après confirmation ; échec : pièce jointe et texte
+gardés dans la barre, nouvel essai avec les mêmes UUID
+(`PieceJointeWhatsApp.id` / `idConsigne`). `DepotConversationsSupabase` lit
+les métadonnées des contextes (RLS) ; un chat qui en a est classé sous
+WhatsApp partout ; cartes restaurées sur les consignes ; « Voir les
+messages » lit les pages du backend. Détails : `docs/backend/CONTEXTES_WHATSAPP.md`.
+
+Moteur de compréhension conversationnelle (phase 1, backend
+`app/comprehension/`, doc `docs/backend/COMPREHENSION_CONVERSATIONNELLE.md`) :
+prépare instructions + extraits WhatsApp pour GroqCloud dans la route de
+chat existante (pas de nouveau client, pas de nouvelle table). Chat avec
+contextes : `whatsapp_analysis` obligatoire (absent → 409
+`consentement_requis`, avant tout appel IA ; `declined` → aucun contenu
+WhatsApp). Consigne d'une pièce jointe : `reply_to` (jamais réinsérée).
+Budget `COMPREHENSION_BUDGET_TOKENS` (compte Groq : 8 000 tokens/min) :
+conversation entière si elle tient, sinon aperçu calculé sur tout + extraits
+choisis (période, début/fin, mots, échantillons répartis), manques
+annoncés. Messages importés = données, jamais instructions. Flutter :
+`ConsentementAnalyse` (par compte, sur l'appareil, Paramètres ›
+Confidentialité), carte « Autoriser l'analyse / Pas maintenant »
+(`ChoixJarvis`, `ConversationSession.choisir`), « Réessayer » sans doublon,
+`DemandeJarvis.contexteImporte` (chat WhatsApp : seules les commandes
+restent locales).
+
+Phase 2 (attribution et références vérifiées) : une ligne autonome par
+message envoyé au modèle (`[12] date heure · auteur : «texte»`), l'auteur
+enregistré n'est jamais recalculé. Le modèle cite par `[[12]]` ;
+`FiltreReperes` les retire du flux SSE (phrase par phrase, formes
+relâchées comprises) ; `verifier` contrôle existence, citation et auteur
+avant l'événement `references` (avertissement si une attribution est
+contredite). Stockage SANS migration : `messages.attachments` (identifiants
+seulement, relus et vérifiés par `GET /conversations/{id}/references`).
+« Pourquoi ? » : messages cités par les 2 dernières réponses refournis.
+Flutter : `ReferenceWhatsApp`, `ReferencesJarvis` / `CarteReference` sous la
+réponse, appui → `ResumeWhatsAppPage.surMessage` (page autour du rang via
+`ServicePiecesJointes.page`, message visé au centre du défilement, éclairage
+lavande temporaire, retour au chat intact).
+
+Attribution corrigée AVANT diffusion (`app/comprehension/attribution.py`) :
+`FiltreReperes(CorrecteurAttributions(fournis))` contrôle chaque phrase
+complète (jamais coupée dans une citation) avant l'événement `delta`.
+Message (citation ou `[[n]]`) prêté à la mauvaise personne explicite
+(nom, « tu ») : phrase REMPLACÉE par une phrase factuelle construite avec
+Supabase (« C'est Pepper Potts qui a écrit « mdr ». ») si l'auteur réel est
+unique, reformulée si plusieurs auteurs sont possibles, sinon écartée ;
+jamais de nom substitué dans la phrase du modèle, citation jamais modifiée.
+Interprétations (ton, second degré) non touchées. Texte enregistré =
+texte corrigé ; note « J'ai rectifié… ».
+
+Phase 3 (aider à répondre et à relancer) : le modèle comprend la demande
+(aucune liste de formulations ; `reperes.aide_reponse` = simple indice de
+budget : fin de conversation, +500 tokens de sortie pris sur l'entrée,
+même total sous les 8 000 tokens/min). Ligne `Situation` de l'aperçu
+(dernier auteur, d'affilée, temps écoulé si dates fiables → réponse ou
+relance ; la demande explicite prime). Il écrit 1-2 phrases puis un bloc
+`<propositions mode="reponse|relance">` (`# Ton`, `1. [approche] texte
+[[n]]`) que `FiltrePropositions` retire du flux ; `analyser` garde
+EXACTEMENT 3 propositions distinctes par ton (3-5 tons). Événement SSE
+`propositions` ; stockage SANS migration dans `messages.attachments`
+(`propositions_reponse`), relu par `GET /conversations/{id}/references`
+(`propositions`). Tous les tons d'un coup : changer de ton n'appelle
+jamais l'IA. « Pourquoi la deuxième ? » : `<propositions_precedentes>`
+redonné au modèle (appuis refournis), `ton_propose` = ton affiché
+(`ConversationSession.regarderTon`). Flutter : `PropositionsReponse`
+(via `ReferencesReponse.propositions`), `MessageConversation.propositions`,
+`PropositionsJarvis` / `CarteProposition` sous la réponse (capsules de
+ton, 3 cartes, « Copier »). Chaque proposition a un `id` unique et stable
+(uuid4 ; anciennes propositions : uuid5 déterministe du message, du ton et
+du rang). « Pourquoi la deuxième ? » : l'appli envoie la référence
+EXPLICITE `propositions_message_id` + `ton_propose` ; le serveur vérifie
+compte et chat (`get_assistant_message`), désigne « PROPOSITION VISÉE
+(identifiant …) » juste avant la question ; une proposition mal recopiée
+par le modèle est rétablie mot pour mot (`CorrecteurAttributions._retablir`).
+
+Phase 4 (réponses déclarées envoyées) : appui long ~800 ms sur la CARTE
+d'une réponse (`CarteProposition` : barre de progression, relâcher ou
+défiler = annulé, vibration légère ; Web / Windows : bouton « Marquer
+envoyée »). `ConversationSession.declarerEnvoyee` →
+`ServiceReponsesEnvoyees` (`ReponsesEnvoyeesApi`) → `PUT` / `DELETE
+/api/v1/conversations/{c}/messages/{m}/propositions/{p}/envoyee`
+(idempotent, 404 hors compte / chat). « Envoyée » (coche + Annuler)
+seulement après confirmation du serveur ; jamais d'envoi WhatsApp.
+Stockage SANS migration : entrée `reponse_envoyee` (statut
+`declaree_envoyee` / `annulee`, texte, ton, contact, contexte, chat,
+message, compte, dates) dans `messages.attachments` de la réponse aux
+propositions — jamais dans `context_messages`. Restauration : `envoyee`
+(date) sur chaque proposition de `GET /references` ; l'actualisation
+reprend les statuts changés ailleurs. Mémoire : `memoire.pour_contacts`
+(toutes conversations du compte, même contexte ou même contact) →
+`<reponses_declarees_envoyees>` juste avant la question (« déclarée, non
+vérifiée », pas de répétition, ton non permanent ; message retrouvé dans
+un nouvel export → « ne la compte pas deux fois »).
+
+Campagne de tests (2026-10-16) : `tests_whatsapp/` (5 ZIP fictifs, Alex
+Martin ; `generer.py`, `manifeste.json`, `faux_groq.py`, README). Tests :
+`test/campagne_whatsapp_test.dart` (parseur réel), `backend/tests/test_campagne.py`.
+Corrections issues de la campagne : recherche par mots pondérée par la
+rareté (IDF, `extraits.selectionner`) ; bloc de propositions : exemple
+« Ton : Naturel » (les instructions interdisent les titres Markdown) et
+lecture tolérante (`[Naturel] 1. …`, puces, titres sans « # ») + journal
+de la FORME d'un bloc illisible (`propositions.forme`, jamais le contenu) ;
+CORS : `PUT` autorisé (déclaration « envoyée » depuis le Web) ; carte de
+proposition : appui long sans sélection de texte du fil
+(`SelectionContainer.disabled` + récepteur d'appui long) ; ton affiché
+gardé quand la liste recrée la carte (`ConversationSession.tonRegarde`).
+
+Phase 5 (actualisation par copier-coller, doc `docs/backend/CONTEXTES_WHATSAPP.md`) :
+menu « + » → glisser « Importer une conversation » vers la gauche
+(`LigneImportGlissante`) → « Ajouter une réponse reçue » → volet
+`VoletActualisation` (Reçu / Envoyé, auteur vérifié, plusieurs messages,
+extrait WhatsApp séparable, doublons confirmés, ajouts corrigeables).
+Service `ActualisationWhatsAppApi` → `POST /api/v1/contexts/{id}/messages`
+(`ajouter_messages_contexte`, atomique, idempotent), `PATCH` / `DELETE`
+des seuls ajouts. `context_messages.origin` = export | manual_received |
+manual_sent (migration 20261016120000, appliquée) ; messages d'export
+protégés par déclencheur. Moteur : « (ajouté à la main) » sur la ligne,
+`origin` dans les références, cache vidé à chaque ajout, aucun appel IA.
+
+Phase 5.1 (finition UX, doc `docs/backend/CONTEXTES_WHATSAPP.md`) : chaque
+ton (3 adaptés + Professionnel) a Court / Moyen / Long × EXACTEMENT 3
+propositions (`longueur`, `rang` ; ancien format accepté à la relecture),
+générées PAR LOTS (`app/comprehension/generation.py` : la réponse
+principale annonce les tons, 2 tons par requête JSON, validation par
+combinaison, seules les combinaisons manquantes redemandées, 429 borné).
+Jamais d'ensemble à moitié (pas de mode « partiel ») : `statut`
+complet / incomplet ; incomplet → « Génération incomplète · Reprendre »
+(`POST …/propositions/completer`, même ensemble, verrou Redis ;
+`ConversationSession.reprendrePropositions`, `GenerationIncomplete`) ;
+`longueur_proposee` pour « pourquoi la deuxième ? ». UN seul choix
+« envoyée » par ensemble : fonctions SQL verrouillées
+`declarer_reponse_envoyee` / `annuler_reponse_envoyee` (migration
+20261016150000, appliquée), 409 `deja_choisi`. Après le choix :
+`BulleReponseChoisie` (menu `···` Copier / Annuler le choix). Messages
+collés : bulles `BulleAjoutWhatsApp` dans le fil
+(`MessageConversation.ajoutWhatsApp`, hors historique des moteurs,
+restaurées selon `created_at`). Grand glissement (≥ 60 %) = volet ouvert ;
+volet épuré (« Options »).
+
+Campagne finale 5.1 (2026-10-16) : registre (`generation.registre` :
+tutoiement / vouvoiement / incertain, mesuré dans la discussion) imposé à
+TOUS les tons, Professionnel compris (un « vous » à quelqu'un qu'on tutoie
+est refusé) ; Court ≤ 20 mots, ≤ 2 phrases ; sauts de ligne d'une
+proposition réduits. Fil inversé : `PropositionsJarvis` corrige le
+défilement pendant un changement de ton / longueur (capsules sous le doigt)
+et rend la bulle du choix visible. Volet : saisie gardée si fermé par
+erreur (`brouillonsActualisation`, mêmes UUID). Continuité : indice d'aide
+sans faux positif (« sa dernière réponse » ≠ aide), plancher de 1 000
+tokens pour les messages WhatsApp, ajout manuel sans date = « après
+l'export », rappel `<derniers_messages>` avant une question sur le dernier
+message. Faux GroqCloud (`tests_whatsapp/faux_groq.py`) : lots JSON +
+pannes à chaud (`POST /panne`, dont « lent »).
+
+Message visé (correction finale) : `app/comprehension/ciblage.py` choisit
+le message AVANT l'appel à l'IA, dans les messages enregistrés (auteur,
+provenance, rang réel ; un ajout sans date n'est jamais devancé par
+l'export) : dernier de la conversation, d'un participant nommé (groupe :
+ses seuls messages), reçu, envoyé, dernier ajout ; « sa dernière réponse »
+sans nom = le contact (discussion à deux) ou la personne de la question
+précédente, sinon clarification (plusieurs contacts / groupe). Le message
+et ses 3 précédents sont FORCÉS dans les extraits (`ciblage.voisins` →
+`cites`), un bloc `<message_vise>` (identifiant, auteur, provenance,
+[[n]]) précède la question, et les anciennes questions / réponses sur « le
+dernier message » sont retirées de l'historique. Remplace le rappel
+`<derniers_messages>`.
+Propositions en préparation : événement SSE `preparation` (après le texte,
+avant les lots) → `ConversationSession.preparationEnCours(id)` →
+`PreparationPropositions` (trois points animés sous le texte) jusqu'à
+`propositions` / `done` ; battements SSE pendant les lots (le client coupe
+après 30 s de silence).
 
 ---
 

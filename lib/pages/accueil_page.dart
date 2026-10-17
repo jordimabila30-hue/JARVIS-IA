@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../models/conversations/apercu_conversation.dart';
 import '../models/conversations/source_conversation.dart';
+import '../models/importation/piece_jointe_whatsapp.dart';
 import '../services/api_jarvis.dart';
 import '../services/authentification/auth_service.dart';
+import '../services/conversation/consentement_analyse.dart';
 import '../services/conversation/conversation_session.dart';
 import '../services/conversation/moteur_conversation_hybride.dart';
 import '../services/conversation/moteur_conversation_ia.dart';
@@ -18,6 +20,8 @@ import '../services/conversations/conversations_multicanal.dart';
 import '../services/conversations/epingles_conversations.dart';
 import '../services/conversations/fournisseur_conversations.dart';
 import '../services/conversations/fournisseur_jarvis.dart';
+import '../services/importation/pieces_jointes_serveur.dart';
+import '../services/conversation/reponses_envoyees.dart';
 import '../services/importation/pont_android_importation.dart';
 import '../services/preferences_pim_service.dart';
 import '../services/voice_session.dart';
@@ -25,6 +29,7 @@ import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/local_date_time.dart';
 import '../widgets/bouton_vocal.dart';
+import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
 import '../widgets/fond_jarvis_anime.dart';
 import '../widgets/ligne_de_commande.dart';
@@ -33,6 +38,8 @@ import '../widgets/parametres/fenetre_parametres.dart';
 import '../widgets/pim_particle.dart';
 import '../widgets/voice_status.dart';
 import 'conversation_page.dart';
+import '../services/importation/actualisation_whatsapp.dart';
+import '../widgets/importation/volet_actualisation.dart';
 import 'importation_whatsapp_page.dart';
 
 /// Page d'accueil, affichée après l'écran de lancement.
@@ -61,6 +68,8 @@ class AccueilPage extends StatefulWidget {
     this.api,
     this.surConnexion,
     this.depotConversations,
+    this.ouvrirImport,
+    this.consentement,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -100,6 +109,24 @@ class AccueilPage extends StatefulWidget {
   /// page et ses données disparaissent.
   final DepotConversations? depotConversations;
 
+  /// Accord pour l'analyse distante des conversations WhatsApp jointes ;
+  /// injectable pour les tests, créé sinon pour le compte connecté.
+  final ConsentementAnalyse? consentement;
+
+  /// Après un échec d'enregistrement d'une pièce jointe.
+  static const pieceJointeGardee =
+      'La pièce jointe et votre consigne sont gardées : renvoyez pour '
+      'réessayer.';
+
+  /// Parcours d'import WhatsApp (tests) ; [ouvrirImportationWhatsApp] par
+  /// défaut. Renvoie la pièce jointe préparée, ou null.
+  final Future<PieceJointeWhatsApp?> Function(
+    BuildContext context, {
+    PartageRecu? partageInitial,
+    Stream<PartageRecu>? partages,
+  })?
+  ouvrirImport;
+
   @override
   State<AccueilPage> createState() => _AccueilPageState();
 }
@@ -118,6 +145,14 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   final _cleZonePim = GlobalKey();
   String _texteConnu = '';
   bool _accueilVisible = true;
+
+  /// Conversation WhatsApp jointe (interface 3), en attente de sa
+  /// consigne : en mémoire seulement, jamais envoyée seule.
+  PieceJointeWhatsApp? _pieceJointe;
+
+  /// Enregistrement de la pièce jointe en cours (serveur) : un second
+  /// appui sur « Envoyer » attend.
+  bool _envoiPieceJointe = false;
   Timer? _retourAccueil;
 
   bool _modeVocal = false;
@@ -165,6 +200,15 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _ => null,
   };
 
+  // Accord pour l'analyse des conversations WhatsApp jointes, par compte
+  // (sans compte : rien n'est enregistré sur le serveur, rien à analyser).
+  late final _consentement =
+      widget.consentement ??
+      switch (widget.depotConversations?.utilisateur) {
+        final compte? => ConsentementAnalyse(compte: compte),
+        null => null,
+      };
+
   late final _conversation =
       widget.conversation ??
       ConversationSession(
@@ -174,29 +218,56 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
               api,
               correspondance: _correspondance,
               avantEnvoi: _echangesLocaux?.attendre,
+              analyseWhatsApp: () => _consentement?.etat.valeurApi,
             ),
           ),
           null => null,
         },
+        consentement: _consentement,
         depot: widget.depotConversations,
+        // Compte connecté : pièces jointes WhatsApp enregistrées par le
+        // serveur (retrouvées sur les autres appareils).
+        piecesJointes: switch ((widget.depotConversations, widget.api)) {
+          (_?, final api?) => PiecesJointesApi(api),
+          _ => null,
+        },
+        reponsesEnvoyees: switch ((widget.depotConversations, widget.api)) {
+          (_?, final api?) => ReponsesEnvoyeesApi(api),
+          _ => null,
+        },
         correspondance: _correspondance,
+        actualisation: _actualisation,
       );
   bool _enConversation = false;
 
-  late final _multicanal =
-      widget.multicanal ??
-      ConversationsMulticanal(
-        fournisseurs: [
-          FournisseurJarvis(
-            _conversation,
-            synchronisation: _synchronisation,
-            echangesLocaux: _echangesLocaux,
-          ),
-          for (final s in SourceConversation.values)
-            if (s != SourceConversation.jarvis) FournisseurNonIntegre(s),
-        ],
-        epingles: EpinglesConversations(),
-      );
+  late final _multicanal = widget.multicanal ?? _creerMulticanal();
+
+  /// JARVIS, puis WhatsApp (chats reclassés par une pièce jointe envoyée,
+  /// en mémoire), puis les messageries pas encore intégrées.
+  ConversationsMulticanal _creerMulticanal() {
+    final jarvis = FournisseurJarvis(
+      _conversation,
+      synchronisation: _synchronisation,
+      echangesLocaux: _echangesLocaux,
+    );
+    final epingles = EpinglesConversations();
+    // Chat reclassé à l'envoi d'une pièce jointe : son épingle le suit.
+    _conversation.surPieceJointe = (envoi) => epingles.deplacer(
+      '${SourceConversation.jarvis.name}:${envoi.idConversation}',
+      '${envoi.pieceJointe.source.name}:${envoi.idConversation}',
+    );
+    return ConversationsMulticanal(
+      fournisseurs: [
+        jarvis,
+        FournisseurSourceClassee(SourceConversation.whatsapp, jarvis),
+        for (final s in SourceConversation.values)
+          if (s != SourceConversation.jarvis &&
+              s != SourceConversation.whatsapp)
+            FournisseurNonIntegre(s),
+      ],
+      epingles: epingles,
+    );
+  }
 
   // Forme principale de PIM, enregistrée sur l'appareil.
   late final _formesPim = widget.formesPim ?? PreferencesPimService();
@@ -239,11 +310,14 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     // Réglages vocaux enregistrés (voix, vitesse, micro…), appliqués à
     // chaque prise de parole.
     _session.reglages.charger();
+    final consentement = _consentement;
+    if (consentement != null && !consentement.charge) consentement.charger();
     // Conversations épinglées (menu latéral).
     _multicanal.epingles.charger();
     // Conversations enregistrées : à la connexion, puis à l'ouverture du
     // menu, au retour au premier plan et après chaque échange avec l'IA.
     WidgetsBinding.instance.addObserver(this);
+    _conversation.avantPieceJointe = _echangesLocaux?.attendre;
     _conversation.surEchangeEnregistre = () {
       _echangesLocaux?.envoyer();
       _synchronisation?.actualiser();
@@ -296,6 +370,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _session.dispose();
     _conversation.removeListener(_surConversation);
     if (widget.conversation == null) _conversation.dispose();
+    if (widget.consentement == null) _consentement?.dispose();
     _menu.dispose();
     if (widget.multicanal == null) _multicanal.dispose();
     _synchronisation?.dispose();
@@ -366,6 +441,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   /// message), ou null s'il n'y en a pas.
   String? get _titreConversation {
     if (!_enConversation) return null;
+    // Chat classé sous WhatsApp : le nom du contact.
+    final id = _conversation.idCourant;
+    final classement = id == null ? null : _conversation.classement(id);
+    if (classement != null) return classement.titre;
     for (final m in _conversation.messages) {
       if (m.deJarvis) continue;
       if (m.texte.trim().isNotEmpty) return m.texte.trim();
@@ -458,6 +537,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       compte: widget.auth,
       api: widget.api,
       surConnexion: widget.surConnexion,
+      consentement: _consentement,
     );
   }
 
@@ -466,17 +546,47 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   /// Page d'import WhatsApp par-dessus l'accueil (la conversation en
   /// cours n'est pas touchée). Une seule page à la fois : les partages
   /// suivants lui sont transmis.
+  /// Phase 5 : actualiser un contexte WhatsApp par copier-coller (compte
+  /// connecté seulement).
+  late final ServiceActualisationWhatsApp? _actualisation = switch ((
+    widget.depotConversations,
+    widget.api,
+  )) {
+    (_?, final api?) => ActualisationWhatsAppApi(api),
+    _ => null,
+  };
+
+  /// Volet par-dessus le chat : brouillon, pièce jointe en attente,
+  /// position, vocal et PIM intacts. Aucun appel à l'IA.
+  Future<void> _ouvrirActualisation() async {
+    final service = _actualisation;
+    if (service == null) return;
+    final r = await afficherVoletActualisation(
+      context,
+      service: service,
+      contextesDuChat: _conversation.contextesCourants,
+    );
+    if (!mounted || r == null) return;
+    // Confirmation visuelle : les bulles dans le fil (aucun message de
+    // JARVIS, aucun appel à l'IA).
+    _conversation.afficherAjouts(r.contexte, r.messages);
+  }
+
   Future<void> _ouvrirImportationWhatsApp({PartageRecu? partage}) async {
     if (_partagesImport != null) return;
     final flux = _partagesImport = StreamController<PartageRecu>();
     _focus.unfocus();
     _pim.annulerApercu();
     try {
-      await ouvrirImportationWhatsApp(
+      final ouvrir = widget.ouvrirImport ?? _importParDefaut;
+      final piece = await ouvrir(
         context,
         partageInitial: partage,
         partages: flux.stream,
       );
+      // Retour dans le même chat (ou l'accueil vide) : la pièce jointe
+      // attend dans la barre ; le texte déjà saisi est gardé.
+      if (piece != null && mounted) setState(() => _pieceJointe = piece);
     } finally {
       _partagesImport = null;
       flux.close();
@@ -522,9 +632,85 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   void _envoyer(String message) {
     // Petite impulsion des particules le long de la barre, puis le
     // message part dans la conversation.
+    final piece = _pieceJointe;
+    if (piece != null) {
+      _envoyerPieceJointe(message, piece);
+      return;
+    }
     _pim.surEnvoi();
     _conversation.envoyer(message);
     _controleur.clear();
+  }
+
+  /// Consigne et pièce jointe partent ensemble, une seule fois. Avec un
+  /// compte, elles ne quittent la barre qu'une fois enregistrées ; échec :
+  /// elles restent (même pièce jointe, mêmes identifiants : un nouvel
+  /// envoi ne crée aucun doublon).
+  Future<void> _envoyerPieceJointe(
+    String message,
+    PieceJointeWhatsApp piece,
+  ) async {
+    if (_envoiPieceJointe) return;
+    setState(() => _envoiPieceJointe = true);
+    _pim.surEnvoi();
+    final r = await _conversation.envoyerAvecPieceJointe(message, piece);
+    if (!mounted) return;
+    setState(() {
+      _envoiPieceJointe = false;
+      if (r is PieceJointeEnvoyee && identical(_pieceJointe, piece)) {
+        _pieceJointe = null;
+        _controleur.clear();
+      }
+    });
+    if (r case PieceJointeNonEnvoyee(:final raison)) {
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '$raison ${AccueilPage.pieceJointeGardee}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: CouleursJarvis.ivoire,
+              ),
+            ),
+            behavior: SnackBarBehavior.floating,
+            // Au-dessus de la barre : « Envoyer » reste accessible pour
+            // réessayer.
+            margin: _margeAuDessusDeLaBarre(),
+            backgroundColor: CouleursJarvis.texte.withValues(alpha: 0.92),
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+    }
+  }
+
+  static Future<PieceJointeWhatsApp?> _importParDefaut(
+    BuildContext context, {
+    PartageRecu? partageInitial,
+    Stream<PartageRecu>? partages,
+  }) => ouvrirImportationWhatsApp(
+    context,
+    partageInitial: partageInitial,
+    partages: partages,
+  );
+
+  EdgeInsets? _margeAuDessusDeLaBarre() {
+    final barre = _cleChamp.currentContext?.findRenderObject();
+    if (barre is! RenderBox || !barre.hasSize) return null;
+    final haut = barre.localToGlobal(Offset.zero).dy;
+    final ecran = MediaQuery.sizeOf(context).height;
+    return EdgeInsets.fromLTRB(16, 0, 16, (ecran - haut + 8).clamp(8, ecran));
+  }
+
+  /// Croix de la pièce jointe : la préparation est abandonnée (rien
+  /// n'avait été enregistré) ; le texte saisi et le chat restent.
+  void _retirerPieceJointe() {
+    if (_envoiPieceJointe) return;
+    setState(() => _pieceJointe = null);
   }
 
   /// Lecture vocale activée : chaque nouvelle réponse écrite de JARVIS est
@@ -705,6 +891,17 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
                                       surLecture: _basculerLecture,
                                       surImporterWhatsApp:
                                           _ouvrirImportationWhatsApp,
+                                      surAjouterMessageWhatsApp:
+                                          _actualisation == null
+                                          ? null
+                                          : _ouvrirActualisation,
+                                      pieceJointe: _pieceJointe == null
+                                          ? null
+                                          : PieceJointeEnAttente(
+                                              piece: _pieceJointe!,
+                                              surRetirer: _retirerPieceJointe,
+                                              enCours: _envoiPieceJointe,
+                                            ),
                                       compacte: gabarit.compact,
                                     ),
                                   ),

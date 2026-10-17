@@ -15,14 +15,33 @@ import 'moteur_conversation.dart';
 /// reprennent, une nouvelle conversation du fil en obtient une autre.
 ///
 /// Seul le texte écrit ou dit à JARVIS est envoyé : jamais une
-/// conversation collée ou importée (le moteur hybride les garde sur
-/// l'appareil).
+/// conversation collée (le moteur hybride la garde sur l'appareil), ni les
+/// messages d'une conversation WhatsApp importée. Ceux-ci sont déjà sur le
+/// serveur : c'est lui qui en joint les extraits utiles à la question
+/// (moteur de compréhension conversationnelle), seulement si
+/// l'utilisateur l'a accepté ([analyseWhatsApp]).
 class MoteurConversationIA {
   MoteurConversationIA(
     this._api, {
     CorrespondanceConversations? correspondance,
     this.avantEnvoi,
+    this.analyseWhatsApp,
   }) : correspondance = correspondance ?? CorrespondanceConversations();
+
+  /// Réponse de l'utilisateur sur l'envoi de ses conversations WhatsApp
+  /// jointes au fournisseur IA ('allowed', 'declined', null : jamais
+  /// demandé), lue à chaque question.
+  final String? Function()? analyseWhatsApp;
+
+  /// Explication affichée (et dite) quand l'accord est demandé.
+  static const demandeAccord =
+      'Pour analyser cette conversation WhatsApp, j’ai besoin de votre '
+      'accord : les extraits utiles des messages (auteurs, dates, textes) '
+      'seront envoyés à GroqCloud, le service d’intelligence artificielle '
+      'externe de JARVIS, à chaque question qui porte sur elle. Jamais de '
+      'fichiers ni de médias. Sans accord, elle reste enregistrée et '
+      'consultable, sans analyse. Vous pourrez changer d’avis dans les '
+      'Paramètres.';
 
   /// Attendu avant chaque question à l'IA (conversation locale) : les
   /// échanges locaux de la conversation sont enregistrés d'abord, pour
@@ -51,6 +70,11 @@ class MoteurConversationIA {
     Future<ResultatApi<ReponseChat>> envoyer() => _api.discuter(
       demande.texte,
       conversation: local == null ? null : correspondance.serveur(local),
+      repondreA: demande.repondreA,
+      analyseWhatsApp: analyseWhatsApp?.call(),
+      tonPropose: demande.tonPropose,
+      propositionsMessage: demande.propositionsMessage,
+      longueurPropose: demande.longueurPropose,
       // Dès l'événement `meta` : même si la génération échoue ensuite,
       // ou si le fil a changé entre-temps, la conversation locale garde
       // sa conversation serveur.
@@ -62,11 +86,12 @@ class MoteurConversationIA {
         recu.write(f);
         demande.surFragment?.call(f);
       },
+      surPreparation: demande.surPreparation,
     );
     var r = await envoyer();
     if (r case EchecApi(
       type: ErreurApi.conversationIntrouvable,
-    ) when local != null) {
+    ) when local != null && demande.repondreA == null) {
       // Conversation effacée côté serveur : refusée avant toute
       // génération (rien d'enregistré), on en recommence une seule fois.
       correspondance.oublier(local);
@@ -77,6 +102,14 @@ class MoteurConversationIA {
         return ReponseJarvis(
           texteSimple(valeur.texte),
           idServeur: valeur.message ?? idReponse,
+          references: valeur.references,
+        );
+      case EchecApi(type: ErreurApi.consentementRequis):
+        // Rien n'est parti vers l'IA : JARVIS demande l'accord dans le fil.
+        return const ReponseJarvis(
+          demandeAccord,
+          erreur: true,
+          accordRequis: true,
         );
       case EchecApi(:final type, :final detail):
         debugPrint(

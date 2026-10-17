@@ -2,13 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../models/importation/conversation_whatsapp.dart';
+import '../models/importation/piece_jointe_whatsapp.dart';
+import '../models/importation/reference_whatsapp.dart';
 import '../models/message_conversation.dart';
 import '../services/conversation/conversation_session.dart';
 import '../services/ecriture/ecriture_progressive.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
+import '../widgets/conversation/bulle_ajout_whatsapp.dart';
 import '../widgets/conversation/bulle_utilisateur.dart';
 import '../widgets/conversation/carte_jarvis.dart';
+import '../widgets/conversation/carte_piece_jointe.dart';
+import 'resume_whatsapp_page.dart';
 import '../widgets/defilement_sans_barre.dart';
 
 /// Mesures verticales de la conversation, pour une hauteur disponible.
@@ -280,6 +286,54 @@ class _ConversationPageState extends State<ConversationPage> {
     p.jumpTo((p.pixels + ecart).clamp(p.minScrollExtent, p.maxScrollExtent));
   }
 
+  /// Message d'origine d'une réponse : « Voir les messages » s'ouvre sur
+  /// lui, dans SA pièce jointe (identifiée par le serveur). Le chat reste
+  /// tel quel dessous : le retour y ramène, à la même position.
+  Future<void> _ouvrirReference(ReferenceWhatsApp r) async {
+    final service = widget.session.piecesJointes;
+    if (service == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Connectez-vous pour consulter ce message.'),
+        ),
+      );
+      return;
+    }
+    PieceJointeWhatsApp? piece;
+    for (final m in widget.session.messages) {
+      if (m.pieceJointe?.id == r.contexte) piece = m.pieceJointe;
+    }
+    final participants =
+        piece?.participants ??
+        [r.contact, if (r.moi != null && r.moi != r.contact) r.moi!];
+    final conversation = ConversationWhatsApp(
+      titre: piece?.titre ?? r.contact,
+      messages: const [],
+      participants: [
+        for (final p in participants) ParticipantWhatsApp(nom: p, messages: 0),
+      ],
+      ordreDate: OrdreDate.jourMoisAnnee,
+      dateIncertaine: piece?.dateIncertaine ?? r.datesIncertaines,
+      lignesNonRattachees: const [],
+      nombreLignesNonRattachees: 0,
+      nomFichier: '',
+    );
+    final moi = piece?.moi ?? r.moi;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ResumeWhatsAppPage.surMessage(
+          conversation: conversation,
+          chargeur: (apres, limite) =>
+              service.page(r.contexte, apres: apres, limite: limite),
+          cible: r.ordre,
+          titrePage: CartePieceJointeEnvoyee.titrePage,
+          moi: moi == null || moi.isEmpty ? null : moi,
+          nombre: piece?.nombre,
+        ),
+      ),
+    );
+  }
+
   Future<void> _surAction(int id, ActionRapide action) async {
     if (action == ActionRapide.question) widget.surPoserQuestion();
     await widget.session.action(id, action);
@@ -416,12 +470,33 @@ class _ConversationPageState extends State<ConversationPage> {
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 child: KeyedSubtree(
                   key: _cle(m.id),
-                  child: m.deJarvis
+                  child: m.ajoutWhatsApp != null
+                      // Phase 5.1 : message WhatsApp collé (reçu / envoyé).
+                      ? BulleAjoutWhatsApp(
+                          ajout: m.ajoutWhatsApp!,
+                          taille: taille,
+                          surCorriger: (t) => session.corrigerAjout(m.id, t),
+                          surSupprimer: () => session.supprimerAjout(m.id),
+                        )
+                      : m.deJarvis
                       ? CarteJarvis(
                           message: m,
                           taille: taille,
                           surTon: (ton) => session.choisirTon(m.id, ton),
                           surAction: (a) => _surAction(m.id, a),
+                          surChoix: (c) => session.choisir(m.id, c),
+                          surReference: _ouvrirReference,
+                          surTonPropositions: (ton, longueur) => session
+                              .regarderTon(m.id, ton, longueur: longueur),
+                          tonPropositions: session.tonRegarde(m.id),
+                          longueurPropositions: session.longueurRegardee(m.id),
+                          contactPropositions: session.contactPropositions,
+                          surReprendrePropositions: () =>
+                              session.reprendrePropositions(m.id),
+                          repriseEnCours: session.repriseEnCours(m.id),
+                          preparation: session.preparationEnCours(m.id),
+                          surStatutProposition: (p, envoyee) => session
+                              .declarerEnvoyee(m.id, p.id, envoyee: envoyee),
                         )
                       : BulleUtilisateur(message: m, taille: taille),
                 ),

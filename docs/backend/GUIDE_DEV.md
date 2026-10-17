@@ -87,7 +87,10 @@ jarvis/
 ├── arreter_jarvis.bat      # Arrêt automatique (Docker)
 ├── tester_jarvis.bat       # Test de bout en bout
 ├── supabase/
-│   └── schema.sql          # Schéma PostgreSQL, tables, RLS et quotas
+│   ├── schema.sql          # Schéma PostgreSQL, tables, RLS et quotas
+│   ├── migrations/         # Évolutions datées (ex. contextes WhatsApp)
+│   └── tests/              # Tests SQL dans un PostgreSQL local jetable :
+│                           #   bash supabase/tests/lancer_tests.sh
 ├── backend/                # Serveur FastAPI
 │   ├── .env                # Variables d'environnement et clés d'API partagées
 │   ├── docker-compose.yml  # Orchestration de l'API et de Redis

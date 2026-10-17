@@ -422,6 +422,14 @@ revoke all on admin.conversations_lisibles, admin.messages_lisibles, admin.quota
   from public, anon, authenticated, service_role;
 
 -- =============================================================================
+-- Contextes WhatsApp (conversation_contexts, context_messages)
+-- =============================================================================
+-- Définis par la migration supabase/migrations/20261015103245_contextes_whatsapp.sql
+-- (tables, clés composites de propriété, index, privilèges, RLS, vue admin).
+-- Tests : bash supabase/tests/lancer_tests.sh (PostgreSQL local jetable).
+-- Appliquée sur le projet « Jarvis » le 2026-10-15 (migration contextes_whatsapp).
+
+-- =============================================================================
 -- Administration (exemples, à exécuter manuellement avec un rôle admin)
 -- =============================================================================
 -- Passer un utilisateur en Pro illimité :

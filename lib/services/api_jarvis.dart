@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/importation/propositions_reponse.dart';
+import '../models/importation/reference_whatsapp.dart';
 import 'flux_sse.dart';
 
 /// Compte tel que le backend JARVIS (FastAPI) le reconnaît, d'après le
@@ -20,7 +22,12 @@ class ReponseChat {
     required this.texte,
     required this.conversation,
     this.message,
+    this.references = ReferencesReponse.vide,
   });
+
+  /// Messages WhatsApp sur lesquels s'appuie la réponse, vérifiés par le
+  /// serveur (événement `references`, avant `done`).
+  final ReferencesReponse references;
 
   final String texte;
 
@@ -106,7 +113,34 @@ enum ErreurApi {
   ),
 
   /// Message refusé avant l'envoi (limite du serveur).
-  messageTropLong('Ce message est trop long : 8 000 caractères au maximum.');
+  messageTropLong('Ce message est trop long : 8 000 caractères au maximum.'),
+
+  /// Pièce jointe WhatsApp refusée (données invalides, identifiant déjà
+  /// utilisé pour un autre contenu).
+  pieceJointeRefusee(
+    'Le serveur JARVIS a refusé cette pièce jointe. Rejoignez la '
+    'conversation pour réessayer.',
+  ),
+
+  /// Pièce jointe au-delà des limites du serveur.
+  pieceJointeTropVolumineuse(
+    'Cette pièce jointe est trop volumineuse : sélectionnez moins de '
+    'messages.',
+  ),
+
+  /// Pièce jointe inconnue du serveur (supprimée, autre compte).
+  pieceJointeIntrouvable('Cette pièce jointe n’existe plus sur le serveur.'),
+
+  /// Le chat a des conversations WhatsApp jointes : le serveur attend
+  /// l'accord de l'utilisateur avant d'en envoyer des extraits à l'IA
+  /// (409, refusé avant tout appel au fournisseur).
+  consentementRequis(
+    'Pour analyser les conversations WhatsApp jointes, j’ai besoin de votre '
+    'accord.',
+  ),
+
+  /// Consigne d'une pièce jointe inconnue du serveur (supprimée).
+  consigneIntrouvable('Cette consigne n’existe plus sur le serveur.');
 
   const ErreurApi(this.message);
   final String message;
@@ -181,12 +215,25 @@ class ApiJarvis {
   /// Une réponse interrompue ou vide est un échec : jamais un texte
   /// partiel présenté comme complet. Aucun réessai, sauf un jeton expiré
   /// (refusé avant toute génération, donc sans doublon).
+  ///
+  /// [repondreA] : UUID d'une consigne déjà enregistrée avec sa pièce
+  /// jointe WhatsApp (elle n'est pas réinsérée). [analyseWhatsApp] :
+  /// réponse de l'utilisateur sur l'envoi des messages WhatsApp joints au
+  /// fournisseur IA ('allowed', 'declined', null : jamais demandé).
+  /// [tonPropose] : ton affiché dans les dernières propositions de réponse
+  /// (« pourquoi la deuxième ? » vise ce ton).
   Future<ResultatApi<ReponseChat>> discuter(
     String message, {
     String? conversation,
+    String? repondreA,
+    String? analyseWhatsApp,
+    String? tonPropose,
+    String? propositionsMessage,
+    String? longueurPropose,
     void Function(String conversation)? surConversation,
     void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
+    void Function()? surPreparation,
   }) {
     if (message.length > longueurMaxMessage) {
       return Future.value(const EchecApi(ErreurApi.messageTropLong));
@@ -199,6 +246,12 @@ class ApiJarvis {
         surConversation,
         surMessage,
         surFragment,
+        repondreA: repondreA,
+        analyseWhatsApp: analyseWhatsApp,
+        tonPropose: tonPropose,
+        propositionsMessage: propositionsMessage,
+        longueurPropose: longueurPropose,
+        surPreparation: surPreparation,
       ),
     );
   }
@@ -268,6 +321,247 @@ class ApiJarvis {
     }
   });
 
+  // --- Contextes WhatsApp (pièces jointes) -------------------------------
+  // Stockage seulement : aucune de ces routes ne passe par l'IA.
+
+  /// `POST /api/v1/conversations/contexts` : consigne + pièce jointe, en
+  /// une transaction côté serveur. [corps] porte les identifiants choisis
+  /// par l'appareil : un nouvel essai ne crée jamais de doublon.
+  Future<ResultatApi<Map<String, dynamic>>> enregistrerContexte(
+    Map<String, dynamic> corps, {
+    Duration delaiEnregistrement = const Duration(seconds: 45),
+  }) => _authentifie(
+    (j) => _json(
+      'POST',
+      'api/v1/conversations/contexts',
+      j,
+      corps: corps,
+      delaiAppel: delaiEnregistrement,
+    ),
+  );
+
+  /// `GET /api/v1/contexts/{id}/messages` : une page, ordre original.
+  Future<ResultatApi<Map<String, dynamic>>> pageMessagesContexte(
+    String id, {
+    int apres = -1,
+    int limite = 500,
+  }) => _authentifie(
+    (j) => _json(
+      'GET',
+      'api/v1/contexts/$id/messages',
+      j,
+      requete: {'after': '$apres', 'limit': '$limite'},
+    ),
+  );
+
+  /// `GET /api/v1/conversations/{id}/references` : références vérifiées
+  /// des réponses de JARVIS de ce chat (relues dans Supabase), par UUID
+  /// de réponse.
+  Future<ResultatApi<Map<String, ReferencesReponse>>> referencesConversation(
+    String conversation,
+  ) async {
+    final r = await _authentifie(
+      (j) => _json('GET', 'api/v1/conversations/$conversation/references', j),
+    );
+    switch (r) {
+      case EchecApi(:final type, :final detail):
+        return EchecApi(type, detail: detail);
+      case SuccesApi(:final valeur):
+        try {
+          return SuccesApi({
+            for (final e in valeur['items'] as List)
+              if (e case {'message_id': final String id})
+                id: ReferencesReponse(
+                  ReferenceWhatsApp.listeDepuisJson(e['references']),
+                  note: e['note'] as String?,
+                  propositions: PropositionsReponse.depuisJson(
+                    e['propositions'],
+                  ),
+                ),
+          });
+        } catch (_) {
+          return const EchecApi(
+            ErreurApi.serveur,
+            detail: 'références illisibles',
+          );
+        }
+    }
+  }
+
+  /// Phase 4 : `PUT` (déclarer) ou `DELETE` (annuler)
+  /// `/api/v1/conversations/{c}/messages/{m}/propositions/{p}/envoyee`.
+  /// Succès : date de la déclaration confirmée par le serveur (null :
+  /// annulée). Idempotent côté serveur (aucun doublon).
+  Future<ResultatApi<DateTime?>> statutEnvoyee({
+    required String conversation,
+    required String message,
+    required String proposition,
+    required bool envoyee,
+  }) async {
+    final r = await _authentifie(
+      (j) => _json(
+        envoyee ? 'PUT' : 'DELETE',
+        'api/v1/conversations/$conversation/messages/$message/propositions/'
+        '$proposition/envoyee',
+        j,
+      ),
+    );
+    switch (r) {
+      case EchecApi(:final type, :final detail):
+        return EchecApi(type, detail: detail);
+      case SuccesApi(:final valeur):
+        final date = valeur['declared_at'];
+        if (valeur['envoyee'] == true && date is String) {
+          return SuccesApi(DateTime.tryParse(date)?.toLocal());
+        }
+        if (valeur['envoyee'] == false) return const SuccesApi(null);
+        return const EchecApi(ErreurApi.serveur, detail: 'statut illisible');
+    }
+  }
+
+  /// `POST /api/v1/conversations/{c}/messages/{m}/propositions/completer` :
+  /// complète une génération incomplète (seulement ce qui manque, même
+  /// ensemble). Peut attendre la limite du fournisseur : délai long.
+  Future<ResultatApi<PropositionsReponse?>> completerPropositions({
+    required String conversation,
+    required String message,
+  }) async {
+    final r = await _authentifie(
+      (j) => _json(
+        'POST',
+        'api/v1/conversations/$conversation/messages/$message/propositions/'
+        'completer',
+        j,
+        delaiAppel: const Duration(minutes: 2),
+      ),
+    );
+    switch (r) {
+      case EchecApi(:final type, :final detail):
+        return EchecApi(type, detail: detail);
+      case SuccesApi(:final valeur):
+        return SuccesApi(PropositionsReponse.depuisJson(valeur['propositions']));
+    }
+  }
+
+  // --- Phase 5 : actualisation manuelle d'un contexte WhatsApp ----------
+
+  /// `GET /api/v1/contexts` : toutes les pièces jointes du compte.
+  Future<ResultatApi<Map<String, dynamic>>> contextesWhatsApp() =>
+      _authentifie((j) => _json('GET', 'api/v1/contexts', j));
+
+  /// `POST /api/v1/contexts/{id}/messages` : messages collés (reçus /
+  /// envoyés), atomique et idempotent. Échec 409 : [EchecApi.detail] porte
+  /// le corps (`correspondances`).
+  Future<ResultatApi<Map<String, dynamic>>> ajouterMessagesContexte(
+    String contexte,
+    Map<String, dynamic> corps,
+  ) => _authentifie(
+    (j) => _json('POST', 'api/v1/contexts/$contexte/messages', j, corps: corps),
+  );
+
+  /// `GET /api/v1/contexts/{id}/messages?manual=true` : les ajouts seulement.
+  Future<ResultatApi<Map<String, dynamic>>> messagesAjoutes(String contexte) =>
+      _authentifie(
+        (j) => _json(
+          'GET',
+          'api/v1/contexts/$contexte/messages',
+          j,
+          requete: {'after': '-1', 'limit': '200', 'manual': 'true'},
+        ),
+      );
+
+  /// `PATCH` / `DELETE /api/v1/contexts/{id}/messages/{message}` : corrige
+  /// ou supprime un message AJOUTÉ (jamais un message importé).
+  Future<ResultatApi<Map<String, dynamic>>> modifierMessageContexte(
+    String contexte,
+    String message,
+    Map<String, dynamic> corps,
+  ) => _authentifie(
+    (j) => _json(
+      'PATCH',
+      'api/v1/contexts/$contexte/messages/$message',
+      j,
+      corps: corps,
+    ),
+  );
+
+  Future<ResultatApi<Map<String, dynamic>>> supprimerMessageContexte(
+    String contexte,
+    String message,
+  ) => _authentifie(
+    (j) => _json('DELETE', 'api/v1/contexts/$contexte/messages/$message', j),
+  );
+
+  /// `DELETE /api/v1/contexts/{id}` : la pièce jointe et ses messages.
+  Future<ResultatApi<Map<String, dynamic>>> supprimerContexte(String id) =>
+      _authentifie((j) => _json('DELETE', 'api/v1/contexts/$id', j));
+
+  Future<_Reponse<Map<String, dynamic>>> _json(
+    String methode,
+    String chemin,
+    String j, {
+    Map<String, dynamic>? corps,
+    Map<String, String>? requete,
+    Duration? delaiAppel,
+  }) async {
+    _Reponse<Map<String, dynamic>> echec(ErreurApi e, [String? detail]) =>
+        _Resultat(EchecApi(e, detail: detail));
+    final http.Response r;
+    try {
+      final adresse = _route(chemin).replace(queryParameters: requete);
+      final demande = http.Request(methode, adresse)
+        ..headers.addAll({
+          'Authorization': 'Bearer $j',
+          if (corps != null) 'Content-Type': 'application/json',
+        });
+      if (corps != null) demande.body = jsonEncode(corps);
+      r = await http.Response.fromStream(
+        await _client.send(demande),
+      ).timeout(delaiAppel ?? delai);
+    } on TimeoutException {
+      return echec(ErreurApi.delaiDepasse);
+    } catch (_) {
+      return echec(ErreurApi.injoignable);
+    }
+    switch (r.statusCode) {
+      case 200 || 201:
+        try {
+          return _Resultat(
+            SuccesApi(
+              jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>,
+            ),
+          );
+        } catch (_) {
+          return echec(ErreurApi.serveur, 'réponse illisible');
+        }
+      case 204:
+        return _Resultat(const SuccesApi(<String, dynamic>{}));
+      case 401 || 403:
+        return _Refus(_detail(r.body), j);
+      case 404:
+        return echec(
+          chemin.startsWith('api/v1/contexts')
+              ? ErreurApi.pieceJointeIntrouvable
+              : ErreurApi.conversationIntrouvable,
+        );
+      case 409 || 422:
+        // Phase 5 (ajouts manuels) : le corps porte les doublons possibles
+        // ou la raison du refus (auteur invalide, message importé).
+        return echec(
+          ErreurApi.pieceJointeRefusee,
+          chemin.contains('/messages')
+              ? utf8.decode(r.bodyBytes)
+              : 'HTTP ${r.statusCode}',
+        );
+      case 413:
+        return echec(ErreurApi.pieceJointeTropVolumineuse);
+      case 503:
+        return echec(ErreurApi.indisponible, _detail(r.body));
+      default:
+        return echec(ErreurApi.serveur, 'HTTP ${r.statusCode}');
+    }
+  }
+
   /// Appel protégé : seule l'horloge du serveur décide si le jeton est
   /// expiré ; dans ce cas, le jeton est renouvelé (Supabase) et l'appel
   /// refait une seule fois. Renouvellement impossible : session expirée
@@ -329,8 +623,14 @@ class ApiJarvis {
     String? conversation,
     void Function(String conversation)? surConversation,
     void Function(String message)? surMessage,
-    void Function(String fragment)? surFragment,
-  ) async {
+    void Function(String fragment)? surFragment, {
+    String? repondreA,
+    String? analyseWhatsApp,
+    String? tonPropose,
+    String? propositionsMessage,
+    String? longueurPropose,
+    void Function()? surPreparation,
+  }) async {
     _Reponse<ReponseChat> echec(ErreurApi e, [String? detail]) =>
         _Resultat(EchecApi(e, detail: detail));
 
@@ -350,6 +650,11 @@ class ApiJarvis {
           ..body = jsonEncode({
             'message': message,
             'conversation_id': conversation,
+            'reply_to': ?repondreA,
+            'whatsapp_analysis': ?analyseWhatsApp,
+            'ton_propose': ?tonPropose,
+            'propositions_message_id': ?propositionsMessage,
+            'longueur_proposee': ?longueurPropose,
           });
     final http.StreamedResponse r;
     try {
@@ -370,7 +675,13 @@ class ApiJarvis {
       }
       return switch (r.statusCode) {
         401 || 403 => _Refus(_detail(corps), j),
+        404 when _detail(corps) == 'Consigne introuvable' => echec(
+          ErreurApi.consigneIntrouvable,
+        ),
         404 => echec(ErreurApi.conversationIntrouvable),
+        409 when _code(corps) == 'consentement_requis' => echec(
+          ErreurApi.consentementRequis,
+        ),
         429 => echec(ErreurApi.quotaAtteint, _quota(corps)),
         422 => echec(ErreurApi.messageTropLong),
         503 => echec(ErreurApi.indisponible, _detail(corps)),
@@ -380,6 +691,8 @@ class ApiJarvis {
 
     String? idConversation;
     final texte = StringBuffer();
+    var references = ReferencesReponse.vide;
+    PropositionsReponse? propositions;
     // Issue connue (`done` ou `error`) : le flux est tout de même lu
     // jusqu'à sa fermeture par le serveur (pas de connexion coupée net).
     _Reponse<ReponseChat>? fin;
@@ -400,6 +713,17 @@ class ApiJarvis {
             if (message is String && message.isNotEmpty) {
               surMessage?.call(message);
             }
+          case 'references':
+            references = ReferencesReponse(
+              ReferenceWhatsApp.listeDepuisJson(donnees['references']),
+              note: donnees['note'] as String?,
+            );
+          case 'propositions':
+            propositions = PropositionsReponse.depuisJson(donnees);
+          case 'preparation':
+            // Texte fini, propositions en préparation (lots) : la bulle
+            // garde un indicateur vivant jusqu'à `propositions` / `done`.
+            surPreparation?.call();
           case 'delta':
             final fragment = donnees['text'];
             if (fragment is String && fragment.isNotEmpty) {
@@ -418,6 +742,7 @@ class ApiJarvis {
                         texte: texte.toString(),
                         conversation: id,
                         message: donnees['message_id'] as String?,
+                        references: references.avecPropositions(propositions),
                       ),
                     ),
                   );
@@ -446,6 +771,17 @@ class ApiJarvis {
     try {
       final d = (jsonDecode(corps) as Map<String, dynamic>)['detail'];
       return d is String ? d : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Code d'une erreur structurée (`{"detail": {"code": …}}`).
+  static String? _code(String corps) {
+    try {
+      final d = (jsonDecode(corps) as Map<String, dynamic>)['detail'];
+      final code = d is Map<String, dynamic> ? d['code'] : null;
+      return code is String ? code : null;
     } catch (_) {
       return null;
     }

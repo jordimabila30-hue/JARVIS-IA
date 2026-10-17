@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 
 from . import console
-from .api.v1 import chat, local_exchanges
+from .api.v1 import chat, contexts, local_exchanges
 from .auth import AuthUser, get_current_user
 from .config import get_settings
 from .horloge import (
@@ -50,7 +50,7 @@ app = FastAPI(title="JARVIS API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],   # PUT : phase 4 ; PATCH : phase 5
     allow_headers=["Authorization", "Content-Type"],
     # Sans ça, Flutter Web ne peut pas lire les en-têtes de quota.
     expose_headers=[
@@ -66,6 +66,8 @@ app.add_middleware(
 
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(local_exchanges.router, prefix="/api/v1")
+app.include_router(contexts.conversations_router, prefix="/api/v1")
+app.include_router(contexts.contexts_router, prefix="/api/v1")
 app.include_router(console.router)
 
 

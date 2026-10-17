@@ -3,6 +3,67 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Pièce jointe WhatsApp enregistrée (table `conversation_contexts`) :
+/// métadonnées seulement ; ses messages sont lus à la demande.
+class ContexteServeur {
+  const ContexteServeur({
+    required this.id,
+    required this.consigne,
+    required this.contact,
+    required this.nombre,
+    required this.creeLe,
+    this.participants = const [],
+    this.moi,
+    this.groupe = false,
+    this.datesIncertaines = false,
+    this.debut,
+    this.fin,
+  });
+
+  final String id;
+
+  /// UUID du message de consigne (null : consigne supprimée).
+  final String? consigne;
+  final String contact;
+
+  /// Nombre réel de messages enregistrés.
+  final int nombre;
+  final DateTime creeLe;
+  final List<String> participants;
+  final String? moi;
+  final bool groupe;
+  final bool datesIncertaines;
+
+  /// Période des messages : heure locale de l'export, sans fuseau.
+  final DateTime? debut;
+  final DateTime? fin;
+
+  /// Colonnes lues (et nombre de messages calculé par PostgREST).
+  static const colonnes =
+      'id, message_id, contact_name, participants, current_user_name, '
+      'is_group, dates_uncertain, period_start, period_end, created_at, '
+      'context_messages(count)';
+
+  static ContexteServeur depuis(Map<String, dynamic> l) => ContexteServeur(
+    id: l['id'] as String,
+    consigne: l['message_id'] as String?,
+    contact: (l['contact_name'] as String?)?.trim() ?? '',
+    nombre: switch (l['context_messages']) {
+      [final Map<String, dynamic> c, ...] => (c['count'] as num?)?.toInt() ?? 0,
+      _ => 0,
+    },
+    creeLe: DepotConversationsSupabase._date(l['created_at']),
+    participants: [
+      for (final p in (l['participants'] as List?) ?? const []) '$p',
+    ],
+    moi: l['current_user_name'] as String?,
+    groupe: l['is_group'] == true,
+    datesIncertaines: l['dates_uncertain'] == true,
+    debut: DateTime.tryParse('${l['period_start']}'),
+    fin: DateTime.tryParse('${l['period_end']}'),
+  );
+}
+
 /// Conversation JARVIS enregistrée sur le serveur (table `conversations`).
 class ConversationServeur {
   const ConversationServeur({
@@ -10,7 +71,13 @@ class ConversationServeur {
     required this.titre,
     required this.derniereActivite,
     this.apercu = '',
+    this.contextes = const [],
   });
+
+  /// Pièces jointes WhatsApp de la conversation, de la plus ancienne à la
+  /// plus récente. Au moins une : la conversation est classée sous
+  /// WhatsApp (son titre est déjà le nom du contact).
+  final List<ContexteServeur> contextes;
 
   /// UUID serveur : la référence stable de la conversation.
   final String id;
@@ -46,9 +113,16 @@ class MessageServeur {
 
 /// Une page de messages, du plus ancien au plus récent.
 class PageMessages {
-  const PageMessages(this.messages, {this.plusAnciens = false});
+  const PageMessages(
+    this.messages, {
+    this.plusAnciens = false,
+    this.contextes = const [],
+  });
 
   final List<MessageServeur> messages;
+
+  /// Pièces jointes WhatsApp de la conversation (première page seulement).
+  final List<ContexteServeur> contextes;
 
   /// Vrai s'il reste des messages plus anciens à charger.
   final bool plusAnciens;
@@ -130,7 +204,10 @@ class DepotConversationsSupabase implements DepotConversations {
       _executer((uid) async {
         final lignes = await _client
             .from('conversations')
-            .select('id, title, last_message_at, messages(content, created_at)')
+            .select(
+              'id, title, last_message_at, messages(content, created_at), '
+              'conversation_contexts(${ContexteServeur.colonnes})',
+            )
             .eq('user_id', uid)
             .eq('archived', false)
             .order('last_message_at', ascending: false)
@@ -149,6 +226,7 @@ class DepotConversationsSupabase implements DepotConversations {
                   dernier['content'] as String? ?? '',
                 _ => '',
               },
+              contextes: _contextes(l['conversation_contexts']),
             ),
         ];
       });
@@ -183,7 +261,19 @@ class DepotConversationsSupabase implements DepotConversations {
       if (existe == null) throw const EchecSynchro(ErreurSynchro.introuvable);
     }
     final page = lignes.take(limite).toList().reversed;
-    return PageMessages([
+    // Pièces jointes WhatsApp : métadonnées seulement, avec la dernière
+    // page (les messages WhatsApp sont lus à la demande).
+    final contextes = avant != null
+        ? const <ContexteServeur>[]
+        : _contextes(
+            await _client
+                .from('conversation_contexts')
+                .select(ContexteServeur.colonnes)
+                .eq('conversation_id', id)
+                .eq('user_id', uid)
+                .timeout(delai),
+          );
+    return PageMessages(contextes: contextes, [
       for (final l in page)
         MessageServeur(
           id: l['id'] as String,
@@ -255,6 +345,15 @@ class DepotConversationsSupabase implements DepotConversations {
         detail: '${e.runtimeType}',
       );
     }
+  }
+
+  static List<ContexteServeur> _contextes(Object? brut) {
+    final liste = [
+      for (final l in (brut as List?) ?? const [])
+        ContexteServeur.depuis(l as Map<String, dynamic>),
+    ];
+    liste.sort((a, b) => a.creeLe.compareTo(b.creeLe));
+    return liste;
   }
 
   static bool _jetonExpire(PostgrestException e) =>

@@ -829,3 +829,294 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Valider le rythme mot par mot sur le téléphone, puis réutiliser `EcritureProgressive` dans le futur composant de choix du ton.
+
+## 2026-10-15 — Import WhatsApp, interface 2 : filtrer les messages
+
+### Fait
+- « Filtrer les messages » (interface 1) est actif quand la lecture a réussi : il ouvre `FiltrageWhatsAppPage` avec la conversation déjà lue (aucune relecture). Lecture échouée : pas de passage au filtrage.
+- État `SelectionWhatsApp` créé par la page d'import pour la conversation lue : gardé au retour, oublié avec elle (un autre fichier repart de zéro).
+- Moteur local `IndexWhatsApp` : index chronologique (recherche dichotomique, tri seulement si l'export est désordonné), nombre de messages par jour, mois et années ; filtres aujourd'hui, hier, 7 derniers jours (date locale), derniers 10/25/50/100 bornés au nombre réel, période personnalisée à la minute (bornes comprises, secondes sans effet), plage par ordre d'origine.
+- Sélection par identifiants stables (`m<ordre>`) : un filtre coche ses messages ; décocher / recocher ; les décochés restent visibles (pâlis) et restent décochés au filtre suivant s'ils en font partie. Événements WhatsApp non sélectionnables. Messages sans date : jamais rangés dans une période, cochables dans « Par messages ».
+- Interface : sélecteur [Par période] [Par messages] (capsule lavande + indicateur violet), capsules à défilement horizontal, période personnalisée (Début / Fin : date via le calendrier, heure : roues sur téléphone, saisie clavier sur ordinateur et Web), calendrier (jours avec messages mis en évidence et comptés, navigation mois et années, plage de jours), plage par messages avec consigne, médias groupés à case unique (identifiants gardés), aperçu virtualisé réutilisant les bulles existantes, barre du bas (compteur, « Continuer vers l'enregistrement » inactif : interface 3 absente, explication discrète).
+- `MessagesChoisisWhatsApp` : résultat prêt pour l'interface 3 (identifiant de la conversation source, messages dans l'ordre avec auteurs, dates réelles et brutes, contenus, types).
+- Tests : `filtrage_whatsapp_test.dart` (21, dont 50 000 messages), `filtrage_whatsapp_page_test.dart` (18 : modes, calendrier, heures, plage, médias, 20 000 messages, 320×568 à police ×2, ordinateur), 3 tests d'intégration dans `lecture_whatsapp_page_test.dart`. Captures : `tool/capture_filtrage_test.dart`.
+
+### État
+- Rien n'est enregistré ni envoyé : tout reste en mémoire sur l'appareil.
+
+### Prochaine étape
+- Interface 3 : enregistrement des messages choisis (désignation de « Moi »).
+
+## 2026-10-15 — Filtrage WhatsApp : cases du côté des bulles, flèches de navigation
+
+### Fait
+- Case de sélection du côté de sa bulle (gauche ou droite), centrée verticalement sur la bulle (marge de tête de suite comprise), aussi pour les messages multilignes et les médias groupés ; événements centrés avec retrait symétrique.
+- Mode « Par messages » : flèches discrètes (violet léger, icône ivoire, 34 px visibles, 48 px touchables) en haut à gauche (« Monter ») et en bas à gauche (« Descendre ») ; défilement animé rapide (saut puis animation sur les longues listes) ; chaque flèche n'apparaît que si elle a de la distance à parcourir.
+- Tests : centrage et côté des cases (320 px, multiligne), flèches sur 3 000 messages, liste courte, absence en mode « Par période ». 75 tests du module réussis.
+
+## 2026-10-15 — Import WhatsApp, interface 3 : joindre la conversation
+
+### Fait
+- « Continuer vers l'enregistrement » (interface 2) ouvre `JoindreWhatsAppPage` : nom, nombre de messages choisis, période, participants, puis « Vous êtes : » (obligatoire, jamais deviné ; un nom confirmé lors d'un import précédent est proposé, modifiable ; groupes pris en charge). « Joindre la conversation » (double appui sans effet) prépare une `PieceJointeWhatsApp` : identifiant temporaire, source WhatsApp, titre, participants, « moi », messages originaux choisis (ordre, auteur, date réelle et brute, contenu, type).
+- L'import se referme et rend la pièce jointe au chat : même conversation (cas A) ou accueil vide (cas B), texte déjà saisi conservé. Carte compacte dans la barre de saisie (logo WhatsApp, « Tony Stark », « WhatsApp · 35 messages », croix), barre dépliée, invite « Écrivez votre consigne à JARVIS… ».
+- Croix : carte retirée, préparation abandonnée, texte et chat intacts ; rien n'avait été enregistré.
+- Envoi : consigne non vide obligatoire ; consigne et pièce jointe dans un seul message, une seule fois. Les messages WhatsApp ne sont ni du texte, ni des commandes, ni transmis au moteur ou à l'IA : JARVIS répond honnêtement que leur analyse arrive à l'étape suivante. Conversation créée à l'envoi seulement (accueil vide) ; anciens échanges gardés (chat existant).
+- Classement préparé en mémoire (source WhatsApp, titre du contact) et événement `EnvoiPieceJointe` ; contrat `DepotPiecesJointes` pour le futur stockage (sans implémentation).
+- Historique : carte de la pièce jointe dans le message + « Voir les messages » (aperçu existant, « moi » à droite).
+- Tests : `piece_jointe_whatsapp_test.dart` (8), `joindre_conversation_test.dart` (12 : page, parcours lecture → filtrage → joindre, accueil vide, chat existant, retrait, consigne vide, double envoi, consultation, petits écrans, grandes polices). Captures : `tool/capture_joindre_test.dart`.
+
+### En attente
+- Stockage définitif (conversations, pièces jointes, classement visible sous WhatsApp dans le menu) et analyse par MIA universel.
+
+## 2026-10-15 — Panneau : chats reclassés sous WhatsApp
+
+### Fait
+- À l'envoi d'une consigne avec une pièce jointe WhatsApp, le chat (nouveau ou JARVIS déjà commencé) quitte la liste JARVIS et apparaît sous le logo WhatsApp, au nom du contact ou du groupe ; même identifiant, même historique, aucun doublon. « EN COURS » affiche aussi ce nom.
+- `FournisseurJarvis.conversationsDe(source)` (source explicite d'après le classement, jamais d'après le titre) ; `FournisseurSourceClassee` pour WhatsApp (ouverture et suppression déléguées) ; l'épingle suit le chat (`EpinglesConversations.deplacer`).
+- Tests : `classement_whatsapp_test.dart` (8 : accueil vide, chat existant, moment de l'envoi, titre, recherche, mise de côté, épingle, suppression, groupe). Suite complète : 641 réussis.
+
+### Limite
+- Classement en mémoire seulement : après redémarrage, il n'existe plus (stockage définitif à venir).
+
+## 2026-10-15 — Stockage WhatsApp, phase 1 : base de données (préparée)
+
+### Fait
+- Audit (lecture seule) du projet Supabase « Jarvis » : tables users, conversations (15 lignes), messages (74), quota_usage ; RLS active partout ; clés composites (id, user_id) ; une migration enregistrée (vues_admin_lisibles). Schéma réel conforme à `supabase/schema.sql`.
+- Migration `supabase/migrations/20261015103245_contextes_whatsapp.sql` : `conversation_contexts` (contexte joint : propriétaire, conversation, message JARVIS, source, contact, groupe, « moi », participants, période sans fuseau, empreinte de l'export) et `context_messages` (messages sélectionnés : rang, rang d'origine, auteur, contenu, type, trace de média, date locale + texte d'origine). Clés étrangères composites (propriété garantie même pour le backend), cascades (contexte → messages, conversation → contextes), message JARVIS supprimé → `message_id` null. Client : lecture et suppression de ses lignes (RLS) ; écriture par le backend seulement. Nombre de messages calculé (vue `admin.contextes_lisibles`), jamais stocké. Seul ajout sur l'existant : contrainte UNIQUE (id, user_id) sur `messages`.
+- Tests : `supabase/tests/` (PostgreSQL 17.11 local jetable, simulation des rôles Supabase) : 31 vérifications réussies, migration appliquée deux fois (ré-exécutable).
+
+### En attente
+- Application sur la base distante : après validation.
+- Phase 2 : endpoints du backend (user_id pris dans le JWT).
+
+## 2026-10-15 — Stockage WhatsApp, phase 1 : terminée (appliquée sur Supabase)
+
+### Fait
+- Vérifications préalables sur le projet « Jarvis » : schéma identique à l'audit, nouvelles tables absentes, aucune migration équivalente.
+- Migration `contextes_whatsapp` appliquée (version 20261015103245, transactionnelle ; fichier local renommé à cette version). `conversation_contexts` et `context_messages` existent réellement : colonnes, clés primaires, clés composites vers `conversations` et `messages`, cascades, contraintes, index, RLS, privilèges (`authenticated` : lecture et suppression ; `anon` : rien) et vue `admin.contextes_lisibles` vérifiés sur la base distante.
+- Test fonctionnel distant dans une transaction annulée (rien d'enregistré) : ordre des messages, refus d'un rattachement au chat d'un autre compte, isolation entre comptes, écriture client et lecture anonyme refusées, suppression en cascade.
+- Données existantes intactes : 3 utilisateurs, 15 conversations, 74 messages, 3 quotas (avant = après).
+- Contrôles Supabase : aucune alerte sur les nouvelles tables.
+
+### Reporté volontairement
+- Retrait du privilège TRUNCATE de `authenticated` sur `conversations` et `messages`.
+- Alertes de sécurité antérieures (fonctions SECURITY DEFINER appelables, protection des mots de passe divulgués désactivée) : non traitées dans cette phase.
+
+### Prochaine étape
+- Phase 2 : endpoints FastAPI pour enregistrer et relire les contextes (user_id pris dans le JWT).
+
+## 2026-10-15 — Stockage WhatsApp, phase 2 : backend FastAPI
+
+### Fait
+- Routes : `POST /api/v1/conversations/contexts` (consigne + pièce jointe ; chat existant ou nouvelle conversation au nom du contact), `GET /api/v1/conversations/{id}/contexts`, `GET /api/v1/contexts/{id}`, `GET /api/v1/contexts/{id}/messages` (pagination par rang), `DELETE /api/v1/contexts/{id}` (CORS : DELETE ajouté).
+- Séparation : routes (`api/v1/contexts.py`), logique (`contextes.py`, `ContextesService`), modèles (`contextes_modeles.py`), accès PostgREST (`supabase_client.py`).
+- Compte pris dans le JWT ; filtres explicites par compte ; autre compte → 404. Erreurs sans détail de la base ; aucun contenu de message journalisé. Limites configurables (5 000 messages, 2 M caractères, 8 Mo, pages de 500).
+- Transaction : fonction PostgreSQL `enregistrer_contexte_whatsapp` (migration `20261015130254`, préparée et testée en local, **pas encore appliquée**). Idempotence par `context_id` choisi par l'appareil, sans changement de table.
+- Tests : backend 80 réussis (60 existants + 20 nouveaux, Supabase simulée) ; SQL 19 vérifications de la fonction en PostgreSQL 17.11 local (cas A/B, réessai, tout ou rien, refus, 5 000 messages) ; lectures validées sur la vraie API Supabase (lecture seule).
+- Documentation : `docs/backend/CONTEXTES_WHATSAPP.md`.
+
+### En attente
+- Validation puis application de la migration de la fonction (POST renvoie 503 d'ici là).
+- Phase 3 : Flutter.
+
+## 2026-10-15 — Moteur de compréhension conversationnelle, phase 1
+
+### Fait
+- Audit : GroqCloud via le client OpenAI du chat (`openai/gpt-oss-120b`, fenêtre 131 072 tokens, mais compte limité à **8 000 tokens par minute**, mesuré dans les en-têtes) ; SSE, quotas, historique Redis/Supabase, contextes WhatsApp réutilisés tels quels. Aucune table modifiée, aucun nouveau client IA.
+- Backend `app/comprehension/` : repères de la question (périodes, début/fin, évolution, tendance, mots, suivis), aperçu calculé sur tous les messages, sélection d'extraits sous budget (6 000 tokens), instructions internes (pragmatique, second degré, faits / indices / hypothèses, anti-injection, réponses courtes), cache Redis des pièces jointes.
+- Route de chat : `reply_to` (consigne jamais réinsérée), `whatsapp_analysis` (absent → 409 `consentement_requis` avant tout appel IA ; `declined` → aucun contenu WhatsApp), attente de la limite de débit avec flux maintenu, nouvel essai plus petit sur 413, nouveaux codes d'erreur.
+- Flutter : l'analyse suit l'enregistrement de la pièce jointe ; carte « Autoriser l'analyse / Pas maintenant » ; « Réessayer » sans doublon ; chats WhatsApp : questions envoyées au serveur (seules les commandes restent locales) ; Paramètres › Confidentialité (interrupteur, révocable).
+- Tests : backend 108 réussis (28 nouveaux) ; Flutter 663 réussis (11 nouveaux), `flutter analyze` sans nouvelle remarque ; essai réel GroqCloud sur conversations fictives (humour, ironie, ton qui change, dates).
+- Galaxy S10+ (APK profile, `adb reverse`) : import de l'export fictif Pepper Potts (943 messages), demande d'accord, résumé réel (159 extraits sur 943), question sur le ton, suivi « vers la fin », deux redémarrages complets avec réponses restaurées, discussion poursuivie. En base : consigne unique, réponses enregistrées (~5 200 tokens réels par question).
+
+### Limites
+- 8 000 tokens par minute : environ une question par minute sur une longue conversation (au-delà, attente automatique jusqu'à 25 s, puis message clair). Au-delà de ~150 messages, JARVIS travaille sur des extraits (annoncés).
+- Le modèle utilise parfois des listes et se trompe ponctuellement sur un détail (attribution d'un « mdr ») ; ses interprétations restent des hypothèses.
+- Accord enregistré par appareil (non synchronisé).
+- Restauration non testée sur Web et Windows dans cette phase (pas d'essai réalisé).
+
+### Prochaine étape
+- Phase 2 : références interactives (`Preparation.references`, `REFERENCES_DANS_LE_TEXTE`).
+
+## 2026-10-15 — Moteur de compréhension, phase 2 : attribution et références vérifiées
+
+### Fait
+- Audit de l'attribution : la chaîne de données (analyseur → `context_messages` → backend) gardait l'auteur ; les erreurs venaient du format envoyé au modèle (date seulement par jour, texte non délimité, « vous » ambigu) et de l'absence de contrôle. Format canonique : une ligne par message `[n] date heure · auteur : «texte»`.
+- Références : le modèle cite `[[n]]` ; `FiltreReperes` les retire du flux SSE (formes relâchées comprises : plages, « (message 5) ») ; `verifier` contrôle existence, citation et auteur ; événement SSE `references` ; avertissement si une attribution est contredite.
+- Stockage sans migration : `messages.attachments` (identifiants), relu et vérifié par `GET /api/v1/conversations/{id}/references`. « Pourquoi ? » : messages cités par les 2 dernières réponses refournis. Battement SSE pendant la réflexion du modèle (silences de 20 à 40 s observés).
+- Flutter : cartes « Messages d'origine » sous la réponse ; appui → « Voir les messages » ouvert sur le message (une page de 120 autour du rang, éclairage lavande temporaire, pages voisines au défilement), retour au chat intact ; restauration après redémarrage.
+- Tests : backend 139 (30 nouveaux + adaptations), Flutter 676 + 13 références, `flutter analyze` sans nouvelle remarque. Essais réels GroqCloud : « mdr » correctement attribué à Pepper, aucune fuite de repère, erreur d'attribution du modèle détectée.
+- Galaxy S10+ : référence vérifiée affichée (auteur, date, texte), appui → vrai message retrouvé et éclairé, retour au chat, redémarrage → référence restaurée et toujours utilisable.
+
+### Limites
+- Le modèle peut encore mal attribuer un message : le serveur le DÉTECTE quand le sujet est explicite (nom, « tu ») et l'affiche en avertissement, sans réécrire la réponse ; « elle / il / vous » ne sont pas vérifiés.
+- 8 000 tokens/minute : extraits au-delà de ~150 messages ; deux questions rapprochées attendent.
+- Web et Windows non testés dans cette phase.
+
+## 2026-10-15 — Attribution corrigée avant diffusion + phase 3 : aider à répondre et à relancer
+
+### Fait
+- **Attribution** : chaque phrase est contrôlée AVANT l'événement SSE `delta` (`app/comprehension/attribution.py`, branché sur `FiltreReperes`, qui ne coupe plus jamais au milieu d'une citation). Une citation ou un repère prêté à la mauvaise personne explicite (nom, « tu ») est remplacé par une phrase factuelle construite avec Supabase (« C'est Pepper Potts qui a écrit « mdr ». ») si l'auteur réel est unique, reformulé si plusieurs auteurs sont possibles, écarté sinon. Citations jamais modifiées, interprétations non touchées, texte enregistré = texte corrigé. Plus d'attribution fausse laissée avec un simple avertissement. Repère « ([[24]]) » retiré avec ses parenthèses.
+- **Phase 3, backend** : intention comprise par GroqCloud (aucune liste de formulations ; indice `aide_reponse` pour le budget seulement) ; ligne `Situation` (dernier auteur, messages d'affilée, temps écoulé si dates fiables, réponse ou relance) ; bloc `<propositions>` retiré du flux, validé (3 à 5 tons, EXACTEMENT 3 propositions distinctes par ton, approche, appuis vérifiés) ; événement SSE `propositions` ; stockage sans migration dans `messages.attachments` ; restauration par `GET /conversations/{id}/references` ; « pourquoi la deuxième ? » avec les propositions précédentes, leurs appuis refournis et le ton affiché (`ton_propose`). Sortie +500 tokens prise sur l’entrée (même total sous 8 000 tokens/min ; les vraies réponses d’aide font ~600 tokens).
+- **Phase 3, Flutter** : `PropositionsReponse`, `MessageConversation.propositions`, `PropositionsJarvis` sous la réponse (« Idées de réponse / de relance », capsules de ton, trois cartes avec approche et « Copier »). Changer de ton : aucun appel à l'IA. Aucune nouvelle page, aucune nouvelle dépendance.
+- Tests : backend 169 (31 nouveaux : `test_attribution.py`, `test_propositions.py`) ; Flutter 686 + 10 nouveaux (`test/propositions_reponse_test.dart`), `flutter analyze` sans nouvelle remarque. Essai réel GroqCloud (`tests/qualite_comprehension.py`, `QUESTIONS=3,7,8,9,10`) : propositions par ton, justification de « la deuxième » appuyée sur le dernier message de Pepper.
+- Galaxy S10+ (`flutter run --profile`, `adb reverse`), chat Pepper Potts existant : « Aide-moi à lui répondre » → 3 tons × 3 propositions + référence vérifiée ; changement de ton instantané sans appel serveur ; « Copier » → « Copié » ; redémarrage de l'appli → propositions restaurées depuis Supabase ; correction d'attribution réelle (« Presque. Un souci ? » rendu à Pepper, note « J'ai rectifié… »).
+- Corrections issues de l'essai réel : budget (8 → 58 messages fournis : instructions estimées à 4 caractères/token, surplus de sortie ramené à 500) ; repère « (message [[24]]) » retiré en entier ; approche qui répète le nom du ton masquée ; propositions précédentes placées juste avant la question + texte exact de « la deuxième » (`rang_vise`) ; quota QUOTIDIEN GroqCloud (200 000 tokens/jour) : message honnête « Réessaie dans environ N minutes ».
+- Builds Web et Windows (debug) réussis. Tests : backend 174, Flutter 686 + 10, `flutter analyze` : une remarque préexistante (accueil_page).
+
+### Limites
+- « Pourquoi la deuxième ? » : lors du dernier essai réussi, le modèle a cité une proposition inventée (signalée par la note « citation… reformulation ») ; le correctif (bloc juste avant la question, texte exact) est testé automatiquement mais PAS revérifié avec GroqCloud : quota quotidien épuisé.
+- Web et Windows : compilés et testés par widgets (320 / 390 / 1366 px), pas essayés à la main avec un compte connecté.
+- « elle / il / vous » non vérifiés par le correcteur d'attribution.
+- Aucune migration Supabase nécessaire (stockage dans `messages.attachments`).
+
+### Prochaine étape
+- Revérifier « pourquoi la deuxième ? » avec GroqCloud quand le quota quotidien est revenu, puis phase 4 (appui long, « réponse envoyée », mémoire des réponses choisies).
+
+## 2026-10-16 — Phase 3 finalisée + phase 4 : réponses déclarées envoyées
+
+### Fait
+- **Phase 3** : identifiant unique et stable par proposition (uuid4 ; anciennes : uuid5 déterministe, identique sur tous les appareils). « Pourquoi la deuxième ? » : référence explicite (`propositions_message_id` + ton affiché), vérifiée par le serveur (compte + chat) ; proposition visée donnée avec son identifiant, son ton, son texte exact et ses appuis, juste avant la question ; une proposition mal recopiée par le modèle est rétablie mot pour mot avant diffusion.
+- **Phase 4** : appui long (~800 ms, progression discrète, annulé si relâché ou défilement, vibration légère) sur la carte d'une réponse ; bouton « Marquer envoyée » sur Web / Windows (souris, clavier). « Envoyée » (coche + « Annuler ») seulement après confirmation du serveur ; chat jamais bloqué ; double appui sans doublon (client + serveur idempotent). Rien n'est envoyé à WhatsApp.
+- **Stockage sans migration** : entrée `reponse_envoyee` dans `messages.attachments` de la réponse aux propositions (id de proposition, texte, ton, contact / groupe, contexte, chat, message, compte, date, statut `declaree_envoyee` / `annulee`). Distinct des messages WhatsApp originaux (`context_messages`) et des propositions. Routes `PUT` / `DELETE …/propositions/{id}/envoyee` (JWT, 404 hors compte ou chat).
+- **Synchronisation** : statut relu avec les propositions (`GET /references`), repris à l'actualisation (annulation faite sur un autre appareil comprise).
+- **Mémoire** : réponses déclarées envoyées au même contact (tous les chats du compte) redonnées au modèle avant la question : continuité, pas de répétition, ton non permanent ; doublon avec un nouvel export signalé.
+- Tests : backend 184 (10 nouveaux), Flutter ciblés 20 (10 nouveaux).
+
+### Limites
+- Pas de table dédiée : écriture par lecture-modification de `messages.attachments` (deux appareils qui déclarent au même instant : la dernière écriture gagne). Une table `reponses_envoyees` (clé unique compte + proposition) serait plus stricte : non créée, à décider.
+- Essai GroqCloud réel non refait (quota quotidien préservé) ; campagne multiplateforme à venir.
+
+## 2026-10-16 — Campagne complète de tests du moteur de compréhension
+
+### Fait
+- 5 exports WhatsApp FICTIFS générés par script (`tests_whatsapp/`) : sentimental 96, professionnel 248, amitié 782, famille 1 493, groupe « Projet Nova » 4 792 messages ; manifeste déterministe (33 messages de référence). Les 5 passent dans le parseur réel de l'appli (comptes, participants, périodes, dernier auteur, références à leur rang). Transférés dans `/sdcard/Download/` (visibles dans le sélecteur Android).
+- Tests simulés : Flutter 705 (dont parseur réel sur les 5 ZIP, appui long dans un fil sélectionnable, ton gardé, clavier) ; backend 210 (26 nouveaux : 22 de campagne et 4 de non-régression — dernier auteur des 5 scénarios, extraits attendus, références au milieu de 4 800 messages, attributions corrigées, réactions identiques, « génie » selon l'auteur, données adverses, deux contacts, mémoire Samuel de bout en bout, double appui et annulations concurrentes, Supabase indisponible, CORS, charge).
+- Galaxy S10+ (`flutter run --profile`, compte de TEST) : imports sentimental, amitié, groupe (4 792 messages : enregistrement ~3,7 s, 1ʳᵉ question ~4,7 s), filtrage, « Vous êtes », pièces jointes ; propositions (faux GroqCloud déterministe), changement de ton sans requête, appui long → « Envoyée » enregistrée dans Supabase, annulation, restauration après fermeture complète, « Pourquoi la deuxième ? » juste pour Naturel puis Amical (identifiant visé par le serveur), mémoire redonnée (« Tu lui as déjà envoyé… »), référence ouverte sur le vrai message.
+- Web réel (compte de test) : chats créés sur Android retrouvés, propositions et références, statut « Envoyée » d'Android visible, « Marquer envoyée » à la souris, rechargement → statuts conservés.
+- GroqCloud réel : 3 requêtes, 11 447 tokens (3 569 + 3 467 + 4 411), puis quota QUOTIDIEN épuisé (429, message « Réessaie dans environ 14 minutes » affiché) → suite en faux GroqCloud.
+
+### Défauts corrigés
+- Bloquant : bloc de propositions jamais lu avec le vrai modèle (il écrit « [Naturel] 1. … », les titres « # » étant interdits par les instructions) → exemple « Ton : … » + lecture tolérante + journal de forme.
+- Bloquant : Web — déclarer « Envoyée » échouait (CORS sans PUT).
+- Important : messages décisifs absents des extraits sur les longs historiques (mots fréquents = mots rares) → pondération IDF.
+- Important : appui long qui sélectionnait aussi le texte du fil.
+- Important : ton affiché réinitialisé quand la liste recrée la carte, alors que la session gardait l'ancien → « pourquoi la deuxième ? » pouvait viser une autre proposition.
+
+### Non effectué / limites
+- Windows réel : compilé et lancé, non testé (connexion du compte de test non faite).
+- Clavier sur le Web : non validé à l'écran (couvert par un test automatique).
+- Validation GroqCloud réelle des propositions après correctif, des résumés et des références : non faite (quota quotidien) ; une requête réelle courte reste à faire.
+- Avec un budget d'extraits réduit (3 500), le modèle ne voyait que 9 à 30 messages : la campagne réelle doit se faire avec le budget normal (6 000).
+
+## 2026-10-16 — Phase 5 WhatsApp : actualisation manuelle par copier-coller
+
+### Fait
+- Menu « + » : appui = import inchangé ; glissement à gauche de la ligne → « Ajouter une réponse reçue » (Web / Windows : icône au survol ou au focus, entrée discrète dans le menu d'ordinateur).
+- Volet compact au nom du contact : Reçu / Envoyé, auteur vérifié (contact, participant en groupe, « vous »), plusieurs messages réordonnables, date facultative jamais inventée, extrait WhatsApp séparable sur demande, doublons signalés avant écriture, ajouts corrigeables et supprimables.
+- Migration appliquée (autorisée) : `context_messages.origin` / `edited_at` / `declared_proposition_id`, fonction atomique `ajouter_messages_contexte`, messages d'export protégés par déclencheur ; 6 655 messages existants passés en `export`.
+- API : `GET /contexts`, `POST /contexts/{id}/messages`, `PATCH` / `DELETE /contexts/{id}/messages/{id}` ; CORS : PATCH autorisé. Moteur : provenance dans le prompt et les références, cache vidé, aucun appel IA à l'ajout.
+- Tests : SQL 70 vérifications (dont ajouts simultanés) ; backend 225 (16 nouveaux) ; Flutter 721 (16 nouveaux, `test/actualisation_whatsapp_test.dart`), `flutter analyze` sans nouvelle remarque.
+- Galaxy S10+ (`flutter run --profile`, compte de test, chat Lina Moreau) : glissement réel → action révélée sans lancer l’import, volet au nom de Lina, un reçu + un envoyé enregistrés (rangs 16 et 17, provenance manuelle, sans date inventée), brouillon de la barre conservé, aucun appel IA.
+
+### Limites
+- Doublons : comparaison exacte (texte normalisé, même auteur) sur les 200 derniers messages ; une reformulation n'est pas détectée.
+- Date saisie au format texte (jj/mm/aaaa hh:mm), sans calendrier.
+
+## 2026-10-16 — Phase 5.1 WhatsApp : finition UX
+
+### Fait
+- Tons × longueurs : 3 tons adaptés + Professionnel, Court / Moyen / Long × 3 propositions (génération par lots depuis la correction finale, voir plus bas) ; ton et longueur changés sans réseau, mémorisés ; « pourquoi la deuxième ? » selon ton ET longueur.
+- Un seul choix « envoyée » par ensemble, garanti par la base (migration autorisée et appliquée : deux fonctions verrouillées) ; 409 `deja_choisi`.
+- Après le choix : la carte devient une bulle compacte (menu `···` : Copier, Annuler le choix) ; annulation → retour au ton et à la longueur choisis.
+- Messages collés affichés en bulles dans le fil (reçu / envoyé, menu `···` Modifier / Supprimer), restaurés à leur place, hors historique des moteurs.
+- Grand glissement → volet ouvert directement ; volet épuré (« Options »).
+- Tests : SQL 81 ; backend 233 (8 nouveaux) ; Flutter : 11 nouveaux (`test/phase51_test.dart`) + adaptations. Essai GroqCloud réel : 1 requête (3 574 + 820 tokens), format respecté, 2 tons seulement → consignes renforcées (non revérifiées).
+
+### Limites
+- Moins d'extraits pour une demande d'aide (~45 messages au lieu de ~60), pour tenir sous 8 000 tokens/minute.
+- Consignes « 4 tons » et « Long ≥ 4 phrases » non revérifiées avec le vrai modèle.
+
+## 2026-10-16 — Phase 5.1 : correction finale de la génération des propositions
+
+### Cause
+- Une seule grande réponse GroqCloud devait écrire 4 tons × 3 longueurs × 3 propositions ; à l'essai réel, le modèle n'en a écrit qu'UNE par longueur (bloc refusé, aucune carte). Le repli « partiel » ajouté ensuite affichait des ensembles à moitié : supprimé.
+
+### Fait
+- Génération par lots (`backend/app/comprehension/generation.py`) : la réponse principale annonce les tons ; 2 tons par requête en JSON strict ; validation de chaque combinaison (3 distinctes, longueur plausible, format propre) ; seules les combinaisons manquantes sont redemandées, les valides gardées avec leurs identifiants ; 5 requêtes au plus ; 429 : attente bornée (45 s), quota quotidien : arrêt.
+- Jamais d'ensemble incomplet présenté comme terminé : `statut` complet / incomplet, lots valides enregistrés ; Flutter : « Génération incomplète · Reprendre » ; reprise `POST …/propositions/completer` (même ensemble, aucun doublon, verrou Redis, quota compté).
+- Tests : backend 248 (15 nouveaux, faux GroqCloud scénarisé : premier coup, une par longueur, longueur / ton manquants, format invalide, répétitions, complément ciblé, quota, attente 429, reprise, restauration, verrou, justification) ; Flutter : 5 nouveaux (état incomplet, Reprendre, double appui, échec, ton/longueur sans réseau).
+
+### Limites
+- Réponse principale + 2 lots dépassent souvent 8 000 tokens/min : le 2e lot attend (jusqu'à 45 s) avant que les propositions apparaissent.
+- Moins d'extraits dans la réponse principale d'une demande d'aide (~34 au lieu de ~45).
+- Essai GroqCloud réel (un seul, script `tests/qualite_comprehension.py`, QUESTIONS=8) : réponse principale 3 416 + 323 tokens (balise seule, tons Taquin / Chaleureux / Naturel), puis 2 lots (2 794 + 2 480 tokens, 6,7 s, aucun 429) → statut complet, 4 tons × 3 longueurs × 3 propositions distinctes, Long de 3 à 6 phrases.
+- Observé : le ton Professionnel vouvoie même un proche ; le modèle n'a écrit aucune phrase d'introduction (la route ajoute « Voici quelques idées de réponse. »).
+- Non vérifié sur le téléphone (Galaxy S10+) ni sur Web / Windows.
+
+## 2026-10-16 — Campagne finale WhatsApp (phases 1 à 5.1)
+
+### Corrections faites pendant la campagne
+- Professionnel : garde le registre de la discussion (tutoiement / vouvoiement / neutre si incertain), contrôlé ; Court réellement court (≤ 20 mots).
+- Proposition avec sauts de ligne en rafale (vu en réel : « Sam » + 4 retours) : réduits.
+- Fil inversé : passer à Long faisait sortir les capsules de l'écran (vu sur le S10+) → défilement compensé ; bulle du choix parfois cachée sous la barre → rendue visible.
+- Volet : saisie perdue si fermé par un appui à côté → brouillon gardé (mêmes identifiants).
+- Continuité : « que penses-tu de sa dernière réponse » réduisait l'analyse à 4 messages (faux indice d'aide + plancher de 200 tokens) → indice corrigé, plancher 1 000 ; ajouts sans date marqués « après l'export » ; rappel des derniers messages avant la question.
+
+### Validé sur appareil réel (Galaxy S10+, `flutter run --profile`, compte de test)
+- Ensemble réel complet : 4 tons (Naturel, Chaleureux, Amical, Professionnel) × 3 longueurs × 3 = 36 propositions, 36 identifiants distincts (Supabase), 2 lots.
+- 12 combinaisons parcourues : textes adaptés à la longueur, aucune requête réseau, capsules immobiles (après correction).
+- Choix → bulle unique ; menu `···` (Copier, Annuler le choix, date) ; annulation → ton et longueur rétablis ; restauration après redémarrage.
+- Petit glissement (action révélée, aucun import), grand glissement → volet direct (en partant du bord droit, Android déclenche « Retour » : geste système, pas l'appli).
+- Volet compact ; doublon détecté (409) ; envoi et réception en bulles ; correction (PATCH) ; suppression (DELETE) ; provenance `manual_*` en base ; restauration sans doublon.
+- Génération incomplète (faux GroqCloud, quota quotidien) : « Génération incomplète · Reprendre », coupure → reste incomplète, puis reprise complète : 1 consigne, 1 réponse, 1 ensemble, 36 propositions.
+
+### Validé sur le Web réel (navigateur intégré, compte de test)
+- Bulle du choix synchronisée depuis Android ; `···` ; annulation ; « Marquer envoyée » ; ton / longueur sans requête réseau ; capsules immobiles ; « Ajouter une réponse reçue » dans « + » ; ajout → bulle.
+- Synchronisation : choix Android visible sur le Web ; annulation Web visible sur Android ; ajout Web visible sur Android (retour au premier plan) ; suppression Android absente du Web.
+- Verrou entre appareils : Web 200, Android 409, une seule déclaration active en base.
+
+### Non validé
+- Windows : appli relancée avec la nouvelle version, non pilotée (aucun outil pour l'automatiser) : test manuel à faire.
+- « Que penses-tu de la dernière réponse de Lina ? » : toujours faux en réel (3 essais, réponse ancrée sur le dernier message daté) ; corrections validées en tests simulés seulement (budget GroqCloud atteint).
+- Copier : appui fait sur l'appareil, contenu du presse-papiers non relu (test automatisé seulement).
+- Texte agrandi / petit écran / clavier ouvert sur le volet : non testés (aucun réglage système modifié).
+
+### GroqCloud réel (openai/gpt-oss-120b)
+- Génération complète (déclenchée pendant la connexion) : 6 407 + 2 782 = 9 189 tokens ; questions de continuité : 3 817, 4 496 et 4 789 ; ping de quota : 73. Total : 22 364 tokens (budget 25 000). Aucun 429.
+
+### Tests
+- Backend : 259 réussis. Flutter : 740 réussis (passe globale). Analyse : seul l’avertissement `axisAlignment` déjà présent.
+
+## 2026-10-16 — Validation réelle : dernier message ajouté à la main
+
+- Question « JARVIS, que penses-tu de la dernière réponse de Lina ? » (chat Lina Moreau, compte de test), GroqCloud réel `openai/gpt-oss-120b`, script hors appli, historique vide : **juste**. JARVIS commente « Bon, je te pardonne pour cette fois. » comme phrase finale et [18] → [21] dans l'ordre (ajouts « après l'export »), plus le 8 octobre.
+- Prompt vérifié sans IA d'abord (`diag_preparation.py`, TEXTE=1) : conversation entière (21 messages), [21] dernier, rappel `<derniers_messages>` juste avant la question.
+- Défaut trouvé : le correcteur d'attributions a remplacé à tort une phrase exacte (« Après que tu aies annoncé … — « … » [[18]] — elle a d'abord exprimé … (« … » [[19]]) … [[20]] ») : le tiret d'incise ne coupait pas la proposition, le « tu » de l'incise était pris pour le sujet de la suite. Corrigé : « — » et « – » coupent une proposition (`references._FIN_PROPOSITION`) ; 2 tests (`test_attribution.py`). Réponse réelle rejouée sans IA : phrase intacte, 4 références justes, aucune correction.
+- Tokens : 3 686 + 653 = 4 339 (essai) ; pings de quota : 72 + 73 (le premier refusé en 429 : TPM occupé ailleurs à ce moment). 1 seule question posée.
+- Non validé : la même question DANS l'appli (historique réel, 3 réponses fausses qui ancrent le modèle) ; le conteneur `jarvis-api` doit être reconstruit pour avoir la correction du tiret.
+- Tests backend : 261 réussis.
+
+## 2026-10-17 — Correction finale WhatsApp : message visé et fluidité
+
+### Cause
+- Le message « visé » (« sa dernière réponse ») était laissé au modèle : il retenait le dernier message DATÉ de l'export plutôt que l'ajout manuel sans date, et l'historique contenait ses anciennes réponses fausses, qui l'ancraient (3 essais faux dans l'appli).
+- Pendant la préparation des propositions (lots), la bulle n'affichait plus rien de vivant : impression d'appli figée.
+
+### Fait
+- `backend/app/comprehension/ciblage.py` : ciblage déterministe AVANT l'appel IA (conversation, participant — groupe compris —, reçu, envoyé, ajout manuel ; suivi par la personne de la question précédente ; clarification si plusieurs contacts ou groupe sans nom). Message et voisins forcés dans les extraits, bloc `<message_vise>` (identifiant, auteur, provenance, [[n]]) juste avant la question, anciennes questions/réponses « dernier message » retirées de l'historique.
+- SSE `preparation` + trois points animés (`PreparationPropositions`) sous le texte jusqu'aux propositions ; battements pendant les lots ; durées journalisées (préparation, premier fragment, réponse principale, chaque lot, enregistrement Supabase).
+- Tests : `test_ciblage.py` (9, dont route : le prompt porte l'identifiant visé AVANT l'appel IA), événement `preparation` (backend), session + animation (Flutter, 3).
+
+### Preuve et essai réel
+- Sans IA : sur l'ensemble Lina (101 messages + 5 ajouts), la cible est `ajout-101` « Bon, je te pardonne pour cette fois. » ; groupe Projet Nova : « dernière réponse de Samuel » = son message même si Nora a parlé après ; 4 795 messages sous 2 500 tokens : message visé toujours fourni.
+- GroqCloud réel (1 requête, `tests/essai_ciblage_reel.py`, historique avec 3 réponses fausses) : JUSTE — commente « Bon, je te pardonne pour cette fois. », 4 références vérifiées (ajouts manuels) ; 6 168 + 360 tokens, 1,6 s.
+- Essai DANS l'appli non fait : le compte de test a été vidé (6 chats supprimés depuis l'appli native à 21 h 48 et 22 h 08 UTC) et le téléphone était en cours d'utilisation.
+
+### Mesures
+- Préparation des extraits : 18 ms (Lina) ; enregistrement Supabase : journalisé (`Durée : enregistrement Supabase`).
+- Goulot : GroqCloud (réponse principale 1,6 à 15 s selon le raisonnement ; lots ~3,3 s chacun, en série). Lots en parallèle : ~3 s gagnés mais double la pression sur 8 000 tokens/min → reporté à la nouvelle API.
+- Flutter : traitement des propositions négligeable ; l'impression de blocage venait de l'absence d'indicateur.
+
+### Tests
+- Backend : 269 réussis. Flutter : 743 réussis (passe globale). Analyse : seul l'avertissement `axisAlignment` déjà présent.

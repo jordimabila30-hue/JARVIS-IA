@@ -1,3 +1,4 @@
+import '../../models/importation/reference_whatsapp.dart';
 import '../../models/message_conversation.dart';
 import '../voice_command_service.dart';
 import 'analyse_conversation.dart';
@@ -21,6 +22,12 @@ class DemandeJarvis {
     this.vocale = false,
     this.idConversation,
     this.surFragment,
+    this.surPreparation,
+    this.repondreA,
+    this.contexteImporte = false,
+    this.tonPropose,
+    this.propositionsMessage,
+    this.longueurPropose,
   }) : texteComplet = texteComplet ?? texte;
 
   /// Ce que l'utilisateur dit à JARVIS (sans la conversation collée).
@@ -54,19 +61,53 @@ class DemandeJarvis {
   /// coup (règles locales) ne l'appelle pas.
   final void Function(String fragment)? surFragment;
 
+  /// Le texte est fini, le serveur prépare les propositions de réponse :
+  /// l'appli garde un indicateur animé (jamais d'écran figé).
+  final void Function()? surPreparation;
+
+  /// UUID serveur d'une consigne DÉJÀ enregistrée avec sa pièce jointe
+  /// WhatsApp : la réponse lui est rattachée, la consigne n'est jamais
+  /// renvoyée ni réinsérée.
+  final String? repondreA;
+
+  /// La conversation du fil a des conversations WhatsApp jointes : les
+  /// questions portent sur elles (analyse par le serveur), jamais sur une
+  /// conversation à coller.
+  final bool contexteImporte;
+
+  /// Ton que l'utilisateur regarde dans les dernières propositions de
+  /// réponse de ce chat (null : aucun choisi).
+  final String? tonPropose;
+
+  /// UUID serveur de la réponse qui porte ces propositions : référence
+  /// EXPLICITE (« pourquoi la deuxième ? » = 2e proposition de
+  /// [tonPropose] dans CETTE réponse ; le serveur vérifie compte et chat).
+  final String? propositionsMessage;
+
+  /// Longueur affichée (court / moyen / long) des propositions (5.1).
+  final String? longueurPropose;
+
   /// La même demande, dont les fragments de réponse vont à [surFragment].
-  DemandeJarvis avecFragments(void Function(String fragment) surFragment) =>
-      DemandeJarvis(
-        texte: texte,
-        intention: intention,
-        texteComplet: texteComplet,
-        historique: historique,
-        conversation: conversation,
-        conversationNouvelle: conversationNouvelle,
-        vocale: vocale,
-        idConversation: idConversation,
-        surFragment: surFragment,
-      );
+  DemandeJarvis avecFragments(
+    void Function(String fragment) surFragment, {
+    void Function()? surPreparation,
+  }) => DemandeJarvis(
+    surPreparation: surPreparation ?? this.surPreparation,
+    texte: texte,
+    intention: intention,
+    texteComplet: texteComplet,
+    historique: historique,
+    conversation: conversation,
+    conversationNouvelle: conversationNouvelle,
+    vocale: vocale,
+    idConversation: idConversation,
+    surFragment: surFragment,
+    repondreA: repondreA,
+    contexteImporte: contexteImporte,
+    tonPropose: tonPropose,
+    propositionsMessage: propositionsMessage,
+    longueurPropose: longueurPropose,
+  );
 }
 
 /// Réponse de JARVIS dans le fil.
@@ -79,9 +120,14 @@ class ReponseJarvis {
     this.erreur = false,
     this.idServeur,
     this.incident,
+    this.accordRequis = false,
+    this.references = ReferencesReponse.vide,
   });
 
   final String texte;
+
+  /// Messages WhatsApp vérifiés qui fondent la réponse (serveur).
+  final ReferencesReponse references;
 
   /// Afficher « Quel ton ? » puis une réponse proposée.
   final bool choixTon;
@@ -104,6 +150,11 @@ class ReponseJarvis {
   /// texte reçu (partiel), [incident] l'explication de l'arrêt. Toujours
   /// avec [erreur].
   final String? incident;
+
+  /// Le serveur attend l'accord de l'utilisateur pour envoyer à l'IA les
+  /// conversations WhatsApp jointes (rien n'a été envoyé). Toujours avec
+  /// [erreur].
+  final bool accordRequis;
 
   /// Texte partiel d'une réponse interrompue.
   bool get interrompue => incident != null;
@@ -155,8 +206,17 @@ class MoteurConversationLocal implements MoteurConversation {
       'exemple :\nSarah : Tu viens ce soir ?\nMoi : Je ne sais pas encore.\n\n'
       'Je m’en occupe ensuite.';
 
+  /// Pièce jointe enregistrée, mais aucune IA branchée : rien d'analysé.
+  static const analyseIndisponible =
+      'J’ai bien enregistré votre consigne avec la conversation WhatsApp, '
+      'mais je ne peux pas l’analyser : le service d’intelligence '
+      'artificielle n’est pas disponible ici.';
+
   @override
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
+    if (demande.repondreA != null) {
+      return const ReponseJarvis(analyseIndisponible);
+    }
     final locale = await repondreLocalement(demande);
     if (locale != null) return locale;
     // Vocal : la réponse « pas encore disponible » du mode vocal.
@@ -178,6 +238,16 @@ class MoteurConversationLocal implements MoteurConversation {
     bool avecIA = false,
   }) async {
     final c = demande.conversation;
+    // Chat WhatsApp : les demandes sur « la conversation » vont au serveur
+    // (analyse) ; seules les commandes (heure, calcul…) restent locales.
+    if (demande.contexteImporte && c == null) {
+      final r = _commandes.reponseLocale(demande.texte, avecIA: avecIA);
+      if (r == null) return null;
+      return ReponseJarvis(
+        r.texte,
+        terminerSession: demande.vocale && r.terminerSession,
+      );
+    }
     // Sans conversation connue, « résume la Révolution française » est une
     // vraie question pour l'IA ; « résume cette conversation » attend
     // toujours qu'on la colle.
