@@ -23,6 +23,8 @@ import '../services/conversations/fournisseur_jarvis.dart';
 import '../services/importation/pieces_jointes_serveur.dart';
 import '../services/conversation/reponses_envoyees.dart';
 import '../services/importation/pont_android_importation.dart';
+import '../services/jarvis_touch_chat.dart';
+import '../services/jarvis_touch_service.dart';
 import '../services/preferences_pim_service.dart';
 import '../services/voice_session.dart';
 import '../theme/gabarit_jarvis.dart';
@@ -273,6 +275,9 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   late final _formesPim = widget.formesPim ?? PreferencesPimService();
   bool _formeAppliquee = false;
 
+  // Mini-chat de JARVIS Touch (Android) : autre vue de la même conversation.
+  PasserelleMiniChat? _miniChat;
+
   // Menu latéral : seul le menu se reconstruit à l'ouverture (pas la page,
   // ni les particules).
   final _menu = ValueNotifier<bool>(false);
@@ -310,6 +315,12 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     // Réglages vocaux enregistrés (voix, vitesse, micro…), appliqués à
     // chaque prise de parole.
     _session.reglages.charger();
+    // JARVIS Touch (Android) : bulle rallumée si elle était activée ; son
+    // mini-chat affiche et alimente CETTE conversation.
+    JarvisTouchService.instance.restaurer();
+    if (JarvisTouchService.instance.disponible) {
+      _miniChat = PasserelleMiniChat(_conversation)..attacher();
+    }
     final consentement = _consentement;
     if (consentement != null && !consentement.charge) consentement.charger();
     // Conversations épinglées (menu latéral).
@@ -358,6 +369,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _miniChat?.detacher();
     WidgetsBinding.instance.removeObserver(this);
     _conversation.surEchangeEnregistre = null;
     _conversation.surEchangeLocal = null;

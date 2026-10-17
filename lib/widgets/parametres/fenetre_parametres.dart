@@ -15,6 +15,7 @@ import 'icone_reacteur_arc.dart';
 import 'panneau_chat_vocal.dart';
 import 'panneau_compte.dart';
 import 'panneau_confidentialite.dart';
+import 'panneau_general.dart';
 
 /// Sections du panneau Paramètres.
 enum SectionParametres {
@@ -731,6 +732,7 @@ class _Contenu extends StatelessWidget {
                 const SizedBox(height: 6),
               ],
               switch (section) {
+                SectionParametres.general => const PanneauGeneral(),
                 SectionParametres.chatVocal => PanneauChatVocal(
                   session: session,
                 ),

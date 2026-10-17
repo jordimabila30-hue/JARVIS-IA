@@ -1120,3 +1120,43 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Tests
 - Backend : 269 réussis. Flutter : 743 réussis (passe globale). Analyse : seul l'avertissement `axisAlignment` déjà présent.
+
+
+## 2026-10-17 — JARVIS Touch, phase 1 (bulle flottante Android)
+
+### Fait
+- Paramètres › Général : `PanneauGeneral` (interrupteur JARVIS Touch, Android seulement ; Langue / Version gardées). Désactivé par défaut, choix enregistré (`jarvis.touch_active`).
+- `services/jarvis_touch_service.dart` : état réel (désactivé / attente d'autorisation / démarrage / actif), jamais « actif » sans confirmation de la bulle ; autorisation demandée puis vérifiée au retour dans JARVIS (refus → explication, interrupteur coupé) ; resynchronisé à chaque retour au premier plan ; bulle rallumée au lancement si elle était activée (`AccueilPage`).
+- Android (`kotlin/.../touch/`) : `PontJarvisTouch` (canal `jarvis/touch`), `ServiceJarvisTouch` (service au premier plan `specialUse`, notification discrète, une seule bulle, pas de redémarrage automatique), `FenetresJarvisTouch` (superposition, glisser, rangement animé au bord le plus proche, zones système et encoche respectées, position mémorisée, rotation, estompage au repos), `BulleJarvis` (rendu simplifié derrière l'interface `RenduBulle`, remplaçable par PIM), `MenuJarvisTouch` (Discuter / Vocal / Analyser l'écran / Importer une conversation → « Disponible prochainement » ; fermeture : ✕, toucher extérieur ou bulle).
+- Prototype `jarvis--main` : principe seulement (aucune licence fournie → code réécrit).
+
+### Tests
+- `test/jarvis_touch_test.dart` (7) + Paramètres, accueil, menu latéral : réussis. Analyse : seul l'avertissement `axisAlignment` déjà présent. APK debug compilé et installé sur le Galaxy S10+ (Android 12) ; section visible.
+
+### Prochaine étape
+- Valider à la main sur le téléphone (autorisation, déplacement, menu, désactivation), puis phase 2 : brancher les entrées du menu.
+
+## 2026-10-17 — JARVIS Touch, phase 2 (mini-chat sur la conversation unique)
+
+### Architecture
+- Interface NATIVE légère (Kotlin) + LA `ConversationSession` de l'accueil comme seule source de vérité. Écarté : second FlutterEngine (isolat séparé = deuxième conversation, mémoire doublée).
+- Le moteur Flutter principal appartient au processus (`MoteurJarvis`, `FlutterEngineCache`, `provideFlutterEngine`) : il survit à la destruction de l'activité tant que la bulle est active ; libéré comme avant (activité quittée + bulle inactive). Jamais de second moteur.
+- Canal `jarvis/touch_chat` lié au moteur (`CanalMiniChat`) ↔ `PasserelleMiniChat` (`lib/services/jarvis_touch_chat.dart`, attachée par `AccueilPage`).
+
+### Fait
+- « Discuter » ouvre `ChatJarvisTouch` (fenêtre en haut de l'écran, focalisable ; toucher ailleurs = focus rendu ; retour = réduire ; clavier : fenêtre raccourcie au-dessus) ; en-tête (titre, ouvrir dans JARVIS, réduire), liste recyclée, saisie 1-4 lignes, envoi désactivé si vide.
+- Envoi = `ConversationSession.envoyer` (même file, même IA, même enregistrement) ; `idEnvoi` : un double envoi ne part qu'une fois. Instantané seulement quand l'affiché change (signature des messages), fragments du message en réception regroupés (≤ 1 / 50 ms, texte complet, une seule bulle mise à jour). Réduit : aucun écouteur. Réponse lue en direct → affichée entière dans l'accueil (pas d'écriture rejouée).
+- 40 derniers messages, puis +40 en remontant (`chargerPlusAnciens` existant si besoin).
+- JARVIS revenu au premier plan : mini-chat réduit automatiquement. Désactivation : fenêtres retirées comme en phase 1.
+- Point de restauration : branche `restauration/avant-touch-phase2` (travail non commité inclus).
+
+### Tests
+- `test/jarvis_touch_chat_test.dart` (4) + `jarvis_touch_test.dart` : réussis. Analyse : seul `axisAlignment` (préexistant).
+- Galaxy S10+ (profile) : menu → Discuter ; conversation de l'accueil affichée (mêmes messages, même ordre) ; envoi depuis le mini-chat visible dans JARVIS et inversement ; aucun doublon ; activité détruite (retour) → mini-chat toujours fonctionnel, JARVIS relancé sur la même conversation sans redémarrer ; réduction automatique au retour dans JARVIS.
+- Mesures : ouverture du mini-chat 130-267 ms ; 40 ouvertures/fermetures → après GC 9 vues, 2 ViewRootImpl, PSS identique (≈ 338 Mo, toute l'app) : aucune fuite.
+- MIA réel (compte connecté, `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`) : question dans JARVIS → réponse ; écran d'accueil Android → bulle → Discuter → même fil → question longue → réponse en streaming dans le mini-chat → réduction → JARVIS : 4 messages, même ordre, réponse entière (pas d'écriture rejouée), aucun doublon ; serveur : exactement 2 `POST /chat/stream` pour 2 questions.
+- Latence fragment (arrivée dans Dart → affiché, regroupement inclus) : moyenne 64-67 ms, max 78-84 ms (36 et 16 fragments). Fenêtres natives pendant le streaming : 1 367 images, 1,1 % saccadées, médiane 7 ms, 95ᵉ centile 15 ms.
+- Corrigé pendant les essais : premier toucher sur le champ (focus + clavier aussitôt) ; mot « en composition » du clavier Samsung oublié à l'envoi (`restartInput`), sinon message tronqué.
+- Cause du « Connectez-vous » vu en cours d'essai : téléphone sans réseau (Supabase injoignable) + lancement sans `JARVIS_API_URL` ; rien à voir avec le mini-chat.
+- Tests Dart : 61 réussis (touch, touch_chat, conversation_ia, accueil).
+- Reste à valider à la main : coupure réseau PENDANT un streaming, rotation avec le mini-chat ouvert, historique très long (> 40 messages, remontée), passage réel par WhatsApp.

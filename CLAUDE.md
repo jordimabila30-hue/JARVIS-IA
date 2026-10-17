@@ -208,6 +208,8 @@ lib/
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
 │   ├── conversations/                # multicanal (fournisseurs, tri, recherche, épingles) ; synchro Supabase : dépôt, correspondance local ↔ UUID, liste, file des échanges locaux
 │   ├── preferences_pim_service.dart  # forme principale PIM (enregistrée sur l'appareil)
+│   ├── jarvis_touch_service.dart     # JARVIS Touch (Android) : bulle flottante, autorisation, état réel ; natif : android/.../touch/
+│   ├── jarvis_touch_chat.dart        # mini-chat de JARVIS Touch : autre vue de LA conversation (canal jarvis/touch_chat ; moteur Flutter du processus : touch/MoteurJarvis.kt)
 │   └── connaissances_techniques.dart # notions techniques (réponse courte + développement)
 ├── models/
 │   ├── voice_state.dart              # idle / listening / thinking / speaking
