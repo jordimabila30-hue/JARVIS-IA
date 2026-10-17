@@ -17,6 +17,14 @@ class Settings(BaseSettings):
 
     quota_limits_cache_ttl: int = 300
 
+    # MIA universel (app/llm/) : fournisseur principal de la couche commune.
+    # Phase 1 : pas encore utilisé par les routes (qui gardent GroqCloud).
+    llm_provider: str = "anthropic"
+    anthropic_api_key: str | None = None
+    anthropic_model: str | None = None     # aucun modèle imposé par le code
+    anthropic_effort: str | None = None    # low | medium | high | xhigh | max
+
+    # GroqCloud (ou OpenAI) : client actuel du chat, et fournisseur « groq ».
     openai_api_key: str
     openai_base_url: str | None = None
     openai_model: str = "gpt-4o-mini"

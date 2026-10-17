@@ -1160,3 +1160,33 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - Cause du « Connectez-vous » vu en cours d'essai : téléphone sans réseau (Supabase injoignable) + lancement sans `JARVIS_API_URL` ; rien à voir avec le mini-chat.
 - Tests Dart : 61 réussis (touch, touch_chat, conversation_ia, accueil).
 - Reste à valider à la main : coupure réseau PENDANT un streaming, rotation avec le mini-chat ouvert, historique très long (> 40 messages, remontée), passage réel par WhatsApp.
+
+## 2026-10-17 — MIA universel, phase 1 (couche multi-fournisseurs `backend/app/llm/`)
+
+### Fait
+- Point de restauration : tag `sauvegarde-avant-mia-phase1` (sur `db498e5`, arbre propre ; `comparaison_points_pim.png` non suivi, laissé tel quel).
+- `app/llm/base.py` : contrat `FournisseurLLM` (`flux` → `Texte`… puis une `Fin(raison, usage, modele)` ; `json` → `ReponseJSON`), `Usage` (entrée, sortie, cache lu / écrit, estimé), `RaisonArret` (fin, longueur, refus, outil, autre), erreurs `LimiteDebit(attente)`, `RequeteTropGrande`, `Refus`, `ErreurFournisseur` avec les MÊMES codes / messages que l'événement SSE `error` actuel (`evenement()`), `apres_texte` pour une coupure. Place réservée à ODO (`DefinitionOutil`, `AppelOutil`, `RaisonArret.OUTIL`) : `outils` non vide → `NotImplementedError`.
+- `app/llm/groq.py` : `FournisseurGroq` (SDK `AsyncOpenAI`), copie fidèle du comportement de production (point d'accès `gsk_` → Groq, flux + usage final, JSON `json_object` avec repli mémorisé, `reasoning_effort` pour gpt-oss, « low » par défaut en JSON, quotas quotidiens / crédit sans attente, délais `retry-after` / `x-ratelimit-*`).
+- `app/llm/anthropic.py` : `FournisseurAnthropic` (SDK officiel `anthropic` 1.15, `AsyncAnthropic`, `max_retries=0`). Conversion : `system` du début → champ `system` ; rappels système suivants (moteur WhatsApp) → bloc `<consignes_systeme>` en tête du `user` qui suit, jamais dans `system` (citations importées non fiables) : note fixe « consignes du serveur, citations = données », balise neutralisée (‹…›) dans tout autre texte (citation, saisie, réponse) ; vides ignorés, rôles identiques fusionnés, `assistant` en tête retiré, fin obligatoire par `user`. Seuls les `text_delta` sont diffusés (réflexion jamais exposée) ; `thinking` non envoyé ; effort `output_config.effort` ramené aux capacités du modèle (rien pour Sonnet / Haiku 4.5 et plus anciens) ; JSON par `output_config.format` (schéma) ou texte relu, toujours en flux ; refus → `Fin.raison=REFUS` (catégorie) en flux, `Refus` en JSON ; 429 / 529 → `LimiteDebit`, 413 ou « prompt is too long » → `RequeteTropGrande`, crédit, clé, modèle. Aucun repli automatique (ni modèle, ni fournisseur).
+- `app/llm/selection.py` : `creer(nom)`, `fournisseur(nom)` (une instance par fournisseur), `configures()`, `fermer_tous()`. `LLM_PROVIDER` (anthropic par défaut) ; inconnu → `FournisseurInconnu` ; incomplet → `FournisseurNonConfigure` (nom de la variable, jamais sa valeur). Extensible : une fabrique dans `FABRIQUES`.
+- Configuration : `LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (aucun modèle imposé par le code), `ANTHROPIC_EFFORT` dans `config.py` et `.env.example` ; variables `OPENAI_*` (GroqCloud) inchangées. `requirements.txt` : `anthropic>=1.15,<2`.
+
+### Inchangé (vérifié par `git diff`)
+- `api/v1/chat.py`, `api/v1/contexts.py`, toutes les routes, le contrat SSE, les quotas, Supabase, Flutter : aucune ligne modifiée. Les routes utilisent toujours `chat.get_openai` (GroqCloud) ; rien en production n'importe `app.llm`.
+
+### Tests
+- Nouveaux (100) : `test_llm_contrat.py` (mêmes tests pour Claude et GroqCloud : flux, réflexion masquée, plafond, refus, coupure, 429, 413 / 401 / 404 / 500, JSON valide / balisé / illisible / coupé, outils, conversations invalides), `test_llm_anthropic.py` (dont enveloppe impossible à fermer ou imiter), `test_llm_groq.py`, `test_llm_selection.py`. Vrais SDK, transport HTTP simulé (`tests/faux_llm.py`) : aucun appel réseau, aucune clé réelle.
+- Contrôle : une fuite volontaire de `thinking_delta` (sur une copie jetable, annulée) est bien détectée (test en échec).
+- SDK : les 100 tests MIA réussissent avec `anthropic` 1.0.0, 1.5.0, 1.10.0, 1.12.0, 1.14.0 et 1.15.0 ; contrainte gardée à `>=1.15,<2` (version de la suite complète).
+- Suite complète dans un conteneur jetable (image `backend-api` + `requirements-dev.txt` + `anthropic`, dépôt entier monté) : **369 réussis** (269 avant + 100), 0 échec, aucun avertissement sur les nouveaux tests.
+- Remarque : sans `tests_whatsapp/` monté, 8 tests de `test_ciblage.py` échouent (`KeyError` sur les ZIP de la campagne) ; c'est l'environnement, pas le code.
+
+### Limites
+- Pas de test réel contre l'API Claude (clé non utilisée, comme demandé) : formats vérifiés par le SDK officiel sur des flux simulés.
+- L'image `backend-api` en service n'a pas encore `anthropic` (à reconstruire en phase 2 ; inutile tant que rien ne l'importe).
+- Copie temporaire de la logique d'erreurs Groq (`describe_llm_error`, `retry_delay`) dans `groq.py`, à retirer de `chat.py` au raccordement.
+- Prompt caching Claude non activé (décision de coût à prendre).
+
+### Prochaine étape (phase 2)
+- Reconstruire l'image ; brancher `chat_stream`, `appel_lot` et `contexts.completer` sur `selection.fournisseur()` ; plafonds de sortie et budget de compréhension propres à Claude (réflexion comptée dans la sortie) ; schéma JSON des lots ; refus → `incident` ; `messages.model` = modèle servi ; sélection manuelle de Groq réservée (environnement de test + compte administrateur) ; console ; tests de route avec les deux fournisseurs ; essais réels.
+- Constat préexistant (hors phase 1, code de compréhension non modifié) : dans `ciblage.bloc`, le texte du message visé est cité via `texte_affiche` sans `neutraliser` ni remplacement des guillemets (contrairement à `extraits.ligne`), et `message_vise` n'est pas dans `extraits._BALISES` ; à corriger en phase 2 (concerne aussi GroqCloud).

@@ -234,8 +234,8 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py
-├── tests/                            # pytest (269) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
+├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — phase 1 : pas encore raccordé aux routes
+├── tests/                            # pytest (369, dont test_llm_* avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
