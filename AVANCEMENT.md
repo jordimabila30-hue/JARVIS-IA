@@ -1277,3 +1277,24 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - ODO (orchestrateur d'outils) sur le contrat `FournisseurLLM` (place réservée : `DefinitionOutil`, `AppelOutil`, `RaisonArret.OUTIL`).
+
+## 2026-10-17 — Abonnements Free & Pro, phase 1 (configuration Supabase)
+
+### Fait
+- Point de restauration : tag `sauvegarde-avant-abonnements-phase1` (sur `6aa7d1a`).
+- Vérifié avant : aucune table d'offres existante (seulement `auth.sessions`, interne) ; `plan_tier` = free, pro ; droits par défaut de Supabase = TOUS les droits à anon / authenticated / service_role sur toute nouvelle table du schéma public.
+- Migration `supabase/migrations/20261017130000_plan_config.sql` (additive, ré-exécutable), **appliquée** sur « Jarvis » : table `public.plan_config` (clé `plan` = `plan_tier`, `llm_provider` ∈ {anthropic, groq}, `llm_model`, limites par jour et par session, `session_duration_minutes`, `critical_threshold_percent`, `updated_at` automatique), contraintes de cohérence, commentaires de colonnes (visibles dans l'éditeur), valeurs initiales en `ON CONFLICT DO NOTHING` (jamais d'écrasement d'une valeur modifiée à la main).
+- Valeurs enregistrées : Free = groq / openai/gpt-oss-120b, 100 msg et 50 000 tokens par jour, sessions de 300 min, 25 msg et 15 000 tokens par session, seuil 80 % ; Pro = anthropic / claude-opus-5-5, 200 et 100 000 par jour, 300 min, 50 et 30 000 par session, 80 %.
+- Sécurité : tous les droits retirés à anon / authenticated (TRUNCATE compris) ET à service_role, qui garde la lecture seule ; RLS active sans politique ; modification par l'administrateur du tableau de bord seulement. `users.plan` toujours non modifiable par l'utilisateur.
+- Doc : `docs/backend/ABONNEMENTS.md` (colonnes, procédure de modification, sécurité, règle de priorité offre / limites personnelles, conception des sessions persistantes, prêt pour la phase 2) ; note dans `supabase/schema.sql` ; CLAUDE.md.
+
+### Tests (aucun appel facturable)
+- PostgreSQL 17 local jetable (`supabase/tests/lancer_tests.sh`, migration jouée deux fois) : **105 réussis, 0 échec**, dont 24 nouveaux (`50_plan_config_test.sql` : valeurs, refus anon / authenticated en lecture, écriture, ajout, suppression, TRUNCATE, changement de plan ou de limites par l'utilisateur ; backend en lecture seule ; modification par l'administrateur + `updated_at` ; contraintes : seuil, fournisseur, modèle vide, durée nulle, session > jour, négatif, cellule vide, doublon, abonnement inconnu).
+- Correction trouvée par les tests : le `service_role` pouvait modifier les offres (droits par défaut) → retiré avant l'application.
+- Base réelle : valeurs exactes ; droits anon / authenticated = aucun, service_role = lecture ; RLS active ; modification par l'administrateur acceptée et refus pour `authenticated` (42501), testés dans une transaction ANNULÉE (valeurs restées 100 / 300) ; données existantes identiques avant / après (1 compte pro 60 / 100 000, 4 lignes `quota_usage` 99 messages / 135 209 tokens, 4 conversations, 12 messages) ; avis de sécurité : seulement « RLS sans politique » (voulu) pour `plan_config`.
+- Production : `jarvis-api` inchangé (même image, démarré à 11:52, santé ok) ; aucun code ne lit `plan_config` ; fournisseur IA et quotas inchangés.
+
+### Points ouverts (phase 2)
+- Règle de priorité offre / limites personnelles : rendre la dérogation explicite (les colonnes `users.daily_*` ont des valeurs par défaut et `NULL` = illimité) — transformation de données à valider ; le compte Pro (60 / 100 000) resterait une dérogation plus basse que l'offre Pro.
+- Sessions : table `usage_sessions` + compteur Redis (conception dans la doc).
+- Avis Supabase préexistants (hors chantier) : `handle_new_user`, `touch_conversation` exécutables par l'API ; protection des mots de passe divulgués désactivée.

@@ -239,11 +239,11 @@ backend/                              # FastAPI (Docker : jarvis-api + jarvis-re
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
-supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages)
+supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages), offres Free & Pro (plan_config)
 supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
-docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE, MIA_UNIVERSEL
+docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE, MIA_UNIVERSEL, ABONNEMENTS
 config_locale.json                    # URL + clé PUBLIQUE Supabase pour Flutter (non versionné ; modèle : config_locale.example.json)
 ```
 

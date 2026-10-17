@@ -430,6 +430,15 @@ revoke all on admin.conversations_lisibles, admin.messages_lisibles, admin.quota
 -- Appliquée sur le projet « Jarvis » le 2026-10-15 (migration contextes_whatsapp).
 
 -- =============================================================================
+-- Offres Free & Pro (plan_config)
+-- =============================================================================
+-- Définie par la migration supabase/migrations/20261017130000_plan_config.sql :
+-- une ligne par abonnement (fournisseur IA, modèle, limites par jour et par
+-- session, durée de session, seuil critique), modifiable dans l'éditeur de
+-- tables ; aucun accès client ; service_role en lecture seule.
+-- Doc : docs/backend/ABONNEMENTS.md. Appliquée sur « Jarvis » le 2026-10-17.
+
+-- =============================================================================
 -- Administration (exemples, à exécuter manuellement avec un rôle admin)
 -- =============================================================================
 -- Passer un utilisateur en Pro illimité :
