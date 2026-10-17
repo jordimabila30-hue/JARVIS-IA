@@ -237,7 +237,7 @@ async def completer_propositions(
     identifiants pour ce qui était déjà valide). Ensemble déjà complet :
     renvoyé tel quel, sans appel à l'IA. Une seule reprise à la fois."""
     user_id = reservation.user.id
-    tokens = 0
+    tokens = entree = sortie = 0
     verrou = False
     try:
         ligne = await supabase.get_assistant_message(str(message_id), str(conversation_id), user_id)
@@ -272,7 +272,8 @@ async def completer_propositions(
             memoire_bloc=memoire_bloc, llm=llm, settings=settings,
         ):
             pass
-        tokens = ensemble.tokens_entree + ensemble.tokens_sortie
+        entree, sortie = ensemble.tokens_entree, ensemble.tokens_sortie
+        tokens = entree + sortie
         # Relu juste avant l'écriture : seule l'entrée des propositions change.
         actuelle = await supabase.get_assistant_message(str(message_id), str(conversation_id), user_id)
         nouvelle = ensemble.stockage()
@@ -287,7 +288,8 @@ async def completer_propositions(
         raise _http(BaseIndisponible()) from None
     finally:
         if tokens:
-            await quota_service.record_usage(reservation, tokens)
+            await quota_service.record_usage(reservation, tokens, tokens_input=entree, tokens_output=sortie,
+                                             provider=llm.nom, model=llm.modele)
         else:
             await quota_service.release(reservation)
         if verrou:

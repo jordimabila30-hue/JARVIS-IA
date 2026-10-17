@@ -1,112 +1,188 @@
 # Abonnements JARVIS Free & Pro
 
-Phase 1 (2026-10-17) : configuration des offres dans Supabase. Le backend ne
-la lit PAS encore : quotas, fournisseur IA et comptes existants sont
-inchangés. Le raccordement (choix du fournisseur, quotas de session) est la
-phase 2 ; les jauges Flutter, la phase 3.
+- **Phase 1** (2026-10-17) : configuration des offres dans Supabase (`plan_config`).
+- **Phase 2** (2026-10-17) : limites effectives, exceptions explicites, sessions,
+  routage MIA par abonnement (activation contrôlée), `/me/quota`, suivi par fournisseur.
+- **Phase 3** (à venir) : jauges Flutter.
 
-## Table `public.plan_config`
+Règle : **`plan_config` définit les limites de chaque offre ; `users.plan` dit
+à quelle offre appartient un compte.** Une limite personnelle ne s'applique
+que si l'exception est activée explicitement.
 
-Migration : `supabase/migrations/20261017130000_plan_config.sql`
-(additive, ré-exécutable ; retour arrière : `drop table public.plan_config;`).
-Une ligne par abonnement (`public.plan_tier` : `free`, `pro`).
+## 1. Tables et fonctions
 
-| Colonne | Rôle | Free | Pro |
-|---|---|---|---|
-| `plan` | abonnement (clé : une seule ligne par abonnement) | `free` | `pro` |
-| `llm_provider` | fournisseur de MIA universel (`anthropic` ou `groq`) | `groq` | `anthropic` |
-| `llm_model` | modèle du fournisseur | `openai/gpt-oss-120b` | `claude-opus-5-5` |
-| `daily_message_limit` | messages IA par jour (minuit UTC) | 100 | 200 |
-| `daily_token_limit` | tokens IA par jour (entrée + sortie, réflexion comprise) | 50 000 | 100 000 |
-| `session_duration_minutes` | durée d'une session (nouvelles sessions) | 300 | 300 |
-| `session_message_limit` | messages IA par session | 25 | 50 |
-| `session_token_limit` | tokens IA par session | 15 000 | 30 000 |
-| `critical_threshold_percent` | seuil critique des jauges (%) | 80 | 80 |
-| `updated_at` | dernière modification (automatique) | | |
+| Objet | Rôle | Migration |
+|---|---|---|
+| `public.plan_config` | une ligne par offre : fournisseur, modèle, limites jour / session, durée de session, seuil critique | `20261017130000_plan_config.sql` |
+| `public.users.limits_override` | `false` (défaut) : le compte suit son offre ; `true` : exception (`daily_message_limit` / `daily_token_limit` du compte, `NULL` = illimité) | `20261017160000_abonnements_sessions.sql` |
+| `public.limites_effectives(user)` | SEUL calcul des limites appliquées (backend, `get_my_quota`, vue admin) | idem |
+| `public.usage_sessions` | sessions (fenêtre, consommation) ; l'utilisateur lit les siennes | idem |
+| `ouvrir_session`, `session_active`, `increment_session_usage` | gestion atomique des sessions (backend seulement) | idem |
+| `public.llm_usage` + `increment_llm_usage` | tokens entrée / sortie par jour, compte, fournisseur, modèle (coûts estimés) | idem |
+| `admin.limites_appliquees` | limites RÉELLEMENT appliquées à chaque compte | idem |
+| `admin.consommation_llm` | consommation par jour, fournisseur et modèle | idem |
 
-Contraintes : fournisseur connu ; modèle non vide (100 caractères au plus) ;
-limites ≥ 0 ; limites de session ≤ limites quotidiennes ; durée > 0 ; seuil
-de 0 à 100 ; aucune valeur vide (une cellule vide ne peut jamais devenir
-« illimité » par erreur). Aucune clé API dans la table.
+Valeurs initiales de `plan_config` :
 
-## Modifier une offre soi-même
+| | Free | Pro |
+|---|---|---|
+| Fournisseur / modèle | `groq` / `openai/gpt-oss-120b` | `anthropic` / `claude-opus-5-5` |
+| Par jour | 100 messages, 50 000 tokens | 200 messages, 100 000 tokens |
+| Session | 300 min, 25 messages, 15 000 tokens | 300 min, 50 messages, 30 000 tokens |
+| Seuil critique | 80 % | 80 % |
 
-1. Tableau de bord Supabase → projet « Jarvis » → **Table Editor** →
-   schéma `public` → table **`plan_config`**.
-2. Double-cliquer sur la cellule (ex. `daily_message_limit` de `free`),
-   saisir la valeur, **Save**. `updated_at` se met à jour seul.
-3. Une valeur incohérente (seuil 120, session > jour, fournisseur inconnu…)
-   est refusée avec le nom de la contrainte.
+Sécurité (vérifiée sur la base réelle) : `anon` / `authenticated` n'ont aucun
+droit sur `plan_config`, `llm_usage`, les fonctions de calcul et de session ;
+ils ne peuvent modifier ni `plan`, ni les limites, ni `limits_override`
+(droit de mise à jour limité à `display_name`, `avatar_url`, `preferences`).
+`service_role` (backend) : lecture de `plan_config`, sessions et suivi
+uniquement par les fonctions (aucune écriture directe). Les vues `admin.*`
+ne sont lisibles que depuis le tableau de bord.
 
-Changer de fournisseur ou de modèle : `llm_provider` doit être `anthropic`
-ou `groq` (noms de `backend/app/llm/selection.py`) ; un nouveau
-fournisseur demande d'abord son adaptateur, puis l'ajout à la contrainte
-`plan_config_llm_provider_connu`. À partir de la phase 2, une modification
-sera prise en compte sans redéploiement (cache de lecture court).
+## 2. Modifier depuis Supabase (Table Editor)
 
-## Sécurité (vérifiée sur la base réelle)
+Délai d'application : **30 secondes au plus** (cache Redis des limites,
+`QUOTA_LIMITS_CACHE_TTL`), sans redémarrage. Durée de session : vaut pour les
+**nouvelles** sessions (celle en cours garde sa fin).
 
-- `anon`, `authenticated` : aucun droit (ni lecture, ni écriture, ni
-  TRUNCATE — les droits par défaut de Supabase sont retirés) ; RLS active sans
-  politique (avis Supabase « RLS sans politique » : voulu).
-- `service_role` (backend) : **lecture seule** ; une clé backend divulguée ne
-  modifie pas les offres.
-- Modification : administrateur du tableau de bord (éditeur de tables, SQL).
-- Abonnement d'un utilisateur : `public.users.plan`, non modifiable par
-  l'utilisateur (droit de mise à jour limité à `display_name`, `avatar_url`,
-  `preferences`) ; changement par `backend/scripts/set_plan.py` (service_role).
+- **Une offre** : table `plan_config` → cellule → *Save*. Exemples : Free
+  `daily_message_limit` 100 → 150 ; Pro 200 → 250 ; `session_duration_minutes`
+  300 → 360 ; `llm_model`. Les valeurs incohérentes sont refusées (seuil
+  > 100, session > jour, fournisseur inconnu, cellule vide…).
+- **L'abonnement d'un compte** : table `users` → colonne `plan` (`free` /
+  `pro`). Ou : `python -m scripts.set_plan <email> pro` (vide aussi le cache).
+- **Activer une exception** : table `users` → `daily_message_limit` /
+  `daily_token_limit` (vide = illimité), puis `limits_override` = `true`. Ou :
+  `python -m scripts.set_plan <email> pro --messages 500 --tokens 1000000`
+  (`--illimite` pour aucune limite quotidienne).
+- **Modifier une exception** : changer les deux colonnes (`limits_override`
+  reste `true`).
+- **Désactiver une exception** : `limits_override` = `false` (les anciennes
+  valeurs restent stockées mais ne sont plus lues). Ou : `set_plan <email> pro`.
+- **Vérifier ce qui s'applique** : vue `admin.limites_appliquees` (éditeur SQL :
+  `select * from admin.limites_appliquees;`). Les colonnes
+  `users.daily_*` seules ne disent PAS ce qui s'applique.
 
-## Priorité entre `plan_config` et les limites d'un utilisateur (phase 2)
+Les limites de SESSION sont toujours celles de l'offre (une exception ne
+porte que sur les limites quotidiennes).
 
-État actuel : `public.users.daily_message_limit` / `daily_token_limit` ont des
-valeurs PAR DÉFAUT (30 / 50 000) remplies pour tout nouveau compte, et `NULL`
-y signifie « illimité ». On ne peut donc pas distinguer une limite choisie
-pour un utilisateur d'une valeur par défaut. Le compte Pro existant a des
-limites personnalisées (60 messages, 100 000 tokens par jour), conservées.
+## 3. Quotas (backend `app/quota.py`)
 
-Règle recommandée (à appliquer en phase 2, avec votre accord sur la
-migration) :
-1. **Limite personnelle explicite** d'un utilisateur, si elle existe : elle
-   prime (dérogation commerciale ou de test).
-2. Sinon, **limite de l'offre** (`plan_config` du `plan` de l'utilisateur).
-3. « Illimité » : seulement par une dérogation explicite, jamais par défaut.
+- `enforce_quota` → `QuotaService.reserve` : limites effectives (cache 30 s),
+  puis UN script Lua atomique qui contrôle **jour + session** et compte la
+  requête dans les deux (aucun dépassement par appels simultanés, aucun double
+  comptage). Réhydratation depuis Supabase si Redis a perdu une clé.
+- `record_usage` (une fois par requête, appels internes compris : lots de
+  propositions, « Reprendre ») : `quota_usage`, `usage_sessions`, `llm_usage`
+  (entrée / sortie, fournisseur, modèle ; jamais bloquant).
+- `release` : aucune réponse → la requête est rendue (jour et session).
+- Limite atteinte : **429** `{"error": "quota_exceeded", "kind":
+  "messages" | "tokens" | "session_messages" | "session_tokens", "resets_in",
+  "resets_at", "quota": {…}}` + `Retry-After` (fin de session pour une limite de
+  session, minuit UTC sinon).
+- Chemins couverts : chat écrit, vocal, JARVIS Touch, analyse WhatsApp (avec
+  ses lots), « Reprendre ». Non couverts (aucun appel IA) : échanges locaux,
+  enregistrement des pièces jointes.
 
-Pour l'appliquer sans ambiguïté, il faudra rendre la dérogation explicite :
-soit des colonnes nullables dédiées (`NULL` = suivre l'offre), soit retirer
-les valeurs par défaut des colonnes actuelles et convertir les lignes qui
-valent exactement l'ancien défaut (30 / 50 000) — transformation de données
-à valider avant. Le compte Pro (60 / 100 000) resterait une dérogation, donc
-plus limité que l'offre Pro (200 / 100 000) : à confirmer ou effacer.
+## 4. Sessions
 
-## Sessions (préparation de la phase 2)
+- Ouverte au **premier appel IA autorisé** (le quota du jour est vérifié
+  AVANT : un appel refusé n'ouvre rien), par `ouvrir_session` (verrou par
+  compte : deux premiers appels simultanés obtiennent la même session).
+- Fin = début + `session_duration_minutes` lue à l'ouverture, **heure du
+  serveur**. Exemple : 10 h premier appel → fin 15 h ; limite atteinte à 13 h →
+  429 `session_*`, `resets_at` 15 h ; après 15 h, l'appel suivant ouvre une
+  nouvelle session.
+- Persistante (`usage_sessions`) : fermer l'application, changer d'appareil
+  (Android, Windows, Web, JARVIS Touch) ou redémarrer Redis / le backend ne
+  change pas la session ; compteurs Redis réhydratés depuis la base.
+- Indépendante du jour : renouveler une session ne remet jamais le jour à zéro.
+- Les sessions terminées restent en base (historique).
 
-Une session = fenêtre de temps persistante, ouverte au PREMIER appel IA
-facturable (`chat_stream`, `contexts.completer`), d'une durée
-`session_duration_minutes` lue à l'ouverture (une modification ne raccourcit
-pas une session en cours). Quotas de session et quotidiens indépendants : un
-appel doit respecter les deux.
+## 5. Routage MIA (`chat.get_fournisseur`)
 
-Stockage persistant nécessaire : oui. La session doit être la même sur
-Android, Windows, Web et JARVIS Touch, et survivre à un redémarrage du
-backend ou à une éviction Redis (comme aujourd'hui `quota_usage` pour les
-compteurs du jour). Solution recommandée, sur le modèle du quota quotidien :
-- table `public.usage_sessions` (une ligne par session : `user_id`, `plan`,
-  `started_at`, `ends_at`, `messages_used`, `tokens_used` ; lecture par
-  l'utilisateur de ses lignes, écriture par le backend seulement, comme
-  `quota_usage`) avec une fonction atomique « ouvrir ou reprendre la session
-  active puis incrémenter » ;
-- Redis comme compteur rapide (clé `session:{user}` expirant à `ends_at`,
-  réservation atomique en Lua comme `reserve()`), réhydraté depuis la table ;
-- l'appareil ne fournit jamais l'heure : seule l'horloge du serveur compte.
+- `ABONNEMENTS_ROUTAGE=true` : fournisseur et modèle **de l'offre du compte**
+  (identité = JWT vérifié, plan = Supabase). Free → GroqCloud
+  `openai/gpt-oss-120b`, Pro → Claude `claude-opus-5-5`. Le corps de la
+  requête n'y joue aucun rôle ; l'en-tête `X-Jarvis-Fournisseur` reste
+  réservé aux tests (hors production, `LLM_SELECTION_MANUELLE`, `LLM_ADMINS`),
+  sinon 403. Fournisseur de l'offre non configuré → 503 `llm_config`, **sans
+  repli** vers un autre fournisseur.
+- `ABONNEMENTS_ROUTAGE=false` (défaut) : `LLM_PROVIDER` pour tous (comportement
+  de la production actuelle).
+- Clés : `ANTHROPIC_API_KEY` (Pro), `OPENAI_API_KEY` GroqCloud (Free) ; le
+  modèle vient de `plan_config` (les `*_MODEL` du `.env` ne servent qu'au
+  mode sans routage).
 
-## Prêt pour la phase 2
+## 6. `/me/quota` (pour les jauges Flutter, phase 3)
 
-- Lecture de `plan_config` par `service_role` (cache court, ex. 60 s).
-- `QuotaService.get_limits` (palier de l'utilisateur, cache Redis) +
-  `selection.fournisseur(nom)` : base du choix Free → GroqCloud, Pro → Claude
-  (à résoudre avant la réservation du quota, comme `get_fournisseur`).
-- Réservation atomique Lua et réhydratation : modèle pour le quota de session.
-- `critical_threshold_percent` et les en-têtes `X-Quota-*` : base des jauges.
-- Avis Supabase préexistants (hors chantier) : `handle_new_user` et
-  `touch_conversation` (fonctions de déclencheur) exécutables par l'API,
-  protection des mots de passe divulgués désactivée.
+Lecture seule (n'ouvre aucune session). Clés historiques conservées, plus :
+
+```json
+{
+  "plan": "pro", "date": "2026-10-17",
+  "messages_used": 1, "messages_limit": 200, "messages_remaining": 199,
+  "tokens_used": 46, "tokens_limit": 100000, "tokens_remaining": 99954,
+  "resets_in": 36000, "resets_at": "2026-10-18T00:00:00+00:00",
+  "llm_provider": "anthropic", "llm_model": "claude-opus-5-5",
+  "critical_threshold_percent": 80, "exception": false,
+  "session": {"active": true, "id": "…", "started_at": "…", "ends_at": "…",
+              "resets_in": 18000, "duration_minutes": 300,
+              "messages_used": 1, "messages_limit": 50, "messages_remaining": 49,
+              "tokens_used": 46, "tokens_limit": 30000, "tokens_remaining": 29954},
+  "fournisseur_actif": {"llm_provider": "anthropic", "llm_model": "claude-opus-5-5",
+                        "routage_abonnement": true}
+}
+```
+
+`llm_provider` / `llm_model` : l'offre ; `fournisseur_actif` : ce qui sert
+réellement (diffère tant que le routage est désactivé). Sans session en
+cours : `session.active = false`, limites et durée de l'offre. Les événements
+SSE `meta` / `done` portent le même objet `quota`. En-têtes ajoutés :
+`X-Quota-Session-Messages-Remaining`, `X-Quota-Session-Tokens-Remaining`,
+`X-Quota-Session-Reset`.
+
+## 7. Protection financière
+
+Actives : plafonds de sortie (`CHAT_MAX_OUTPUT_TOKENS`,
+`COMPREHENSION_MAX_OUTPUT_TOKENS`, lots, marge de réflexion), quotas
+jour + session en tokens, **refus avant l'appel** si l'entrée estimée dépasse
+déjà les tokens restants (jour ou session, `QuotaService.budget_depasse`),
+budget d'entrée WhatsApp par fournisseur, aucun repli vers un autre
+fournisseur. Suivi : `llm_usage` / `admin.consommation_llm` (coût estimé =
+tokens × tarif ; tarifs non stockés).
+
+À définir (votre décision) : un plafond en dollars (par jour / mois, par
+compte ou global) et les limites de dépense dans les consoles Anthropic et
+GroqCloud. Les quotas en tokens ne sont pas un plafond financier : un même
+token coûte différemment selon le fournisseur, l'entrée ou la sortie.
+
+## 8. Activation et retour arrière
+
+1. Déployer la nouvelle image (`docker compose build api && docker compose up -d api`)
+   avec `ABONNEMENTS_ROUTAGE=false` : quotas jour + session de `plan_config`
+   actifs, fournisseur inchangé (Claude pour tous).
+2. Activer le routage : `ABONNEMENTS_ROUTAGE=true` dans `.env`, puis
+   `docker compose up -d api` (vérifier que `OPENAI_API_KEY` GroqCloud est
+   présente pour les comptes Free).
+3. Retour arrière : `ABONNEMENTS_ROUTAGE=false` + `docker compose up -d api` ;
+   code : image `backend-api:avant-mia` / tag Git
+   `sauvegarde-avant-abonnements-phase2` ; base : la migration est additive
+   (les anciens backends lisent toujours `users`).
+
+Instance de test (isolée) : `jarvis-api-abo`, port 8001, image
+`backend-api:abo-test`, Redis base 1, `ABONNEMENTS_ROUTAGE=true`.
+
+## 9. Limitations
+
+- GroqCloud : limite de débit **par organisation** (≈ 8 000 tokens / min,
+  ≈ 200 000 / jour vus en test), partagée par tous les comptes Free.
+- La dernière requête d'une fenêtre peut dépasser légèrement la limite de
+  tokens (coût exact connu après) ; bornée par les plafonds de sortie et le
+  refus avant appel.
+- Avec Redis indisponible, contrôle non atomique sur Supabase (mode dégradé).
+- Flutter actuel : un 429 de session affiche encore l'heure de réinitialisation
+  du jour (`quota.resets_in`) ; la phase 3 utilisera `detail.resets_in`.
+- Avis Supabase préexistants (hors chantier) : `handle_new_user`,
+  `touch_conversation` exécutables par l'API ; protection des mots de passe
+  divulgués désactivée.

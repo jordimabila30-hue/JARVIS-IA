@@ -85,9 +85,9 @@ from ...comprehension.attribution import CorrecteurAttributions
 from ...comprehension.moteur import MoteurComprehension, Preparation, choisir
 from ...comprehension.references import FiltreReperes, entree_stockee, verifier
 from ...config import Settings, get_settings
-from ...quota import QuotaReservation, QuotaService, enforce_quota, get_quota_service
+from ...quota import QuotaReservation, QuotaService, enforce_quota, get_quota_service, quota_exceeded
 from ...redis_client import get_redis
-from ...supabase_client import SupabaseAdmin, get_supabase
+from ...supabase_client import SupabaseAdmin, UserLimits, get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -202,15 +202,30 @@ def selection_autorisee(user: AuthUser, settings: Settings) -> bool:
     return selection.choix_manuel_possible(settings) and user.id in settings.llm_admins
 
 
-def get_fournisseur(
+def fournisseur_attendu(limites: UserLimits | None, settings: Settings) -> tuple[str, str | None]:
+    """(fournisseur, modèle) qui servira ce compte : celui de son offre
+    (plan_config) si ABONNEMENTS_ROUTAGE est actif, sinon LLM_PROVIDER pour tous.
+    Seule source de cette règle (route de chat, « Reprendre », /me/quota)."""
+    if settings.abonnements_routage:
+        if limites is None or not limites.llm_provider:
+            raise FournisseurNonConfigure("Offre sans fournisseur IA (plan_config).")
+        return limites.llm_provider, limites.llm_model
+    nom = selection.nom_configure(settings)
+    return nom, selection.modele_configure(nom, settings)
+
+
+async def get_fournisseur(
     request: Request,
     user: AuthUser = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    quota_service: QuotaService = Depends(get_quota_service),
 ) -> FournisseurLLM:
-    """Fournisseur de la requête : celui de la configuration (Claude par
-    défaut). Un fournisseur demandé par l'en-tête n'est jamais accepté sans
-    autorisation côté serveur. Résolu AVANT la réservation du quota : un
-    refus ici ne consomme rien."""
+    """Fournisseur de la requête, d'après l'identité vérifiée (JWT) :
+    l'offre du compte (routage par abonnement : Free → GroqCloud, Pro →
+    Claude), ou LLM_PROVIDER si ce routage est désactivé. Le corps de la
+    requête n'y joue aucun rôle ; l'en-tête n'est accepté que pour les tests
+    autorisés. Aucun repli vers un autre fournisseur. Résolu AVANT la
+    réservation du quota : un refus ici ne consomme rien."""
     demande = (request.headers.get(ENTETE_FOURNISSEUR) or "").strip()
     if demande and not selection_autorisee(user, settings):
         logger.warning("Choix manuel du fournisseur refusé (compte non autorisé ou production)")
@@ -218,7 +233,12 @@ def get_fournisseur(
             "code": "fournisseur_interdit",
             "message": "Le choix du fournisseur IA est réservé aux tests autorisés."})
     try:
-        llm = selection.fournisseur(demande or None, settings)
+        if demande:
+            llm = selection.fournisseur(demande, settings)
+        else:
+            limites = await quota_service.get_limits(user.id) if settings.abonnements_routage else None
+            nom, modele = fournisseur_attendu(limites, settings)
+            llm = selection.fournisseur(nom, settings, modele) if limites else selection.fournisseur(None, settings)
     except FournisseurInconnu as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             detail={"code": "fournisseur_inconnu", "message": str(exc)}) from None
@@ -315,6 +335,7 @@ async def finalize_exchange(
     prompt_tokens: int,
     completion_tokens: int,
     model: str,
+    provider: str | None = None,
     attachments: list[dict] | None = None,
 ) -> None:
     """[user_row] None : la question est une consigne déjà enregistrée
@@ -346,7 +367,11 @@ async def finalize_exchange(
     except httpx.HTTPError:
         logger.error("Échec d'enregistrement des messages (conversation=%s)", conversation_id, exc_info=True)
 
-    await quota_service.record_usage(reservation, prompt_tokens + completion_tokens)
+    # Une seule comptabilisation (jour, session, suivi par fournisseur), lots
+    # de propositions compris.
+    await quota_service.record_usage(reservation, prompt_tokens + completion_tokens,
+                                     tokens_input=prompt_tokens, tokens_output=completion_tokens,
+                                     provider=provider, model=model)
 
     try:
         await append_context(
@@ -627,6 +652,15 @@ async def chat_stream(
         ]
         max_sortie = plafond(llm, settings.chat_max_output_tokens, settings)
 
+    # Contrôle avant l'appel facturable : une demande dont l'entrée estimée
+    # dépasse déjà les tokens restants (jour ou session) n'est pas envoyée.
+    depassement = quota_service.budget_depasse(
+        reservation, estimate_tokens("".join(m["content"] for m in prompt)))
+    if depassement:
+        await quota_service.release(reservation)
+        logger.info("Demande refusée avant l'appel : %s", depassement)
+        raise quota_exceeded(depassement, reservation.status)
+
     demande_id = consigne["id"] if consigne is not None else user_row["id"]
 
     async def event_stream():
@@ -843,6 +877,7 @@ async def chat_stream(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 model=fin.modele if fin is not None else llm.modele,
+                provider=llm.nom,
                 attachments=stockees,
             ))
 

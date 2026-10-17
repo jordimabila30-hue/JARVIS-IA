@@ -437,6 +437,12 @@ revoke all on admin.conversations_lisibles, admin.messages_lisibles, admin.quota
 -- session, durée de session, seuil critique), modifiable dans l'éditeur de
 -- tables ; aucun accès client ; service_role en lecture seule.
 -- Doc : docs/backend/ABONNEMENTS.md. Appliquée sur « Jarvis » le 2026-10-17.
+-- Phase 2 : migration 20261017160000_abonnements_sessions.sql (appliquée le
+-- 2026-10-17) : users.limits_override (exception explicite), fonction
+-- limites_effectives (seul calcul des limites), get_my_quota sur ces limites,
+-- usage_sessions + ouvrir_session / session_active / increment_session_usage,
+-- llm_usage + increment_llm_usage, vues admin.limites_appliquees et
+-- admin.consommation_llm.
 
 -- =============================================================================
 -- Administration (exemples, à exécuter manuellement avec un rôle admin)

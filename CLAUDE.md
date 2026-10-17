@@ -234,12 +234,12 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — raccordé à chat_stream, appel_lot, contexts.completer (phase 2)
-├── tests/                            # pytest (393, dont test_llm_* et test_mia_* avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
+├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour ET par session selon l'abonnement (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — raccordé à chat_stream, appel_lot, contexts.completer (phase 2)
+├── tests/                            # pytest (417, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
-supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages), offres Free & Pro (plan_config)
+supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages), offres Free & Pro (plan_config), abonnements phase 2 (limites_effectives, usage_sessions, llm_usage)
 supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)

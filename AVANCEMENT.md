@@ -1298,3 +1298,31 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - Règle de priorité offre / limites personnelles : rendre la dérogation explicite (les colonnes `users.daily_*` ont des valeurs par défaut et `NULL` = illimité) — transformation de données à valider ; le compte Pro (60 / 100 000) resterait une dérogation plus basse que l'offre Pro.
 - Sessions : table `usage_sessions` + compteur Redis (conception dans la doc).
 - Avis Supabase préexistants (hors chantier) : `handle_new_user`, `touch_conversation` exécutables par l'API ; protection des mots de passe divulgués désactivée.
+
+## 2026-10-17 — Abonnements Free & Pro, phase 2 (backend, sessions, routage MIA)
+
+### Fait
+- Point de restauration : tag `sauvegarde-avant-abonnements-phase2` (sur `fdeb10e`).
+- Migration `supabase/migrations/20261017160000_abonnements_sessions.sql` (additive, ré-exécutable), **appliquée** sur « Jarvis » : `users.limits_override` (exception explicite, `false` par défaut), fonction `limites_effectives` (seul calcul : offre `plan_config`, sauf exception ; `NULL` = illimité gardé pour les exceptions), `get_my_quota` sur ces limites (même signature), `usage_sessions` + `session_active` / `ouvrir_session` (verrou par compte) / `increment_session_usage`, `llm_usage` + `increment_llm_usage` (suivi par fournisseur et modèle), vues `admin.limites_appliquees` et `admin.consommation_llm`.
+- Compte Pro existant : suit désormais l'offre Pro (**200 msg / 100 000 tokens par jour**, session 300 min, 50 / 30 000) ; anciennes valeurs 60 / 100 000 conservées mais ignorées ; aucun autre changement de données.
+- Backend : `supabase_client` (limites effectives par RPC, sessions, suivi) ; `quota.py` réécrit (cache JSON 30 s, script Lua unique jour + session atomique, réhydratation, ouverture de session après contrôle du jour, `release` sur les deux, `record_usage` unique avec entrée / sortie / fournisseur, mode dégradé, 429 typé avec `resets_in` / `resets_at`, `budget_depasse`) ; `chat.get_fournisseur` asynchrone : routage par l'offre si `ABONNEMENTS_ROUTAGE=true` (désactivé par défaut), en-tête réservé aux tests, 503 sans repli ; refus avant l'appel facturable si l'entrée estimée dépasse le reste ; `contexts.completer` comptabilisé avec le fournisseur ; `/me/quota` (session, offre, seuil, `resets_at`, `fournisseur_actif`) ; en-têtes `X-Quota-Session-*` ; `selection.fournisseur(nom, settings, modele)` ; `scripts/set_plan.py` (héritage par défaut, `--messages / --tokens / --illimite` = exception).
+- Configuration : `ABONNEMENTS_ROUTAGE=false`, `QUOTA_LIMITS_CACHE_TTL=30` (défaut, `.env.example`, et `.env` privé : 300 → 30).
+- Doc : `docs/backend/ABONNEMENTS.md` (réécrite : tables, procédures Supabase, quotas, sessions, routage, `/me/quota`, protection financière, activation / retour arrière, limitations) ; `supabase/schema.sql` ; CLAUDE.md.
+
+### Tests (aucun appel API réel)
+- SQL (PostgreSQL local jetable) : **132 réussis**, 0 échec (27 nouveaux, `60_abonnements_sessions_test.sql` : héritage, modification d'offre, exception activée / désactivée, ouverture / reprise / renouvellement de session, durée pour les nouvelles sessions, consommation par compte, suivi, vues, droits).
+- Backend (pytest, image `backend-api` + dépôt monté) : **417 réussis**, 0 échec (393 existants inchangés + 24 `test_abonnements.py` : Free → GroqCloud, Pro → Claude, contournement refusé, admin de test, routage désactivé, fournisseur non configuré sans repli, cache 30 s, exception, compte Pro sur l'offre, session de 5 h, limite de session et renouvellement sans toucher au jour, tokens de session, jour épuisé sans session, redémarrage / réouverture = même session, appareils = même consommation, 80 appels simultanés → exactement 50, release, durée modifiée, comptabilisation unique + suivi, suivi jamais bloquant, chat compté dans jour / session / fournisseur, refus avant l'appel sans appel facturable, `/me/quota`).
+- Mutation volontaire (contrôle de session retiré, copie jetable) : 2 tests en échec → les tests détectent la faille.
+- Base réelle : limites appliquées au compte (vue admin), droits (authenticated / anon : aucun ; service_role : fonctions, aucune écriture directe), RLS ; données identiques (1 compte, `quota_usage` 4 lignes 99 / 135 209, 4 conversations, 12 messages) ; avis de sécurité : seulement « RLS sans politique » (voulu) pour `llm_usage` / `plan_config`.
+- Instance de test `jarvis-api-abo` (port 8001, image `backend-api:abo-test`, routage ACTIF) : santé ok ; sans appel IA : compte Pro → anthropic / claude-opus-5-5, compte Free → groq / openai/gpt-oss-120b.
+- Production `jarvis-api` : non modifiée (image `1e0a52b54b6f`, démarrée à 11:52, Claude pour tous, anciennes limites jusqu'au déploiement).
+
+### Limitations
+- GroqCloud : limite de débit par organisation, partagée par tous les comptes Free.
+- Aucun plafond en dollars (à décider) ; tarifs non stockés.
+- Flutter actuel : un 429 de session affiche l'heure de réinitialisation du jour (phase 3).
+- Aucun essai réel des sessions avec l'application (prévu après accord).
+
+### Prochaine étape
+- Accord pour déployer (quotas jour + session) puis activer le routage (`ABONNEMENTS_ROUTAGE=true`).
+- Phase 3 : jauges Flutter à partir de `/me/quota`.

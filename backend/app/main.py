@@ -8,9 +8,9 @@ from redis.exceptions import RedisError
 
 from . import console
 from .api.v1 import chat, contexts, local_exchanges
-from .llm import selection
+from .llm import FournisseurNonConfigure, selection
 from .auth import AuthUser, get_current_user
-from .config import get_settings
+from .config import Settings, get_settings
 from .horloge import (
     close_surveillance_horloge,
     get_surveillance_horloge,
@@ -45,6 +45,8 @@ async def lifespan(app: FastAPI):
         logger.info("Fournisseur IA : %s", actif)
     else:
         logger.error("Fournisseur IA « %s » non configuré : le chat répondra 503 (llm_config).", actif)
+    logger.info("Routage par abonnement : %s", "ACTIF (offre du compte, plan_config)"
+                if settings.abonnements_routage else f"inactif ({actif} pour tous)")
     yield
     await close_surveillance_horloge()
     # Laisse les sauvegardes de fin de flux se terminer avant de fermer les clients.
@@ -69,6 +71,9 @@ app.add_middleware(
         "X-Quota-Tokens-Limit",
         "X-Quota-Tokens-Remaining",
         "X-Quota-Reset",
+        "X-Quota-Session-Messages-Remaining",
+        "X-Quota-Session-Tokens-Remaining",
+        "X-Quota-Session-Reset",
         "Retry-After",
     ],
 )
@@ -130,7 +135,20 @@ async def my_quota(
     response: Response,
     user: AuthUser = Depends(get_current_user),
     service: QuotaService = Depends(get_quota_service),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
+    """Utilisation du compte (jauges de l'app) : abonnement, offre (fournisseur,
+    modèle, seuil critique), jour (utilisé / autorisé, réinitialisation à
+    minuit UTC), session (utilisée / autorisée, durée, fin) et fournisseur
+    réellement utilisé. Lecture seule : n'ouvre aucune session."""
     quota = await service.get_status(user.id)
     response.headers.update(quota.headers())
-    return quota.to_dict()
+    donnees = quota.to_dict()
+    try:
+        nom, modele = chat.fournisseur_attendu(await service.get_limits(user.id), settings)
+    except FournisseurNonConfigure:
+        nom = modele = None
+    donnees["fournisseur_actif"] = {
+        "llm_provider": nom, "llm_model": modele, "routage_abonnement": settings.abonnements_routage,
+    }
+    return donnees

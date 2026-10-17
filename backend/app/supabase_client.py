@@ -8,16 +8,48 @@ contrôle total des timeouts.
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 
 
 @dataclass(frozen=True)
 class UserLimits:
+    """Limites EFFECTIVES d'un compte (fonction SQL `limites_effectives` :
+    offre `plan_config`, sauf exception explicite `users.limits_override`)."""
+
     plan: str
     daily_message_limit: int | None  # None = illimité
     daily_token_limit: int | None
+    llm_provider: str | None = None           # fournisseur de l'offre (MIA universel)
+    llm_model: str | None = None
+    session_duration_minutes: int | None = None   # None : pas de quota de session
+    session_message_limit: int | None = None
+    session_token_limit: int | None = None
+    critical_threshold_percent: int | None = None
+    exception: bool = False                    # limites personnelles actives
+
+
+@dataclass(frozen=True)
+class SessionUsage:
+    """Une ligne de `usage_sessions` (heures du serveur)."""
+
+    id: str
+    plan: str
+    started_at: datetime
+    ends_at: datetime
+    messages_used: int = 0
+    tokens_used: int = 0
+
+    @classmethod
+    def depuis_ligne(cls, ligne: dict) -> "SessionUsage":
+        return cls(
+            id=str(ligne["id"]), plan=ligne["plan"],
+            started_at=datetime.fromisoformat(ligne["started_at"]),
+            ends_at=datetime.fromisoformat(ligne["ends_at"]),
+            messages_used=int(ligne.get("messages_used") or 0),
+            tokens_used=int(ligne.get("tokens_used") or 0),
+        )
 
 
 class SupabaseAdmin:
@@ -34,23 +66,54 @@ class SupabaseAdmin:
         )
 
     async def get_user_limits(self, user_id: str) -> UserLimits | None:
-        resp = await self._http.get(
-            "/users",
-            params={
-                "id": f"eq.{user_id}",
-                "select": "plan,daily_message_limit,daily_token_limit",
-            },
-        )
+        """Limites effectives (offre ou exception), calculées en SQL : une
+        seule source de vérité pour le backend, get_my_quota et la vue admin."""
+        resp = await self._http.post("/rpc/limites_effectives", json={"p_user_id": user_id})
         resp.raise_for_status()
         rows = resp.json()
         if not rows:
-            return None
+            return None     # compte inconnu, ou offre absente de plan_config
         row = rows[0]
         return UserLimits(
             plan=row["plan"],
             daily_message_limit=row["daily_message_limit"],
             daily_token_limit=row["daily_token_limit"],
+            llm_provider=row["llm_provider"],
+            llm_model=row["llm_model"],
+            session_duration_minutes=row["session_duration_minutes"],
+            session_message_limit=row["session_message_limit"],
+            session_token_limit=row["session_token_limit"],
+            critical_threshold_percent=row["critical_threshold_percent"],
+            exception=bool(row["limits_override"]),
         )
+
+    # --- Sessions d'utilisation -------------------------------------------------
+
+    async def session_active(self, user_id: str) -> SessionUsage | None:
+        resp = await self._http.post("/rpc/session_active", json={"p_user_id": user_id})
+        resp.raise_for_status()
+        rows = resp.json()
+        return SessionUsage.depuis_ligne(rows[0]) if rows else None
+
+    async def ouvrir_session(self, user_id: str, plan: str, duree_minutes: int) -> SessionUsage:
+        """Session en cours, ou nouvelle (verrou par compte côté SQL)."""
+        resp = await self._http.post("/rpc/ouvrir_session", json={
+            "p_user_id": user_id, "p_plan": plan, "p_duree_minutes": duree_minutes})
+        resp.raise_for_status()
+        return SessionUsage.depuis_ligne(resp.json())
+
+    async def increment_session_usage(self, session_id: str, user_id: str, messages: int, tokens: int) -> None:
+        resp = await self._http.post("/rpc/increment_session_usage", json={
+            "p_session_id": session_id, "p_user_id": user_id, "p_messages": messages, "p_tokens": tokens})
+        resp.raise_for_status()
+
+    async def increment_llm_usage(self, user_id: str, provider: str, model: str,
+                                  requests: int, tokens_input: int, tokens_output: int) -> None:
+        """Suivi des coûts estimés : tokens par jour, fournisseur et modèle."""
+        resp = await self._http.post("/rpc/increment_llm_usage", json={
+            "p_user_id": user_id, "p_provider": provider, "p_model": model,
+            "p_requests": requests, "p_input": tokens_input, "p_output": tokens_output})
+        resp.raise_for_status()
 
     async def get_daily_usage(self, user_id: str, day: date) -> tuple[int, int]:
         """Renvoie (messages_used, tokens_used) pour le jour UTC donné."""
@@ -80,17 +143,16 @@ class SupabaseAdmin:
         resp.raise_for_status()
 
     async def set_user_plan(
-        self, user_id: str, plan: str, daily_message_limit: int | None, daily_token_limit: int | None
+        self, user_id: str, plan: str, *, exception: bool = False,
+        daily_message_limit: int | None = None, daily_token_limit: int | None = None,
     ) -> None:
-        resp = await self._http.patch(
-            "/users",
-            params={"id": f"eq.{user_id}"},
-            json={
-                "plan": plan,
-                "daily_message_limit": daily_message_limit,
-                "daily_token_limit": daily_token_limit,
-            },
-        )
+        """Abonnement d'un compte. Sans exception : il suit son offre
+        (plan_config), ses anciennes limites personnelles ne sont pas lues.
+        Avec exception : limites personnelles (None = illimité)."""
+        champs: dict = {"plan": plan, "limits_override": exception}
+        if exception:
+            champs |= {"daily_message_limit": daily_message_limit, "daily_token_limit": daily_token_limit}
+        resp = await self._http.patch("/users", params={"id": f"eq.{user_id}"}, json=champs)
         resp.raise_for_status()
 
     async def find_user_id(self, email: str) -> str | None:

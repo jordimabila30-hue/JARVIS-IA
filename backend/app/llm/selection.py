@@ -39,7 +39,7 @@ def _exiger(valeur: str | None, variable: str, nom: str) -> str:
     return valeur
 
 
-def _anthropic(settings: Settings) -> FournisseurLLM:
+def _anthropic(settings: Settings, modele: str | None = None) -> FournisseurLLM:
     from .anthropic import FournisseurAnthropic
 
     effort = (settings.anthropic_effort or "").strip().lower() or None
@@ -48,26 +48,29 @@ def _anthropic(settings: Settings) -> FournisseurLLM:
             f"Fournisseur « anthropic » mal configuré : ANTHROPIC_EFFORT doit valoir {', '.join(EFFORTS)}.")
     return FournisseurAnthropic(
         cle=_exiger(settings.anthropic_api_key, "ANTHROPIC_API_KEY", "anthropic"),
-        modele=_exiger(settings.anthropic_model, "ANTHROPIC_MODEL", "anthropic"),
+        modele=_exiger(modele or settings.anthropic_model, "ANTHROPIC_MODEL", "anthropic"),
         effort=effort,
         budget_comprehension=settings.anthropic_comprehension_budget_tokens,
     )
 
 
-def _groq(settings: Settings) -> FournisseurLLM:
+def _groq(settings: Settings, modele: str | None = None) -> FournisseurLLM:
     from .groq import FournisseurGroq
 
     return FournisseurGroq(
         cle=_exiger(settings.openai_api_key, "OPENAI_API_KEY", "groq"),
-        modele=_exiger(settings.openai_model, "OPENAI_MODEL", "groq"),
+        modele=_exiger(modele or settings.openai_model, "OPENAI_MODEL", "groq"),
         base_url=settings.openai_base_url,
     )
 
 
-FABRIQUES: dict[str, Callable[[Settings], FournisseurLLM]] = {
+# fabrique(settings, modele) : modele None = modèle de la configuration.
+FABRIQUES: dict[str, Callable[..., FournisseurLLM]] = {
     "anthropic": _anthropic,
     "groq": _groq,
 }
+
+_MODELES_CONFIGURES = {"anthropic": "anthropic_model", "groq": "openai_model"}
 
 
 def nom_configure(settings: Settings | None = None) -> str:
@@ -75,15 +78,23 @@ def nom_configure(settings: Settings | None = None) -> str:
     return (settings.llm_provider or FOURNISSEUR_DEFAUT).strip().lower() or FOURNISSEUR_DEFAUT
 
 
-def creer(nom: str | None = None, settings: Settings | None = None) -> FournisseurLLM:
-    """Nouveau fournisseur [nom] (celui de la configuration si None)."""
+def modele_configure(nom: str, settings: Settings | None = None) -> str | None:
+    """Modèle de la configuration (.env) pour [nom]."""
+    settings = settings or get_settings()
+    attribut = _MODELES_CONFIGURES.get(nom)
+    return getattr(settings, attribut, None) if attribut else None
+
+
+def creer(nom: str | None = None, settings: Settings | None = None, modele: str | None = None) -> FournisseurLLM:
+    """Nouveau fournisseur [nom] (celui de la configuration si None), avec
+    [modele] (abonnement) ou celui de la configuration."""
     settings = settings or get_settings()
     nom = (nom or nom_configure(settings)).strip().lower()
     fabrique = FABRIQUES.get(nom)
     if fabrique is None:
         raise FournisseurInconnu(
             f"Fournisseur inconnu : « {nom} » (connus : {', '.join(sorted(FABRIQUES))}).")
-    return fabrique(settings)
+    return fabrique(settings, (modele or "").strip() or None)
 
 
 def choix_manuel_possible(settings: Settings | None = None) -> bool:
@@ -110,13 +121,17 @@ def configures(settings: Settings | None = None) -> dict[str, bool]:
 _instances: dict[str, FournisseurLLM] = {}
 
 
-def fournisseur(nom: str | None = None, settings: Settings | None = None) -> FournisseurLLM:
+def fournisseur(nom: str | None = None, settings: Settings | None = None,
+                modele: str | None = None) -> FournisseurLLM:
     """Instance partagée du fournisseur [nom] (celui de la configuration si
-    None), créée au premier appel avec [settings]."""
+    None) et du [modele] (abonnement ; None : celui de la configuration),
+    créée au premier appel avec [settings]. Une instance par couple."""
     nom = (nom or nom_configure(settings)).strip().lower()
-    if nom not in _instances:
-        _instances[nom] = creer(nom, settings)
-    return _instances[nom]
+    modele = (modele or "").strip() or None
+    cle = nom if modele is None else f"{nom}:{modele}"
+    if cle not in _instances:
+        _instances[cle] = creer(nom, settings, modele)
+    return _instances[cle]
 
 
 async def fermer_tous() -> None:

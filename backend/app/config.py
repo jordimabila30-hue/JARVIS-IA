@@ -15,7 +15,9 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
-    quota_limits_cache_ttl: int = 300
+    # Cache des limites effectives (plan_config + abonnement) : délai maximal
+    # avant qu'une modification faite dans Supabase s'applique.
+    quota_limits_cache_ttl: int = 30
 
     # MIA universel (app/llm/) : fournisseur de toutes les demandes ordinaires.
     llm_provider: str = "anthropic"
@@ -35,6 +37,10 @@ class Settings(BaseSettings):
     # comparaisons seulement. Refusé en production et hors de LLM_ADMINS
     # (identifiants Supabase des comptes autorisés).
     environnement: str = "production"
+    # Abonnements, phase 2 : true = fournisseur et modèle de l'offre du compte
+    # (plan_config : Free → groq, Pro → anthropic) ; false = LLM_PROVIDER pour
+    # tous (comportement actuel). Activation contrôlée, retour arrière = false.
+    abonnements_routage: bool = False
     llm_selection_manuelle: bool = False
     llm_admins: list[str] = []
 
