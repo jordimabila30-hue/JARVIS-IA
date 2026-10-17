@@ -1234,3 +1234,46 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Reste
 - Essai depuis l'application Flutter (écrit, vocal, WhatsApp) sur la production ; commit de la phase 2 (rien n'est commité).
+
+## 2026-10-17 — Validation de MIA universel dans les applis (Android, Windows, Web)
+
+### Méthode (économie de tokens)
+- Instance de test `jarvis-api-mia` (port 8001, image de la phase 2, Redis base 1) à plafonds réduits : `CHAT_MAX_OUTPUT_TOKENS=300`, `LLM_REFLEXION_MARGE_TOKENS=700`, `ANTHROPIC_EFFORT=low` (pire cas ≈ 0,022 $ par appel) ; modèle inchangé (`claude-opus-5-5`). Applis : `flutter run --dart-define=JARVIS_API_URL=http://127.0.0.1:8001` ; S10+ : `adb reverse tcp:8001 tcp:8001` ; Web : port 3000 (CORS ok).
+- Budget : `backend/scripts/budget_mia.py` (lecture seule : tokens enregistrés dans `messages`, coût majorant, arrêt si la prochaine requête peut dépasser 0,20 $ ; ne voit pas les lots de « Reprendre »).
+- Gratuit d'abord : 150 tests Flutter (chat IA, écriture progressive, vocal, JARVIS Touch, synchronisation, WhatsApp) réussis ; WhatsApp, propositions, « Reprendre », erreurs : résultats réels du matin réutilisés (aucune nouvelle analyse).
+
+### Résultats réels (4 appels, une seule conversation partagée)
+| # | Plateforme | Tokens (entrée + sortie) | Coût | Premier fragment |
+|---|---|---|---|---|
+| 1 | S10+ écrit | 200 + 83 | 0,0025 $ | 2,9 s |
+| 2 | S10+ vocal | 293 + 37 | 0,0019 $ | 2,5 s |
+| 3 | Windows écrit | 338 + 90 | 0,0032 $ | 3,7 s |
+| 4 | Web (Chrome) écrit | 440 + 117 | 0,0041 $ | 3,7 s |
+- Total : **0,0116 $** / 0,20 $.
+- S10+ : authentification, écrit (points animés puis écriture progressive), vocal (transcription, réponse de Claude, PIM), retour à l'écrit (échange vocal dans le fil, micro coupé), JARVIS Touch (menu, mini-chat = même conversation, 4 messages, sans envoi).
+- Windows et Web : conversation synchronisée (messages du téléphone visibles), questions dépendantes de l'historique correctement comprises (« comme le ZIP », « Lequel des deux »), affichage progressif ; Web : préflight CORS + POST ok.
+- Supabase : 1 conversation, 8 messages pour 4 échanges (aucun doublon), `model = claude-opus-5-5` sur les 4 réponses. Quotas JARVIS : compteurs Redis à jour (15 requêtes, 31 086 tokens ce jour). Journal de l'instance : 0 erreur.
+- Non testés en réel (volontairement, coût) : nouvelle analyse WhatsApp, interruption de flux, envoi depuis le mini-chat, phrase vocale sur Windows / Web (couverts par les tests automatiques ou les essais du matin).
+- Rappel : la production (port 8000) est sur MIA / Claude depuis 11:52 UTC (déploiement autorisé à l'étape D) ; rien n'est commité pour cette validation (`scripts/budget_mia.py` et cette entrée).
+
+## 2026-10-17 — Clôture de MIA universel
+
+### Coût réel de la campagne (lecture Supabase, aucun appel)
+- 9 réponses de Claude enregistrées : 13 767 tokens d'entrée + 3 239 de sortie = **0,120 $** (essais backend du matin 0,108 $ ; applis 0,012 $).
+- Lots de « Reprendre » (non enregistrés comme messages) : ≈ 11 300 tokens d'après `quota_usage` (31 086 tokens ce jour − réponses Claude − 2 799 tokens GroqCloud) ; coût estimé 0,05-0,23 $, probablement ≈ 0,11 $.
+- **Total estimé ≈ 0,23 $** (fourchette 0,17-0,35 $) ; la console Anthropic fait foi. `scripts/budget_mia.py` est conservé (suivi des prochaines campagnes, ODO).
+
+### Remise en état (gratuit)
+- Sessions `flutter run` de test arrêtées (Android, Windows, Chrome) ; aucune appli de test ne tourne.
+- APK Android réinstallée vers le backend habituel (`JARVIS_API_URL=http://127.0.0.1:8000`, configuration USB documentée) ; redirection ADB : 8001 retirée, `tcp:8000` remise. Windows et Web visent `localhost:8000` par défaut (aucune définition nécessaire).
+- Instance de test `jarvis-api-mia` (8001) arrêtée ; `jarvis-api` (production, image `1e0a52b54b6f`, Claude) et `jarvis-redis` inchangés. Images gardées : `backend-api:avant-mia` (retour arrière), `backend-api:mia-test`.
+
+### Limitations restantes
+- Le téléphone n'atteint le backend local que par USB (`adb reverse`) ou par l'adresse du PC sur le réseau : vrai hébergement à venir (`deploy/oracle/`).
+- Durée des propositions WhatsApp avec Opus 5.5 : ≈ 8-25 s par lot (≈ 50 s pour un ensemble complet) ; mesure d'un modèle plus rapide pour les lots = décision à prendre.
+- `budget_mia.py` ne voit pas les lots de « Reprendre » (seulement les réponses enregistrées).
+- Base Redis 1 : quelques clés de test (contexte court, quotas) qui expirent seules ; non supprimées.
+- Hors MIA, préexistant : `SourceConversation.jarvis` référence `assets/logos/jarvis.png`, absent du dépôt (404 vu sur le Web).
+
+### Prochaine étape
+- ODO (orchestrateur d'outils) sur le contrat `FournisseurLLM` (place réservée : `DefinitionOutil`, `AppelOutil`, `RaisonArret.OUTIL`).
