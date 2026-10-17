@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 
 import '../models/importation/propositions_reponse.dart';
 import '../models/importation/reference_whatsapp.dart';
+import '../models/utilisation/utilisation.dart';
+import '../utils/format_utilisation.dart';
 import 'flux_sse.dart';
 
 /// Compte tel que le backend JARVIS (FastAPI) le reconnaît, d'après le
@@ -86,10 +88,11 @@ enum ErreurApi {
     'instant.',
   ),
 
-  /// Quota quotidien atteint (429) ; [EchecApi.detail] : quand il se
-  /// renouvelle.
+  /// Limite JARVIS atteinte (429 : jour ou session, messages ou tokens) ;
+  /// [EchecApi.detail] : message complet (limite et réinitialisation). Une
+  /// limite du fournisseur IA est distincte : [iaIndisponible].
   quotaAtteint(
-    'Vous avez atteint votre limite quotidienne d’utilisation de l’IA.',
+    'Vous avez atteint votre limite d’utilisation de l’IA.',
   ),
 
   /// Le fournisseur d'IA (GroqCloud) a échoué ; [EchecApi.detail] : le
@@ -238,7 +241,8 @@ class ApiJarvis {
     if (message.length > longueurMaxMessage) {
       return Future.value(const EchecApi(ErreurApi.messageTropLong));
     }
-    return _authentifie(
+    return _consommer(
+      () => _authentifie(
       (j) => _chat(
         j,
         message,
@@ -253,7 +257,38 @@ class ApiJarvis {
         longueurPropose: longueurPropose,
         surPreparation: surPreparation,
       ),
+      ),
     );
+  }
+
+  /// Appelé après chaque opération IA qui a pu consommer le quota (réponse
+  /// terminée, interrompue ou refusée, « Reprendre ») : l'application
+  /// actualise alors l'utilisation (`/me/quota`). Jamais pendant un flux.
+  void Function()? surConsommation;
+
+  Future<ResultatApi<T>> _consommer<T>(Future<ResultatApi<T>> Function() appel) async {
+    try {
+      return await appel();
+    } finally {
+      surConsommation?.call();
+    }
+  }
+
+  /// `GET /me/quota` : utilisation du compte calculée par le serveur
+  /// (offre Supabase, consommation du jour et de la session). Lecture
+  /// seule : n'appelle jamais l'IA, n'ouvre aucune session.
+  Future<ResultatApi<Utilisation>> utilisation() async {
+    final r = await _authentifie((j) => _json('GET', 'me/quota', j));
+    switch (r) {
+      case EchecApi(:final type, :final detail):
+        return EchecApi(type, detail: detail);
+      case SuccesApi(:final valeur):
+        try {
+          return SuccesApi(Utilisation.depuisJson(valeur));
+        } on FormatException {
+          return const EchecApi(ErreurApi.serveur, detail: 'réponse /me/quota illisible');
+        }
+    }
   }
 
   /// `POST /api/v1/conversations/local-exchanges` : enregistre un échange
@@ -435,6 +470,7 @@ class ApiJarvis {
         delaiAppel: const Duration(minutes: 2),
       ),
     );
+    surConsommation?.call();   // lots de propositions : quota consommé
     switch (r) {
       case EchecApi(:final type, :final detail):
         return EchecApi(type, detail: detail);
@@ -555,6 +591,8 @@ class ApiJarvis {
         );
       case 413:
         return echec(ErreurApi.pieceJointeTropVolumineuse);
+      case 429:
+        return echec(ErreurApi.quotaAtteint, messageLimite(utf8.decode(r.bodyBytes)));
       case 503:
         return echec(ErreurApi.indisponible, _detail(r.body));
       default:
@@ -682,7 +720,7 @@ class ApiJarvis {
         409 when _code(corps) == 'consentement_requis' => echec(
           ErreurApi.consentementRequis,
         ),
-        429 => echec(ErreurApi.quotaAtteint, _quota(corps)),
+        429 => echec(ErreurApi.quotaAtteint, messageLimite(corps)),
         422 => echec(ErreurApi.messageTropLong),
         503 => echec(ErreurApi.indisponible, _detail(corps)),
         _ => echec(ErreurApi.serveur, 'HTTP ${r.statusCode}'),
@@ -787,18 +825,29 @@ class ApiJarvis {
     }
   }
 
-  /// « Elle se renouvelle dans 3 h. » : lu dans le refus 429 du serveur
-  /// (secondes avant minuit UTC).
-  static String? _quota(String corps) {
+  /// Message complet d'un refus 429 du serveur, selon la limite atteinte
+  /// (`detail.kind`) et SA réinitialisation (`detail.resets_at` : fin de
+  /// session pour une limite de session, remise à zéro quotidienne sinon).
+  /// null : corps illisible (message générique).
+  static String? messageLimite(String corps, {DateTime? maintenant}) {
     try {
       final d = (jsonDecode(corps) as Map<String, dynamic>)['detail'];
-      final quota = d is Map<String, dynamic> ? d['quota'] : null;
-      final reste = quota is Map<String, dynamic> ? quota['resets_in'] : null;
-      if (reste is! int) return null;
-      final delai = reste < 3600
-          ? '${(reste / 60).ceil()} min'
-          : '${(reste / 3600).ceil()} h';
-      return 'Elle se renouvelle dans $delai.';
+      if (d is! Map<String, dynamic>) return null;
+      final quand = DateTime.tryParse(d['resets_at'] as String? ?? '');
+      final reprise = quand == null
+          ? ''
+          : ' ${repriseLimite(quand, maintenant ?? DateTime.now())}';
+      return switch (d['kind']) {
+        'session_messages' =>
+          'Vous avez atteint votre limite de messages pour cette session. '
+              'Réessayez après sa réinitialisation.$reprise',
+        'session_tokens' =>
+          'Vous avez atteint votre limite de tokens pour cette session. '
+              'Réessayez après sa réinitialisation.$reprise',
+        'messages' => 'Votre limite quotidienne de messages est atteinte.$reprise',
+        'tokens' => 'Votre limite quotidienne de tokens est atteinte.$reprise',
+        _ => null,
+      };
     } catch (_) {
       return null;
     }

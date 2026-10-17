@@ -3,7 +3,7 @@
 - **Phase 1** (2026-10-17) : configuration des offres dans Supabase (`plan_config`).
 - **Phase 2** (2026-10-17) : limites effectives, exceptions explicites, sessions,
   routage MIA par abonnement (activation contrôlée), `/me/quota`, suivi par fournisseur.
-- **Phase 3** (à venir) : jauges Flutter.
+- **Phase 3** (2026-10-17) : interface Utilisation Flutter (section 10).
 
 Règle : **`plan_config` définit les limites de chaque offre ; `users.plan` dit
 à quelle offre appartient un compte.** Une limite personnelle ne s'applique
@@ -181,8 +181,36 @@ Instance de test (isolée) : `jarvis-api-abo`, port 8001, image
   tokens (coût exact connu après) ; bornée par les plafonds de sortie et le
   refus avant appel.
 - Avec Redis indisponible, contrôle non atomique sur Supabase (mode dégradé).
-- Flutter actuel : un 429 de session affiche encore l'heure de réinitialisation
-  du jour (`quota.resets_in`) ; la phase 3 utilisera `detail.resets_in`.
+- (Corrigé en phase 3 : Flutter affiche la réinitialisation propre à la limite
+  atteinte, `detail.resets_at`.)
 - Avis Supabase préexistants (hors chantier) : `handle_new_user`,
   `touch_conversation` exécutables par l'API ; protection des mots de passe
   divulgués désactivée.
+
+## 10. Interface Utilisation (Flutter, phase 3)
+
+Paramètres → **Utilisation** (panneau) → **Voir les détails** (page). Tout
+vient de `GET /me/quota` : aucune limite, aucun fournisseur ni modèle n'est
+écrit dans l'application.
+
+| Fichier | Rôle |
+|---|---|
+| `lib/models/utilisation/utilisation.dart` | lecture de la réponse (`Utilisation`, `Jauge`, `SessionUtilisation`, `FournisseurIA`) ; `null` = illimité, rien d'inventé |
+| `lib/services/api_jarvis.dart` | `utilisation()` (`GET /me/quota`, jamais l'IA) ; `surConsommation` après chaque opération IA (réponse, interruption, refus, « Reprendre ») ; `messageLimite` (429) |
+| `lib/services/utilisation/service_utilisation.dart` | quand relire : ouverture, toutes les 30 s pendant l'affichage, 2 s après une opération IA, retour au premier plan, changement de compte, fin de session constatée ; jamais de lecture en double |
+| `lib/widgets/utilisation/jauge_utilisation.dart` | jauge en lecture seule, animée 450 ms ; bleu (`CouleursJarvis.signal`) puis orange (`CouleursJarvis.critique`) dès `critical_threshold_percent` ; « Limite atteinte » à 100 % |
+| `lib/widgets/utilisation/panneau_utilisation.dart` | synthèse : offre, fournisseur et modèle, session (la ressource la plus consommée, détail messages / tokens), messages et tokens du jour, réinitialisations |
+| `lib/pages/utilisation_page.dart` | détail : offre, fournisseur utilisé, session (début, fin, durée, restants), journée (restants, prochaine remise à zéro) |
+
+Délai d'affichage d'une modification faite dans Supabase : **≤ 30 s** de
+cache serveur + **≤ 30 s** d'actualisation périodique de l'écran ouvert
+(immédiat avec le bouton Actualiser une fois le cache serveur expiré).
+
+Limites atteintes (429) : message selon `detail.kind` (messages / tokens, du
+jour ou de la session) et SA réinitialisation (`detail.resets_at` : fin de
+session, jamais minuit pour une limite de session). La limite d'un
+fournisseur IA (événement `error` du flux) reste un message distinct.
+
+Routage par abonnement inactif : la page indique le fournisseur réellement
+utilisé (`fournisseur_actif`) en plus de celui de l'offre ; elle n'annonce
+jamais un fournisseur qui ne sert pas.

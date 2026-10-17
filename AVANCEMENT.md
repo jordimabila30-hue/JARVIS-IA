@@ -1326,3 +1326,26 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - Accord pour déployer (quotas jour + session) puis activer le routage (`ABONNEMENTS_ROUTAGE=true`).
 - Phase 3 : jauges Flutter à partir de `/me/quota`.
+
+## 2026-10-17 — Abonnements Free & Pro, phase 3 (interface Utilisation Flutter)
+
+### Fait
+- Paramètres › **Utilisation** (`PanneauUtilisation`) : en-tête (offre JARVIS Free / Pro, fournisseur, modèle), jauges Limite de session (détail messages / tokens), Messages aujourd'hui, Tokens aujourd'hui ; temps restant de session d'après `ends_at` ; heure exacte de la remise à zéro du jour ; « Voir les détails » → `UtilisationPage` (offre, fournisseur, session, jour, restes, fin de session, prochaine remise à zéro).
+- Jauges en lecture seule (`JaugeUtilisation`) : bleu sous le seuil, orange (`CouleursJarvis.critique`) dès `critical_threshold_percent` lu du serveur, « Limite atteinte » à 100 % ; animation courte des changements.
+- Données : `ApiJarvis.utilisation()` → `GET /me/quota` → modèle `Utilisation` (rien de codé en dur). `ServiceUtilisation` : ouverture, toutes les 30 s pendant l'affichage, 2 s après chaque appel IA ou refus (`ApiJarvis.surConsommation`), retour au premier plan, changement de compte ; lecture partagée, jamais l'IA.
+- 429 typés (`ApiJarvis.messageLimite`) : jour / session × messages / tokens avec l'heure réelle de `resets_at` ; limite du fournisseur IA = message distinct.
+- Routage inactif : le panneau indique le fournisseur qui sert réellement (`fournisseur_actif`).
+- Doc : `docs/backend/ABONNEMENTS.md` §10 ; CLAUDE.md.
+
+### Tests (aucun appel IA)
+- `test/utilisation_test.dart` : 24 tests (modèle, seuils 79 / 80 / 100 et seuil modifié, illimité, remises à zéro, 4 types de 429, service sans doublon, panneau Free → Pro → Free, routage inactif, indisponible, sans compte, page de détails, 100 % orange).
+- Suite complète : 777 réussis + 1 test ancien (`ecriture_progressive_test`, texte du quota) mis à jour vers le 429 typé, réussi.
+- Applis S10+, Windows, Web lancées contre l'instance de test 8001 : `/me/quota` lu (200) sur les trois ; S10+ : panneau affiché (JARVIS Free, GroqCloud, 15 / 100 messages, 31 086 / 50 000 tokens, remise à zéro « demain à 01:00 »).
+- Synchronisation Supabase (base réelle, aucun compteur touché) : Pro 200 → 250 → 200 non observable (compte passé en Free par l'utilisateur) ; Free 100 → 120 à 19:01:06 UTC → S10+ « 15 / 120 messages », 12 %, déjà affiché à +35 s (lecture de 19:01:13, 7 s après) ; remis à 100. `plan_config` identique à l'état initial.
+
+### Limitations
+- Aucun changement en production : `jarvis-api` (8000) ne fournit pas encore `/me/quota` avec sessions.
+- Délai d'une modification Supabase : ≤ 30 s (cache serveur) + ≤ 30 s (relecture).
+
+### Prochaine étape
+- Accord pour déployer la nouvelle image backend puis activer `ABONNEMENTS_ROUTAGE`.

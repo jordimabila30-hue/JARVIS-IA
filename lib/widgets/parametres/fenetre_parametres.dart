@@ -10,6 +10,8 @@ import '../../services/voice_session.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../models/forme_pim.dart';
 import '../../services/preferences_pim_service.dart';
+import '../../services/utilisation/service_utilisation.dart';
+import '../utilisation/panneau_utilisation.dart';
 import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
 import 'panneau_chat_vocal.dart';
@@ -20,6 +22,7 @@ import 'panneau_general.dart';
 /// Sections du panneau Paramètres.
 enum SectionParametres {
   general('Général', Icons.tune_rounded),
+  utilisation('Utilisation', Icons.data_usage_rounded),
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
   apparence('Apparence', Icons.palette_outlined),
@@ -53,6 +56,7 @@ Future<void> ouvrirParametres(
   ApiJarvis? api,
   VoidCallback? surConnexion,
   ConsentementAnalyse? consentement,
+  ServiceUtilisation? utilisation,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < largeurParametresCompacte;
   final route = RawDialogRoute<void>(
@@ -68,6 +72,7 @@ Future<void> ouvrirParametres(
       api: api,
       surConnexion: surConnexion,
       consentement: consentement,
+      utilisation: utilisation,
     ),
     transitionBuilder: (context, animation, _, enfant) {
       final courbe = CurvedAnimation(
@@ -119,9 +124,13 @@ class FenetreParametres extends StatefulWidget {
     this.api,
     this.surConnexion,
     this.consentement,
+    this.utilisation,
   });
 
   final VoiceSession session;
+
+  /// Utilisation de l'IA du compte (null : sans compte).
+  final ServiceUtilisation? utilisation;
 
   /// Accord pour l'analyse distante des conversations WhatsApp (null :
   /// sans compte).
@@ -248,6 +257,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             api: widget.api,
                             surConnexion: widget.surConnexion,
                             consentement: widget.consentement,
+                            utilisation: widget.utilisation,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -301,6 +311,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           api: widget.api,
                           surConnexion: widget.surConnexion,
                           consentement: widget.consentement,
+                          utilisation: widget.utilisation,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -673,10 +684,12 @@ class _Contenu extends StatelessWidget {
     this.api,
     this.surConnexion,
     this.consentement,
+    this.utilisation,
     this.avecTitre = true,
   });
 
   final SectionParametres section;
+  final ServiceUtilisation? utilisation;
   final ConsentementAnalyse? consentement;
   final VoiceSession session;
   final PreferencesPimService formes;
@@ -733,6 +746,7 @@ class _Contenu extends StatelessWidget {
               ],
               switch (section) {
                 SectionParametres.general => const PanneauGeneral(),
+                SectionParametres.utilisation => PanneauUtilisation(service: utilisation),
                 SectionParametres.chatVocal => PanneauChatVocal(
                   session: session,
                 ),
@@ -837,6 +851,7 @@ class _SectionAVenir extends StatelessWidget {
         [('Thème', 'Ivoire'), ('Couleur signature', 'Bleu-violet')],
       ),
       SectionParametres.confidentialite ||
+      SectionParametres.utilisation ||
       SectionParametres.chatVocal ||
       SectionParametres.particules ||
       SectionParametres.compte => ('', const []),

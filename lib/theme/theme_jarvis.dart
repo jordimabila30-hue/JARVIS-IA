@@ -24,6 +24,9 @@ class CouleursJarvis {
   static const signal = Color(0xFF5559B8);
   static const violet = Color(0xFF8C7AD2);
 
+  /// Orange chaud des jauges d'utilisation au-delà du seuil critique.
+  static const critique = Color(0xFFD9822B);
+
   static const texte = Color(0xFF272932);
 
   /// Texte secondaire : gris chaud, contraste ≈ 4,6:1 sur l'ivoire.

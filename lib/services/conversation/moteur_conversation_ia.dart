@@ -207,8 +207,8 @@ class MoteurConversationIA {
           'connexion Internet, ou que le serveur est bien démarré. Les '
           'commandes locales (heure, calculs…) restent disponibles.',
     ErreurApi.iaIndisponible => detail ?? type.message,
-    ErreurApi.quotaAtteint =>
-      detail == null ? type.message : '${type.message} $detail',
+    // Message complet du serveur (type de limite + sa réinitialisation).
+    ErreurApi.quotaAtteint => detail ?? type.message,
     _ => type.message,
   };
 }

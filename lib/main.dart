@@ -6,6 +6,7 @@ import 'pages/ecran_de_lancement.dart';
 import 'services/api_jarvis.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
+import 'services/utilisation/service_utilisation.dart';
 import 'theme/theme_jarvis.dart';
 import 'utils/chrono_perf.dart';
 
@@ -58,6 +59,11 @@ class _JarvisAppState extends State<JarvisApp> {
   );
   final _navigateur = GlobalKey<NavigatorState>();
 
+  /// Utilisation de l'IA du compte (`/me/quota`) : une seule instance,
+  /// actualisée après chaque opération IA ([ApiJarvis.surConsommation]).
+  late final _utilisation = ServiceUtilisation(_api);
+  String? _compteUtilisation;
+
   // Lancée pendant l'animation de démarrage.
   late final Future<void> _session = _auth.restaurerSession();
 
@@ -68,11 +74,14 @@ class _JarvisAppState extends State<JarvisApp> {
   void initState() {
     super.initState();
     _auth.addListener(_surAuth);
+    _api.surConsommation = _utilisation.signalerConsommation;
   }
 
   @override
   void dispose() {
     _auth.removeListener(_surAuth);
+    _api.surConsommation = null;
+    _utilisation.dispose();
     if (widget.auth == null) _auth.dispose();
     if (widget.api == null) _api.fermer();
     super.dispose();
@@ -81,6 +90,12 @@ class _JarvisAppState extends State<JarvisApp> {
   /// Session perdue pendant que JARVIS est ouvert (déconnexion, session
   /// révoquée) ; ou lien de récupération ouvert.
   void _surAuth() {
+    // Autre compte (ou déconnexion) : rien de l'ancienne utilisation.
+    final compte = _auth.utilisateur?.identifiant;
+    if (compte != _compteUtilisation) {
+      _compteUtilisation = compte;
+      _utilisation.changerCompte();
+    }
     final d = _destination;
     if (d == null) return;
     if (_auth.recuperationEnCours && d != _Destination.nouveauMotDePasse) {
@@ -115,6 +130,7 @@ class _JarvisAppState extends State<JarvisApp> {
         depotConversations: d == _Destination.accueilConnecte
             ? _depotConversations
             : null,
+        utilisation: d == _Destination.accueilConnecte ? _utilisation : null,
       ),
       _Destination.connexion => _authentification(EcranAuth.connexion),
       _Destination.nouveauMotDePasse => _authentification(

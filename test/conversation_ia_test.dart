@@ -206,17 +206,16 @@ void main() {
             'error': 'quota_exceeded',
             'kind': 'messages',
             'message': 'Limite quotidienne de messages atteinte',
+            'resets_in': 3 * 3600 - 20,
+            'resets_at': DateTime.now().toUtc().add(const Duration(hours: 3)).toIso8601String(),
             'quota': {'resets_in': 3 * 3600 - 20},
           },
         }),
       );
       final r = await s.api().discuter('Bonjour') as EchecApi;
       expect(r.type, ErreurApi.quotaAtteint);
-      expect(r.detail, 'Elle se renouvelle dans 3 h.');
-      expect(
-        MoteurConversationIA.messageErreur(r.type, r.detail),
-        contains('limite quotidienne'),
-      );
+      expect(r.detail, startsWith('Votre limite quotidienne de messages est atteinte. Réinitialisation '));
+      expect(MoteurConversationIA.messageErreur(r.type, r.detail), r.detail);
     });
 
     test('jeton expiré : renouvelé, un seul nouvel essai', () async {
@@ -510,11 +509,8 @@ void main() {
       );
       final c = _session(quota);
       await c.envoyer('Raconte-moi l’histoire de Rome');
-      expect(
-        c.messages.last.texte,
-        'Vous avez atteint votre limite quotidienne d’utilisation de l’IA. '
-        'Elle se renouvelle dans 20 min.',
-      );
+      // Refus sans type de limite (ancien serveur) : message générique.
+      expect(c.messages.last.texte, 'Vous avez atteint votre limite d’utilisation de l’IA.');
 
       final sansCompte = _serveurIA();
       final c2 = ConversationSession(

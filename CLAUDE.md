@@ -169,6 +169,7 @@ lib/
 │   ├── conversation_page.dart        # fil (zone qui défile) + zone PIM réservée au-dessus de la barre
 │   ├── importation_whatsapp_page.dart # import WhatsApp : recevoir un export ZIP / TXT, le lire (étape 2), résumé + aperçu
 │   ├── resume_whatsapp_page.dart     # « Voir les messages » : discussion en bulles ; .surMessage : ouverte sur un message (référence), éclairé
+│   ├── utilisation_page.dart         # « Voir les détails » de l'utilisation (offre, fournisseur, session, jour, restes, remises à zéro)
 │   ├── filtrage_whatsapp_page.dart   # interface 2 : filtrer (par période / par messages), aperçu cochable, compteur, « Continuer vers l'enregistrement »
 │   ├── joindre_whatsapp_page.dart    # interface 3 : nom, nombre, période, participants, « Vous êtes : », « Joindre la conversation »
 │   └── authentification/            # parcours (authentification_page), connexion, inscription, mot de passe oublié
@@ -188,10 +189,12 @@ lib/
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
-│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp)
+│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota)
+│   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
+│   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s, compte)
 │   ├── microphone_service.dart       # permission micro (Android / iOS)
 │   ├── niveau_micro*.dart            # volume du micro sur le Web (Web Audio)
 │   ├── reconnaissance_navigateur*.dart  # voix → texte sur le Web (API Web Speech directe)
@@ -217,18 +220,20 @@ lib/
 │   ├── signal_vocal.dart             # bandes du micro + mots de JARVIS → PIM
 │   ├── forme_pim.dart                # sphère, cube, tétraèdre, Réacteur Arc : noms, tirage, durées
 │   ├── message_conversation.dart     # messages (écrits ou vocaux), conversation externe, tons, raccourcis
+│   ├── utilisation/                  # Utilisation, Jauge, SessionUtilisation, FournisseurIA (réponse de /me/quota)
 │   ├── authentification/            # UtilisateurAuth, ResultatAuth / ErreurAuth
 │   ├── importation/                  # FichierExportWhatsApp (fichier reçu) ; ConversationWhatsApp, MessageWhatsApp (conversation lue)
 │   └── conversations/                # SourceConversation (JARVIS, WhatsApp, Gmail, Messenger, Instagram), ApercuConversation
 ├── utils/
 │   ├── local_date_time.dart          # heure, date, salutation en français
+│   ├── format_utilisation.dart       # « 12 400 », « 2 h 14 min », « demain à 01:00 », phrase de réinitialisation
 │   ├── calcul_vocal.dart             # calculs dictés (chiffres ou lettres)
 │   ├── chrono_perf.dart              # sondes de performance (inactives hors banc)
 │   ├── taille_fichier.dart           # « 12,4 Ko », « 3,1 Mo »
 │   ├── noms_locales.dart             # « fr-CA » → « Français (Canada) », nom de langue, de région
 │   └── noms_voix.dart                # « Microsoft Denise Online (Natural)… » → « Denise · Naturelle »
 └── theme/
-    ├── theme_jarvis.dart             # palette ivoire / graphite / bleu-violet + FondJarvis
+    ├── theme_jarvis.dart             # palette ivoire / graphite / bleu-violet (+ critique orange) + FondJarvis
     └── gabarit_jarvis.dart           # responsive : formats, tailles de texte, taille de la sphère
 ```
 
@@ -608,6 +613,19 @@ avant les lots) → `ConversationSession.preparationEnCours(id)` →
 `PreparationPropositions` (trois points animés sous le texte) jusqu'à
 `propositions` / `done` ; battements SSE pendant les lots (le client coupe
 après 30 s de silence).
+
+Utilisation (abonnements phase 3, doc `docs/backend/ABONNEMENTS.md` §10) :
+Paramètres › Utilisation (`PanneauUtilisation`) et `UtilisationPage`.
+Tout vient de `GET /me/quota` (`ApiJarvis.utilisation`) : offre, fournisseur,
+limites, seuil critique, session (`ends_at`), remises à zéro ; rien de codé
+en dur. `ServiceUtilisation` (une instance dans `JarvisApp`) relit à
+l'ouverture, toutes les 30 s pendant l'affichage, 2 s après chaque appel IA
+(`ApiJarvis.surConsommation`), au retour au premier plan, au changement de
+compte ; lecture en cours partagée, jamais l'IA. Délai d'une modification
+Supabase : ≤ 30 s (cache serveur) + ≤ 30 s (relecture). 429 typés
+(`ApiJarvis.messageLimite` : jour / session × messages / tokens, heure réelle
+de `resets_at`) ; limite du fournisseur IA = autre message. Routage inactif :
+le panneau dit quel fournisseur sert réellement (`fournisseur_actif`).
 
 ---
 

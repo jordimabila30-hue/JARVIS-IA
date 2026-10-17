@@ -715,6 +715,13 @@ void main() {
             utf8.encode(
               jsonEncode({
                 'detail': {
+                  'error': 'quota_exceeded',
+                  'kind': 'messages',
+                  'resets_in': 7200,
+                  'resets_at': DateTime.now()
+                      .toUtc()
+                      .add(const Duration(hours: 2))
+                      .toIso8601String(),
                   'quota': {'resets_in': 7200},
                 },
               }),
