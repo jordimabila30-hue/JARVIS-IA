@@ -189,6 +189,9 @@ class FournisseurLLM(ABC):
     #: La réflexion interne du modèle compte dans le plafond de sortie
     #: (Claude) : l'appelant doit prévoir un plafond plus large.
     reflexion_dans_sortie: bool = False
+    #: Budget d'entrée du moteur de compréhension (tokens estimés) propre à
+    #: ce fournisseur ; None : réglage commun (calé sur GroqCloud).
+    budget_comprehension: int | None = None
 
     def __init__(self, modele: str) -> None:
         if not modele:
@@ -210,6 +213,19 @@ class FournisseurLLM(ABC):
 
     def __repr__(self) -> str:      # jamais la clé
         return f"<{type(self).__name__} {self.nom} modele={self.modele!r}>"
+
+
+async def reponse_complete(llm: FournisseurLLM, messages: Sequence[Message], *, max_sortie: int,
+                           effort: Effort | None = None) -> tuple[str, Fin]:
+    """Tout le texte d'un flux, et sa fin (essais manuels, scripts)."""
+    parts: list[str] = []
+    fin = None
+    async for e in llm.flux(messages, max_sortie=max_sortie, effort=effort):
+        if isinstance(e, Texte):
+            parts.append(e.texte)
+        else:
+            fin = e
+    return "".join(parts), fin
 
 
 # --- Utilitaires partagés par les adaptateurs ----------------------------------

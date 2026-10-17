@@ -16,7 +16,9 @@ def test_console_page_served():
 def test_console_config_exposes_no_secret():
     data = client.get("/console/config").json()
     settings = get_settings()
-    assert set(data) == {"supabase_url", "publishable_key", "openai_configured", "model"}
+    assert set(data) == {"supabase_url", "publishable_key", "fournisseur", "modele", "configure",
+                         "fournisseurs", "selection_manuelle"}
+    assert data["fournisseur"] == "anthropic" and data["selection_manuelle"] is False
     assert settings.supabase_service_role_key not in str(data)
     assert settings.openai_api_key not in str(data)
 

@@ -114,7 +114,7 @@
   <div class="status" id="status">
     <span><i class="dot" id="st-redis"></i>Redis</span>
     <span><i class="dot" id="st-supabase"></i>Supabase</span>
-    <span><i class="dot" id="st-openai"></i>OpenAI</span>
+    <span><i class="dot" id="st-openai"></i>IA</span>
   </div>
 </header>
 
@@ -164,6 +164,13 @@
           <option value="enthousiaste">Enthousiaste</option>
         </select>
       </label>
+      <label style="margin:0" id="choix-fournisseur" hidden>Fournisseur (test)
+        <select id="fournisseur">
+          <option value="">Par défaut</option>
+          <option value="anthropic">Claude</option>
+          <option value="groq">GroqCloud</option>
+        </select>
+      </label>
       <span class="grow"></span>
       <span class="quota" id="quota" title=""><span class="bar"><i id="quota-bar"></i></span><span id="quota-txt">–</span></span>
       <button class="ghost" id="new-conv" type="button">Nouvelle conversation</button>
@@ -189,8 +196,12 @@ let busy = false;
 async function loadStatus() {
   try {
     config = await (await fetch("/console/config")).json();
-    setDot("st-openai", config.openai_configured ? "ok" : "err",
-      config.openai_configured ? config.model : "OPENAI_API_KEY manquante dans .env");
+    // Fournisseur actif (MIA universel) : nom et modèle, jamais une clé.
+    setDot("st-openai", config.configure ? "ok" : "err",
+      config.configure ? config.fournisseur + " · " + config.modele
+        : "Fournisseur « " + config.fournisseur + " » non configuré dans .env");
+    // Choix manuel : seulement si le serveur l'autorise (le serveur revérifie le compte).
+    $("choix-fournisseur").hidden = !config.selection_manuelle;
   } catch { config = null; setDot("st-openai", "err", "API injoignable"); }
   try {
     const r = await (await fetch("/health/ready")).json();
@@ -388,9 +399,10 @@ $("composer").addEventListener("submit", async (e) => {
   const started = performance.now();
 
   try {
+    const choisi = config && config.selection_manuelle ? $("fournisseur").value : "";
     const resp = await api("/api/v1/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(choisi ? { "X-Jarvis-Fournisseur": choisi } : {}) },
       body: JSON.stringify({ message, ton: $("ton").value, ...(conversationId ? { conversation_id: conversationId } : {}) }),
     });
 

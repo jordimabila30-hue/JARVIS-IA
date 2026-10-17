@@ -44,7 +44,7 @@ _RIRES = re.compile(
 
 # Balises qui délimitent les données dans les instructions : neutralisées si
 # un message importé les contient (tentative d'en sortir).
-_BALISES = re.compile(r"<\s*/?\s*(?:donnees_whatsapp|messages|apercu|pieces_jointes|propositions(?:_precedentes)?|reponses_declarees_envoyees)[^>]*>", re.I)
+_BALISES = re.compile(r"<\s*/?\s*(?:donnees_whatsapp|messages|apercu|pieces_jointes|propositions(?:_precedentes)?|reponses_declarees_envoyees|message_vise|consignes_systeme)[^>]*>", re.I)
 
 
 def estimer_tokens(texte: str) -> int:
@@ -53,6 +53,14 @@ def estimer_tokens(texte: str) -> int:
 
 def neutraliser(texte: str) -> str:
     return _BALISES.sub(lambda m: m.group(0).replace("<", "‹").replace(">", "›"), texte)
+
+
+def citer(texte: str) -> str:
+    """Texte importé prêt à être cité entre « » : balises neutralisées, sur
+    une ligne, guillemets internes remplacés (un « Nom : » ou un » ne peut
+    pas sortir de la citation). Le sens du message est inchangé."""
+    return (neutraliser(texte).replace("\r", "").replace("\n", " / ")
+            .replace("«", "“").replace("»", "”"))
 
 
 @dataclass(frozen=True)
@@ -145,11 +153,7 @@ def ligne(m: MessageSource, ctx: ContexteJoint, numero: int) -> str:
     if len(texte) > LONGUEUR_MAX_MESSAGE:
         texte = texte[:LONGUEUR_MAX_MESSAGE].rstrip() + " […message tronqué]"
     # Le texte reste entre ses guillemets, sur sa ligne.
-    texte = (
-        neutraliser(texte).replace("\r", "").replace("\n", " / ")
-        .replace("«", "“").replace("»", "”")
-    )
-    return f"[{numero}] {date_ligne(m, ctx)} · {qui} : «{texte}»"
+    return f"[{numero}] {date_ligne(m, ctx)} · {qui} : «{citer(texte)}»"
 
 
 def passages(

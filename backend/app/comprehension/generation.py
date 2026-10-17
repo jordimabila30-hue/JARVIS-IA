@@ -329,6 +329,42 @@ def invite(e: Ensemble, tons: list[str], contexte: str) -> list[dict]:
     ]
 
 
+_PROPOSITION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["approche", "texte", "appuis"],
+    "properties": {
+        "approche": {"type": "string"},
+        "texte": {"type": "string"},
+        "appuis": {"type": "array", "items": {"type": "integer"}},
+    },
+}
+
+
+def schema_lot(e: Ensemble, tons: list[str]) -> dict:
+    """Schéma JSON d'une réponse de lot (sorties structurées : Claude), même
+    forme que CONSIGNES_LOT : {"tons": [{"nom", <longueurs demandées>}]}.
+    Seules les longueurs qui manquent pour ces tons sont exigées (rien de
+    généré pour rien). Le nombre exact de propositions, leur longueur et
+    leurs appuis restent contrôlés par [Ensemble.integrer] : les schémas
+    stricts n'imposent ni bornes de taille ni contenu."""
+    manque = e.manquants()
+    longueurs = [lo for lo in LONGUEURS if any(lo in manque.get(t, {}) for t in tons)]
+    ton = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["nom", *longueurs],
+        "properties": {"nom": {"type": "string"},
+                       **{lo: {"type": "array", "items": _PROPOSITION_SCHEMA} for lo in longueurs}},
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["tons"],
+        "properties": {"tons": {"type": "array", "items": ton}},
+    }
+
+
 def sortie_estimee(e: Ensemble, tons: list[str], plafond: int) -> int:
     manque = e.manquants()
     utile = sum(_SORTIE[lo] * n for t in tons for lo, n in manque[t].items())
@@ -337,7 +373,8 @@ def sortie_estimee(e: Ensemble, tons: list[str], plafond: int) -> int:
 
 # --- Boucle de complétion ----------------------------------------------------
 
-Appel = Callable[[list[dict], int], Awaitable[tuple[str, int, int]]]
+# (messages, plafond de sortie, schéma JSON du lot) → (texte, entrée, sortie)
+Appel = Callable[[list[dict], int, dict], Awaitable[tuple[str, int, int]]]
 
 
 async def completer(
@@ -365,7 +402,8 @@ async def completer(
         lot = sorted(manque, key=lambda t: -sum(manque[t].values()))[:tons_par_lot]
         debut = asyncio.get_running_loop().time()
         try:
-            texte, entree, sortie = await appeler(invite(e, lot, contexte), sortie_estimee(e, lot, plafond_sortie))
+            texte, entree, sortie = await appeler(invite(e, lot, contexte), sortie_estimee(e, lot, plafond_sortie),
+                                                  schema_lot(e, lot))
         except LimiteAtteinte as exc:
             if exc.delai is None or attendu + exc.delai > attente_max:
                 e.raison = "quota"

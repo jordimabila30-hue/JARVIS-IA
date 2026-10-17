@@ -1,10 +1,11 @@
 """Essai de qualité RÉEL (pas un test automatique) : conversations fictives
-envoyées au modèle configuré (GroqCloud), questions enchaînées.
+envoyées au fournisseur MIA (FOURNISSEUR=anthropic|groq, LLM_PROVIDER par défaut),
+questions enchaînées.
 
     docker run --rm -v "$PWD:/app" -w /app --env-file .env --entrypoint \
         python backend-api tests/qualite_comprehension.py
 
-Consomme du quota GroqCloud ; à lancer à la main.
+Consomme du quota (facturable avec Claude) ; à lancer à la main.
 """
 
 import asyncio
@@ -14,7 +15,11 @@ from datetime import date, datetime, timedelta
 
 sys.path.insert(0, "/app")
 
-from app.api.v1.chat import Ton, build_system_prompt, completer_ensemble, get_openai  # noqa: E402
+import os  # noqa: E402
+
+from app.api.v1.chat import Ton, build_system_prompt, completer_ensemble, plafond  # noqa: E402
+from app.llm import selection  # noqa: E402
+from app.llm.base import reponse_complete  # noqa: E402
 from app.comprehension import generation  # noqa: E402
 from app.comprehension.moteur import MoteurComprehension, contexte_joint, message_source  # noqa: E402
 from app.comprehension import propositions as aide, reperes  # noqa: E402
@@ -95,7 +100,7 @@ async def main():
     ctx = contexte_joint(ligne, "A")
     ctx.messages = [message_source(ctx, r) for r in messages()]
     moteur = MoteurComprehension(None, None, settings)
-    client = get_openai().with_options(max_retries=3)
+    llm = selection.creer(os.environ.get("FOURNISSEUR"))
     historique: list[dict] = []
     systeme = build_system_prompt(Ton.naturel, None, datetime(2026, 10, 15))
     faites = None
@@ -107,11 +112,8 @@ async def main():
                             budget=settings.comprehension_budget_tokens - extra,
                             propositions_faites=faites)
         debut = time.time()
-        r = await client.chat.completions.create(
-            model=settings.openai_model, messages=p.messages,
-            max_tokens=settings.comprehension_max_output_tokens + extra,
-        )
-        brut = r.choices[0].message.content or ""
+        brut, fin = await reponse_complete(
+            llm, p.messages, max_sortie=plafond(llm, settings.comprehension_max_output_tokens + extra, settings))
         c = CorrecteurAttributions(p.fournis)
         f = FiltreReperes(c)
         b = aide.FiltrePropositions()
@@ -124,10 +126,9 @@ async def main():
             ens = generation.annoncer(b.bloc, p.fournis, ctx.id)
             debut_lots = time.time()
             if not ens.complet:
-                lots = get_openai().with_options(max_retries=0)
                 async for _ in completer_ensemble(ens, ctx, question=q, analyse=texte,
                                                   aujourd_hui=date(2026, 10, 15), memoire_bloc=None,
-                                                  client=lots, settings=settings):
+                                                  llm=llm, settings=settings):
                     pass
             entree = ens.stockage()
             props = aide.lues([entree], "essai")
@@ -142,8 +143,8 @@ async def main():
                         print(f"     {x['rang']}. ({x['approche']}) {x['texte']}")
         if props and props.get("tons"):
             faites = props
-        print(f"\n### {q}\n({r.usage.prompt_tokens} tokens envoyés, estimés {p.tokens_estimes}, "
-              f"{r.usage.completion_tokens} produits, {time.time() - debut:.1f} s)\n"
+        print(f"\n### {q}\n({fin.usage.entree_totale} tokens envoyés, estimés {p.tokens_estimes}, "
+              f"{fin.usage.sortie} produits, {fin.modele}, {time.time() - debut:.1f} s)\n"
               f"BRUT : {brut}\nVISIBLE : {texte}")
         for ref in v.references:
             print(f"   ↳ {ref['author']} · {ref['date_label']} · « {ref['excerpt']} »")

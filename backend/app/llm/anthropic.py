@@ -164,8 +164,9 @@ class FournisseurAnthropic(FournisseurLLM):
     reflexion_dans_sortie = True
 
     def __init__(self, *, cle: str, modele: str, effort: Effort | None = None,
-                 client: AsyncAnthropic | None = None) -> None:
+                 budget_comprehension: int | None = None, client: AsyncAnthropic | None = None) -> None:
         super().__init__(modele)
+        self.budget_comprehension = budget_comprehension
         if effort is not None and effort not in EFFORTS:
             raise ValueError(f"effort inconnu : {effort!r}")
         if client is None:

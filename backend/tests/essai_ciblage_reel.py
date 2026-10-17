@@ -1,4 +1,5 @@
-"""Essai RÉEL (manuel, une requête GroqCloud) du ciblage du dernier message.
+"""Essai RÉEL (manuel, une requête au fournisseur MIA : FOURNISSEUR=anthropic|groq,
+LLM_PROVIDER par défaut) du ciblage du dernier message.
 
 Reproduit le cas vu le 2026-10-16 : conversation fictive de Lina
 (tests_whatsapp/), ajouts manuels sans date, et TROIS anciennes réponses
@@ -16,7 +17,11 @@ from datetime import date, datetime
 sys.path.insert(0, "/repo/backend")
 sys.path.insert(0, "/repo/backend/tests")
 
-from app.api.v1.chat import Ton, build_system_prompt, get_openai  # noqa: E402
+import os  # noqa: E402
+
+from app.api.v1.chat import Ton, build_system_prompt, plafond  # noqa: E402
+from app.llm import selection  # noqa: E402
+from app.llm.base import reponse_complete  # noqa: E402
 from app.comprehension import ciblage  # noqa: E402
 from app.comprehension.attribution import CorrecteurAttributions  # noqa: E402
 from app.comprehension.moteur import MoteurComprehension, message_source  # noqa: E402
@@ -57,16 +62,15 @@ async def main():
         budget=settings.comprehension_budget_tokens, cites=ciblage.voisins(visee), ciblage=visee)
     print(f"préparation {1000 * (time.perf_counter() - debut):.0f} ms, {len(p.fournis)} messages fournis, "
           f"historique gardé : {len(p.messages) - 3} message(s)")
-    client = get_openai().with_options(max_retries=0)
+    llm = selection.creer(os.environ.get("FOURNISSEUR"))
     appel = time.perf_counter()
-    r = await client.chat.completions.create(model=settings.openai_model, messages=p.messages,
-                                             max_tokens=settings.comprehension_max_output_tokens)
-    brut = r.choices[0].message.content or ""
+    brut, fin = await reponse_complete(llm, p.messages,
+                                       max_sortie=plafond(llm, settings.comprehension_max_output_tokens, settings))
     c = CorrecteurAttributions(p.fournis)
     f = FiltreReperes(c)
     texte = f.ajouter(brut) + f.terminer()
     v = verifier(texte, f.reperes, p.fournis)
-    print(f"GroqCloud : {r.usage.prompt_tokens} + {r.usage.completion_tokens} tokens, "
+    print(f"{fin.modele} : {fin.usage.entree_totale} + {fin.usage.sortie} tokens, {fin.raison.value}, "
           f"{time.perf_counter() - appel:.1f} s")
     print("RÉPONSE :", texte)
     for ref in v.references:

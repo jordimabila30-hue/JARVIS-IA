@@ -1190,3 +1190,47 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape (phase 2)
 - Reconstruire l'image ; brancher `chat_stream`, `appel_lot` et `contexts.completer` sur `selection.fournisseur()` ; plafonds de sortie et budget de compréhension propres à Claude (réflexion comptée dans la sortie) ; schéma JSON des lots ; refus → `incident` ; `messages.model` = modèle servi ; sélection manuelle de Groq réservée (environnement de test + compte administrateur) ; console ; tests de route avec les deux fournisseurs ; essais réels.
 - Constat préexistant (hors phase 1, code de compréhension non modifié) : dans `ciblage.bloc`, le texte du message visé est cité via `texte_affiche` sans `neutraliser` ni remplacement des guillemets (contrairement à `extraits.ligne`), et `message_vise` n'est pas dans `extraits._BALISES` ; à corriger en phase 2 (concerne aussi GroqCloud).
+
+## 2026-10-17 — MIA universel, phase 2 (raccordement au backend) — tests automatiques validés, essais réels en attente
+
+### Fait
+- Point de restauration : tag Git `sauvegarde-avant-mia-phase2` (sur `ddf844a`) ; image de production conservée sous `backend-api:avant-mia` (`b2113aa77e17`).
+- `api/v1/chat.py` : `get_openai`, `describe_llm_error` propre à Groq, `retry_delay`, `_secondes` retirés ; `get_fournisseur` (résolu AVANT le quota) ; `chat_stream` consomme `llm.flux` (Texte / Fin), attente sur `LimiteDebit` et réduction sur `RequeteTropGrande` seulement si rien n'a été diffusé, `Fin.raison` ≠ fin → `error` `llm_refus` / `llm_incomplet` (jamais `done`), plafond + `LLM_REFLEXION_MARGE_TOKENS` si la réflexion compte dans la sortie, budget WhatsApp propre au fournisseur (`budget_comprehension`), `messages.model` = modèle servi, tokens = entrée + cache / sortie (réflexion comprise), en-tête de réponse `X-Jarvis-Fournisseur`. `appel_lot` → `llm.json(schema=…, effort=LLM_EFFORT_PROPOSITIONS)`. `describe_llm_error` = `ErreurLLM.evenement()`.
+- `api/v1/contexts.py` (« Reprendre ») : même fournisseur, résolu avant le quota.
+- `comprehension/generation.py` : `schema_lot(e, tons)` (schéma strict : `additionalProperties: false`, seules les longueurs manquantes exigées, aucune borne non prise en charge) ; `Appel` reçoit le schéma.
+- Sécurité : `extraits.citer` (balises neutralisées, une ligne, guillemets remplacés) utilisé par `extraits.ligne` ET `ciblage.bloc` (point préexistant corrigé) ; `message_vise` et `consignes_systeme` ajoutés aux balises neutralisées.
+- Choix manuel : en-tête `X-Jarvis-Fournisseur` accepté seulement hors production + `LLM_SELECTION_MANUELLE` + compte dans `LLM_ADMINS` ; sinon 403 sans quota ; inconnu 400 ; non configuré 503 `llm_config` (aucun repli vers Groq). `selection.choix_manuel_possible`.
+- Configuration : `ANTHROPIC_COMPREHENSION_BUDGET_TOKENS` (20 000), `LLM_REFLEXION_MARGE_TOKENS` (8 000), `LLM_EFFORT_PROPOSITIONS` (low), `ENVIRONNEMENT` (production par défaut), `LLM_SELECTION_MANUELLE`, `LLM_ADMINS` ; `OPENAI_API_KEY` facultative. `.env` privé : lignes MIA ajoutées (`LLM_PROVIDER`, `ANTHROPIC_MODEL=claude-opus-5-5`, `ANTHROPIC_API_KEY` VIDE, à remplir par l'utilisateur).
+- `main.py` : fournisseur actif annoncé au démarrage (ou erreur claire), clients fermés à l'arrêt. Console : état du fournisseur (nom, modèle, jamais de clé) et sélecteur visible seulement si le choix manuel est ouvert.
+- Adaptateur GroqCloud : lecture tolérante des réponses partielles (comme l'ancienne route). `base.reponse_complete` pour les scripts.
+- Scripts d'essai : `essai_ciblage_reel.py`, `qualite_comprehension.py` (`FOURNISSEUR=anthropic|groq`), `quota_groq.py` (client Groq direct), nouveau `scripts/essai_mia.py` (scénarios réels 1-7, mot de passe au clavier, conversation WhatsApp FICTIVE).
+- Doc : `docs/backend/MIA_UNIVERSEL.md` (architecture, garanties, configuration, tests, déploiement et retour arrière).
+- Flutter : aucune modification (tout `error` est déjà traité comme une réponse interrompue).
+
+### Tests (étape A, sans API réelle)
+- Tests existants adaptés (simulation `get_fournisseur` au lieu de `get_openai`, erreurs via l'adaptateur) ; nouveaux : `test_mia_chat.py` (19 : SSE, réflexion masquée, requête Claude réelle du SDK, modèle et tokens enregistrés, historique, refus / plafond / coupure, 429 + 529 attendus sans doublon, erreurs, choix protégé, non configuré, aucun basculement), `test_mia_whatsapp.py` (5 : schéma, propositions complètes avec Claude, « Reprendre » + « Pourquoi la deuxième ? », injection depuis un message importé).
+- **393 réussis**, 0 échec : conteneur jetable (image `backend-api`) ET image de test `backend-api:mia-test` (`anthropic` 1.15.0).
+- SDK 1.15.0 : `OutputConfigParam` (`effort` low…max, `format` json_schema) et `Message.stop_details` présents ; corps des requêtes vérifié tel qu'émis par le SDK.
+
+### Étape B
+- Image `backend-api:mia-test` construite ; instance isolée `jarvis-api-mia` (port 8001, Redis base 1, `ENVIRONNEMENT=development`) : démarre, `/health/ready` ok, signale « anthropic non configuré » (clé absente). `jarvis-api` (port 8000) jamais arrêté ni modifié.
+
+### Étape C — essais réels (autorisés, instance de test port 8001, `claude-opus-5-5`)
+- Clé collée par l'utilisateur dans `backend/.env` (vérifiée sans affichage : 1 ligne, préfixe `sk-ant-`) ; mot de passe saisi par l'utilisateur dans son terminal (`scripts/essai_mia.py`).
+- 1-2. Conversation + streaming : `meta → delta (23) → done`, premier fragment 4,0-5,6 s (réflexion), réponse 5-7 s ; suite de conversation relue (historique) ; usage `342 + 267` tokens.
+- 6. `messages.model` = `claude-opus-5-5`.
+- 3. WhatsApp FICTIF (Lina Moreau, 97 messages, conversation complète fournie, ~5 300 tokens) : réponse terminée en 32,7 s (texte 3 s, premier fragment 3,5 s), 1 référence vérifiée ; lot JSON par schéma accepté par l'API réelle (`output_config.format` + `effort`), 15 propositions gardées / 3 refusées par les règles de longueur, 25 s pour 2 tons ; instance volontairement limitée à 1 lot → statut `incomplet`.
+- 4. « Reprendre » : premier essai 404 (le script appelait avant l'enregistrement en tâche de fond, 100 ms plus tard ; sans effet dans l'appli, script corrigé) ; second essai : HTTP 200, `complet`, 4 tons, 3 lots (23 s, 10 s, 8 s), 44 s au total.
+- 5. Erreurs : en-tête de fournisseur non autorisé → 403 `fournisseur_interdit` ; conversation inconnue → 404.
+- 7. Comparaison (compte dans `LLM_ADMINS`, instance de test seulement) : Claude 1,8 s / 2,6 s, 320 tokens ; GroqCloud (`openai/gpt-oss-120b`) 1,4 s / 1,5 s, 271 tokens ; réponses équivalentes.
+- Bilan : 1er passage 12/13 (seul échec : la course du script sur « Reprendre »), 2e passage 2/2 ; les 7 scénarios sont validés. Coût estimé < 1 $. Données de test : 3 conversations (dont 1 WhatsApp fictive) dans le compte de l'utilisateur, supprimables depuis l'appli.
+- Observation : les lots de propositions avec Opus 5.5 prennent 8-25 s chacun (un ensemble complet de 4 tons ≈ 50 s après le texte) ; piste à mesurer si gênant : un modèle plus rapide pour les lots (décision de l'utilisateur).
+
+### Étape D — déploiement (accord de l'utilisateur, 2026-10-17 11:52 UTC)
+- `docker compose build api` puis `docker compose up -d api` : `jarvis-api` sur l'image `1e0a52b54b6f` (ancienne : `b2113aa77e17`, gardée sous `backend-api:avant-mia`). Redis non recréé.
+- Contrôles : santé `healthy`, `/health/ready` ok (Redis, Supabase), journal « Fournisseur IA : anthropic », `/console/config` : `anthropic` / `claude-opus-5-5` configuré, choix manuel FERMÉ (`ENVIRONNEMENT` absent = production) ; en-tête `X-Jarvis-Fournisseur` sans compte → 401 ; préflight CORS Flutter Web (`localhost:3000`) → 200.
+- Instance de test `jarvis-api-mia` arrêtée (elle avait le choix manuel ouvert). Image `backend-api:mia-test` conservée.
+- Retour arrière : `LLM_PROVIDER=groq` + `docker compose up -d api`, ou `docker tag backend-api:avant-mia backend-api:latest` + `docker compose up -d --no-build api` (voir `docs/backend/MIA_UNIVERSEL.md`).
+
+### Reste
+- Essai depuis l'application Flutter (écrit, vocal, WhatsApp) sur la production ; commit de la phase 2 (rien n'est commité).

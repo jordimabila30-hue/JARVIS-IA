@@ -32,6 +32,7 @@ from ...auth import AuthUser, get_current_user
 from ...ajouts_manuels import AjoutsManuels, AuteurInvalide, Correspondances, MessageIntrouvable, MessageOriginal
 from ...comprehension import generation, memoire, propositions as aide, restauration
 from ...comprehension.moteur import MoteurComprehension
+from ...llm import FournisseurLLM
 from ...quota import QuotaReservation, QuotaService, enforce_quota, get_quota_service
 from ...config import Settings, get_settings
 from ...contextes import (
@@ -56,7 +57,7 @@ from ...contextes_modeles import (
 )
 from ...redis_client import get_redis
 from ...supabase_client import SupabaseAdmin, get_supabase
-from .chat import completer_ensemble, context_key, get_comprehension, get_openai
+from .chat import completer_ensemble, context_key, get_comprehension, get_fournisseur
 
 logger = logging.getLogger(__name__)
 
@@ -222,12 +223,13 @@ def _verrou(message_id: str) -> str:
 @conversations_router.post("/{conversation_id}/messages/{message_id}/propositions/completer")
 async def completer_propositions(
     conversation_id: UUID, message_id: UUID,
+    # Avant le quota : un fournisseur refusé ou mal configuré ne consomme rien.
+    llm: FournisseurLLM = Depends(get_fournisseur),
     reservation: QuotaReservation = Depends(enforce_quota),
     quota_service: QuotaService = Depends(get_quota_service),
     supabase: SupabaseAdmin = Depends(get_supabase),
     redis: Redis = Depends(get_redis),
     settings: Settings = Depends(get_settings),
-    openai=Depends(get_openai),
     comprehension: MoteurComprehension = Depends(get_comprehension),
 ) -> dict:
     """« Reprendre » : complète SEULEMENT les combinaisons manquantes d'un
@@ -263,12 +265,11 @@ async def completer_propositions(
                    if ensemble.demande_id else None)
         envoyees = await memoire.pour_contacts(supabase, user_id, [ctx])
         memoire_bloc = aide.bloc_memoire(envoyees[ctx.id], ctx.contact) if envoyees.get(ctx.id) else None
-        client = openai.with_options(max_retries=0) if hasattr(openai, "with_options") else openai
         ensemble.raison = None
         async for _ in completer_ensemble(
             ensemble, ctx, question=(demande or {}).get("content") or "",
             analyse=ligne.get("content") or "", aujourd_hui=datetime.now(timezone.utc).date(),
-            memoire_bloc=memoire_bloc, client=client, settings=settings,
+            memoire_bloc=memoire_bloc, llm=llm, settings=settings,
         ):
             pass
         tokens = ensemble.tokens_entree + ensemble.tokens_sortie

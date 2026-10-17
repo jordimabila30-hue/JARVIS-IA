@@ -19,7 +19,7 @@ from app.quota import QuotaService, get_quota_service
 from app.redis_client import get_redis
 from app.supabase_client import get_supabase
 
-from test_chat import auth_headers
+from test_chat import auth_headers, fournisseur_test
 from test_comprehension import AUTRE, CHAT, CTX_PEPPER, FakeSupabase, ctx_row, pepper
 from test_propositions import BLOC_COMPLET as BLOC
 from test_references import evenements, reponse
@@ -45,7 +45,7 @@ async def env(redis):
     app.dependency_overrides[get_quota_service] = lambda: service
     app.dependency_overrides[get_supabase] = lambda: supa
     app.dependency_overrides[get_redis] = lambda: redis
-    app.dependency_overrides[chat.get_openai] = lambda: e.llm
+    app.dependency_overrides[chat.get_fournisseur] = lambda: fournisseur_test(e.llm)
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
     e = SimpleNamespace(client=client, supa=supa, redis=redis, llm=reponse("Rien."))
     yield e

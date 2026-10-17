@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from .config import Settings, get_settings
+from .llm import selection
 
 _PAGE = Path(__file__).parent / "static" / "console.html"
 
@@ -30,9 +31,17 @@ async def console_page(_: Settings = Depends(_require_enabled)) -> FileResponse:
 
 @router.get("/config")
 async def console_config(settings: Settings = Depends(_require_enabled)) -> dict:
+    # MIA universel : fournisseur actif et modèles configurés (jamais une clé).
+    nom = selection.nom_configure(settings)
+    etat = selection.configures(settings)
+    modeles = {"anthropic": settings.anthropic_model, "groq": settings.openai_model}
     return {
         "supabase_url": settings.supabase_url.rstrip("/"),
         "publishable_key": settings.supabase_publishable_key,
-        "openai_configured": bool(settings.openai_api_key.strip()),
-        "model": settings.openai_model,
+        "fournisseur": nom,
+        "modele": modeles.get(nom),
+        "configure": etat.get(nom, False),
+        "fournisseurs": etat,
+        # Indication pour l'affichage ; le serveur revérifie le compte (LLM_ADMINS).
+        "selection_manuelle": selection.choix_manuel_possible(settings),
     }

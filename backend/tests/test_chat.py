@@ -10,6 +10,8 @@ from fastapi import FastAPI
 
 from app.api.v1 import chat
 from app.config import get_settings
+from app.llm import FournisseurLLM
+from app.llm.groq import FournisseurGroq
 from app.quota import QuotaService, get_quota_service, requests_key, utc_now
 from app.redis_client import get_redis
 from app.supabase_client import UserLimits, get_supabase
@@ -101,6 +103,20 @@ def reponse_lot(messages, contenu=None):
                            usage=SimpleNamespace(prompt_tokens=700, completion_tokens=500))
 
 
+def fournisseur_test(llm) -> FournisseurGroq:
+    """Fournisseur MIA GroqCloud autour d'un faux client OpenAI (le chemin
+    de production complet : adaptateur, événements, erreurs normalisées).
+    Un fournisseur MIA déjà construit (Claude simulé) est rendu tel quel."""
+    if isinstance(llm, FournisseurLLM):
+        return llm
+    return FournisseurGroq(cle="cle-de-test", modele=get_settings().openai_model, client=llm)
+
+
+def erreur_groq(exc: Exception):
+    """Erreur du SDK OpenAI traduite par l'adaptateur GroqCloud (MIA)."""
+    return fournisseur_test(object()).erreur(exc)
+
+
 class FakeOpenAI:
     def __init__(self, chunks=None, fail=False):
         self.calls = []
@@ -138,10 +154,11 @@ async def env(redis):
     app.dependency_overrides[get_quota_service] = lambda: service
     app.dependency_overrides[get_supabase] = lambda: supa
     app.dependency_overrides[get_redis] = lambda: redis
-    app.dependency_overrides[chat.get_openai] = lambda: llm
+    app.dependency_overrides[chat.get_fournisseur] = lambda: fournisseur_test(e.llm)
 
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
-    yield SimpleNamespace(client=client, redis=redis, supa=supa, llm=llm)
+    e = SimpleNamespace(client=client, redis=redis, supa=supa, llm=llm, app=app)
+    yield e
     await client.aclose()
 
 
@@ -251,11 +268,11 @@ def test_llm_error_codes():
         return cls("x", response=_httpx.Response(status, request=req), body=body)
 
     credit = err(openai.RateLimitError, 429, {"code": "insufficient_quota", "type": "insufficient_quota"})
-    assert chat.describe_llm_error(credit)["code"] == "llm_credit"
+    assert chat.describe_llm_error(erreur_groq(credit))["code"] == "llm_credit"
     rate = err(openai.RateLimitError, 429, {"code": "rate_limit_exceeded"})
-    assert chat.describe_llm_error(rate)["code"] == "llm_rate_limit"
+    assert chat.describe_llm_error(erreur_groq(rate))["code"] == "llm_rate_limit"
     auth = err(openai.AuthenticationError, 401, {"code": "invalid_api_key"})
-    assert chat.describe_llm_error(auth)["code"] == "llm_auth"
+    assert chat.describe_llm_error(erreur_groq(auth))["code"] == "llm_auth"
     assert chat.describe_llm_error(RuntimeError())["code"] == "llm_unavailable"
 
 

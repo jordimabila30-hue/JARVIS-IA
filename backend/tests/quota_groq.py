@@ -8,13 +8,18 @@ import sys
 
 sys.path.insert(0, "/app")
 
-from app.api.v1.chat import get_openai  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
+
 from app.config import get_settings  # noqa: E402
+from app.llm.groq import adresse  # noqa: E402
 
 
 async def main():
     settings = get_settings()
-    brut = await get_openai().with_options(max_retries=0).chat.completions.with_raw_response.create(
+    # En-têtes bruts propres à GroqCloud : client direct (même adresse que MIA).
+    client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0,
+                         base_url=adresse(settings.openai_api_key, settings.openai_base_url))
+    brut = await client.chat.completions.with_raw_response.create(
         model=settings.openai_model, messages=[{"role": "user", "content": "ok"}], max_tokens=1)
     for cle, valeur in brut.headers.items():
         if cle.startswith("x-ratelimit") or cle == "retry-after":

@@ -50,6 +50,7 @@ def _anthropic(settings: Settings) -> FournisseurLLM:
         cle=_exiger(settings.anthropic_api_key, "ANTHROPIC_API_KEY", "anthropic"),
         modele=_exiger(settings.anthropic_model, "ANTHROPIC_MODEL", "anthropic"),
         effort=effort,
+        budget_comprehension=settings.anthropic_comprehension_budget_tokens,
     )
 
 
@@ -85,6 +86,13 @@ def creer(nom: str | None = None, settings: Settings | None = None) -> Fournisse
     return fabrique(settings)
 
 
+def choix_manuel_possible(settings: Settings | None = None) -> bool:
+    """Le choix manuel d'un fournisseur est-il ouvert (tests) ? Jamais en
+    production ; la route vérifie en plus le compte (LLM_ADMINS)."""
+    settings = settings or get_settings()
+    return settings.llm_selection_manuelle and settings.environnement.strip().lower() not in ("production", "prod")
+
+
 def configures(settings: Settings | None = None) -> dict[str, bool]:
     """Fournisseur → configuré ? (supervision, console ; aucune valeur)."""
     settings = settings or get_settings()
@@ -102,10 +110,12 @@ def configures(settings: Settings | None = None) -> dict[str, bool]:
 _instances: dict[str, FournisseurLLM] = {}
 
 
-def fournisseur(nom: str | None = None) -> FournisseurLLM:
-    nom = (nom or nom_configure()).strip().lower()
+def fournisseur(nom: str | None = None, settings: Settings | None = None) -> FournisseurLLM:
+    """Instance partagée du fournisseur [nom] (celui de la configuration si
+    None), créée au premier appel avec [settings]."""
+    nom = (nom or nom_configure(settings)).strip().lower()
     if nom not in _instances:
-        _instances[nom] = creer(nom)
+        _instances[nom] = creer(nom, settings)
     return _instances[nom]
 
 

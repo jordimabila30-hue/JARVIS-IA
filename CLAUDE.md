@@ -234,8 +234,8 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (GroqCloud), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — phase 1 : pas encore raccordé aux routes
-├── tests/                            # pytest (369, dont test_llm_* avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
+├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis, horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — raccordé à chat_stream, appel_lot, contexts.completer (phase 2)
+├── tests/                            # pytest (393, dont test_llm_* et test_mia_* avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
@@ -243,7 +243,7 @@ supabase/migrations/                  # évolutions datées, appliquées : conte
 supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
-docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE
+docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE, MIA_UNIVERSEL
 config_locale.json                    # URL + clé PUBLIQUE Supabase pour Flutter (non versionné ; modèle : config_locale.example.json)
 ```
 
@@ -294,6 +294,13 @@ Conversation IA : `ConversationSession` → `MoteurConversationHybride`
 message part ; le serveur garde l'historique (UUID rattaché à l'id local de
 la conversation). Écrit et vocal : même moteur. Conversations collées ou
 importées : jamais envoyées.
+Côté serveur, tout appel au modèle passe par MIA universel (`app/llm/`,
+doc `docs/backend/MIA_UNIVERSEL.md`) : `chat.get_fournisseur` →
+`FournisseurLLM.flux` / `.json` ; Claude (`LLM_PROVIDER=anthropic`) pour les
+demandes ordinaires, GroqCloud seulement par l'en-tête
+`X-Jarvis-Fournisseur` (hors production, `LLM_SELECTION_MANUELLE`,
+`LLM_ADMINS`). Aucun basculement automatique ; réflexion jamais diffusée ;
+refus / plafond → `error` (`llm_refus`, `llm_incomplet`), jamais `done`.
 
 Écriture progressive (phase 4) : toutes les réponses de JARVIS s'écrivent
 dans leur bulle. Trois étapes séparées : réception (`TexteEnDirect` :

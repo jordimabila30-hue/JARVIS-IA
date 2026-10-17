@@ -183,7 +183,7 @@ async def env(redis, monkeypatch):
     supa = FakeSupabase()
     # Aucun appel à l'IA ne doit avoir lieu.
     appels_ia = []
-    monkeypatch.setattr(chat, "get_openai", lambda: appels_ia.append(1))
+    monkeypatch.setattr(chat.selection, "fournisseur", lambda nom=None, settings=None: appels_ia.append(1))
     app = FastAPI()
     app.include_router(contexts.conversations_router, prefix="/api/v1")
     app.include_router(contexts.contexts_router, prefix="/api/v1")

@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 
 from . import console
 from .api.v1 import chat, contexts, local_exchanges
+from .llm import selection
 from .auth import AuthUser, get_current_user
 from .config import get_settings
 from .horloge import (
@@ -23,6 +24,7 @@ logging.basicConfig(
     level=get_settings().log_level,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -37,10 +39,17 @@ async def lifespan(app: FastAPI):
         seuil_alerte=settings.clock_skew_warn_seconds,
         intervalle=settings.clock_check_interval,
     )
+    # MIA universel : fournisseur actif annoncé (nom et modèle, jamais une clé).
+    actif = selection.nom_configure(settings)
+    if selection.configures(settings).get(actif):
+        logger.info("Fournisseur IA : %s", actif)
+    else:
+        logger.error("Fournisseur IA « %s » non configuré : le chat répondra 503 (llm_config).", actif)
     yield
     await close_surveillance_horloge()
     # Laisse les sauvegardes de fin de flux se terminer avant de fermer les clients.
     await chat.wait_background_tasks()
+    await selection.fermer_tous()
     await close_supabase()
     await close_redis()
 

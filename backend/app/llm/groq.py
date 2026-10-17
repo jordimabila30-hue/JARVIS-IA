@@ -145,19 +145,22 @@ class FournisseurGroq(FournisseurLLM):
         try:
             stream = await self._client.chat.completions.create(**options)
             async for chunk in stream:
+                # Champs lus avec tolérance : certains fournisseurs compatibles
+                # OpenAI en omettent (comme le faisait la route de production).
                 if getattr(chunk, "model", None):
                     modele = chunk.model
-                if chunk.usage is not None:
+                if getattr(chunk, "usage", None) is not None:
                     usage = chunk.usage
-                if not chunk.choices:
+                if not getattr(chunk, "choices", None):
                     continue
                 choix = chunk.choices[0]
-                if choix.finish_reason:
+                if getattr(choix, "finish_reason", None):
                     finish = choix.finish_reason
                 # `delta.reasoning` (gpt-oss) n'est jamais diffusé.
-                if choix.delta is not None and choix.delta.content:
-                    parts.append(choix.delta.content)
-                    yield Texte(choix.delta.content)
+                contenu = getattr(getattr(choix, "delta", None), "content", None)
+                if contenu:
+                    parts.append(contenu)
+                    yield Texte(contenu)
         except openai.APIError as exc:
             raise self.erreur(exc, apres_texte=bool(parts)) from exc
 
@@ -192,13 +195,13 @@ class FournisseurGroq(FournisseurLLM):
                 raise self.erreur(exc) from exc
             except openai.APIError as exc:
                 raise self.erreur(exc) from exc
-        choix = r.choices[0] if r.choices else None
-        texte = (choix.message.content if choix else None) or ""
+        choix = r.choices[0] if getattr(r, "choices", None) else None
+        texte = getattr(getattr(choix, "message", None), "content", None) or ""
         return ReponseJSON(
             texte=texte, donnees=lire_json(texte),
             usage=self._usage(getattr(r, "usage", None), messages, texte),
             modele=getattr(r, "model", None) or self.modele,
-            raison=_raison(choix.finish_reason if choix else None),
+            raison=_raison(getattr(choix, "finish_reason", None)),
         )
 
     # --- Divers -----------------------------------------------------------------
@@ -206,7 +209,8 @@ class FournisseurGroq(FournisseurLLM):
     @staticmethod
     def _usage(usage, messages: Sequence[Message], texte: str) -> Usage:
         if usage is not None:
-            return Usage(entree=usage.prompt_tokens or 0, sortie=usage.completion_tokens or 0)
+            return Usage(entree=getattr(usage, "prompt_tokens", 0) or 0,
+                         sortie=getattr(usage, "completion_tokens", 0) or 0)
         return Usage(entree=estimer_tokens("".join(m["content"] for m in messages)),
                      sortie=estimer_tokens(texte), estime=True)
 

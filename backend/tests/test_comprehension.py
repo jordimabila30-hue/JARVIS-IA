@@ -20,7 +20,8 @@ from app.quota import QuotaService, get_quota_service, requests_key, utc_now
 from app.redis_client import get_redis
 from app.supabase_client import UserLimits, get_supabase
 
-from test_chat import USER, FakeOpenAI, auth_headers, chunk, parse_sse
+from test_chat import USER, FakeOpenAI, auth_headers, chunk, erreur_groq, fournisseur_test, parse_sse
+from app.llm.base import secondes
 
 settings = get_settings()
 AUTRE = "99999999-9999-9999-9999-999999999999"
@@ -316,7 +317,7 @@ async def env(redis):
     app.dependency_overrides[get_quota_service] = lambda: service
     app.dependency_overrides[get_supabase] = lambda: supa
     app.dependency_overrides[get_redis] = lambda: redis
-    app.dependency_overrides[chat.get_openai] = lambda: env.llm
+    app.dependency_overrides[chat.get_fournisseur] = lambda: fournisseur_test(env.llm)
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
     env = SimpleNamespace(client=client, redis=redis, supa=supa, llm=llm)
     yield env
@@ -637,8 +638,8 @@ async def test_limite_de_debit_trop_longue_erreur_claire(env):
     ])
     resp = await post(env, message="Résume", conversation_id=CHAT, whatsapp_analysis="allowed")
     events = parse_sse(resp.text)
-    assert events[-1] == ("error", chat.describe_llm_error(
-        erreur_api(openai.RateLimitError, 429, body={"code": "rate_limit_exceeded"})))
+    assert events[-1] == ("error", chat.describe_llm_error(erreur_groq(
+        erreur_api(openai.RateLimitError, 429, body={"code": "rate_limit_exceeded"}))))
 
 
 async def test_requete_trop_grande_reessayee_plus_petite(env):
@@ -652,11 +653,11 @@ async def test_requete_trop_grande_reessayee_plus_petite(env):
 
 
 def test_codes_erreur_supplementaires():
-    assert chat.describe_llm_error(erreur_api(openai.APIStatusError, 413))["code"] == "llm_too_large"
-    assert chat.describe_llm_error(erreur_api(openai.NotFoundError, 404))["code"] == "llm_model"
+    assert chat.describe_llm_error(erreur_groq(erreur_api(openai.APIStatusError, 413)))["code"] == "llm_too_large"
+    assert chat.describe_llm_error(erreur_groq(erreur_api(openai.NotFoundError, 404)))["code"] == "llm_model"
     timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://x"))
-    assert chat.describe_llm_error(timeout)["code"] == "llm_timeout"
-    assert chat._secondes("1m26.4s") == 86.4 and chat._secondes("450ms") == 0.45
+    assert chat.describe_llm_error(erreur_groq(timeout))["code"] == "llm_timeout"
+    assert secondes("1m26.4s") == 86.4 and secondes("450ms") == 0.45
 
 
 async def _sans_attente(_):

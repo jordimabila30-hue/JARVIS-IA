@@ -17,15 +17,29 @@ class Settings(BaseSettings):
 
     quota_limits_cache_ttl: int = 300
 
-    # MIA universel (app/llm/) : fournisseur principal de la couche commune.
-    # Phase 1 : pas encore utilisé par les routes (qui gardent GroqCloud).
+    # MIA universel (app/llm/) : fournisseur de toutes les demandes ordinaires.
     llm_provider: str = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str | None = None     # aucun modèle imposé par le code
     anthropic_effort: str | None = None    # low | medium | high | xhigh | max
+    # Claude n'a pas la limite de 8 000 tokens/min du compte GroqCloud : plus
+    # d'extraits WhatsApp par question (budget d'entrée estimé).
+    anthropic_comprehension_budget_tokens: int = 20000
+    # Réflexion interne comptée dans le plafond de sortie (Claude) : marge
+    # ajoutée aux plafonds habituels, pour ne pas couper la réponse visible.
+    llm_reflexion_marge_tokens: int = 8000
+    # Effort des lots de propositions (JSON) : court, comme avant (gpt-oss).
+    llm_effort_propositions: str | None = "low"
 
-    # GroqCloud (ou OpenAI) : client actuel du chat, et fournisseur « groq ».
-    openai_api_key: str
+    # Choix manuel du fournisseur (en-tête X-Jarvis-Fournisseur) : tests et
+    # comparaisons seulement. Refusé en production et hors de LLM_ADMINS
+    # (identifiants Supabase des comptes autorisés).
+    environnement: str = "production"
+    llm_selection_manuelle: bool = False
+    llm_admins: list[str] = []
+
+    # GroqCloud (ou OpenAI) : fournisseur « groq », réservé aux tests.
+    openai_api_key: str = ""
     openai_base_url: str | None = None
     openai_model: str = "gpt-4o-mini"
     chat_max_output_tokens: int = 1024

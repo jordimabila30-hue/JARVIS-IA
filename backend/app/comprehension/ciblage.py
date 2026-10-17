@@ -175,7 +175,7 @@ def voisins(ciblage: Ciblage | None, avant: int = 3) -> dict[str, set[int]]:
 def bloc(ciblage: Ciblage | None, fournis: dict) -> str | None:
     """Bloc placé juste avant la question : le message visé (numéro de
     CETTE requête, identifiant, auteur, provenance) et ce qui le précède."""
-    from .extraits import date_ligne, neutraliser, texte_affiche
+    from .extraits import citer, date_ligne, neutraliser, texte_affiche
 
     if ciblage is None:
         return None
@@ -198,7 +198,9 @@ def bloc(ciblage: Ciblage | None, fournis: dict) -> str | None:
         if c.contexte.est_moi(m.auteur):
             qui += " (utilisateur)"
         origine = ", ajouté à la main" if m.manuel else ""
-        return f"[{k}] {date_ligne(m, c.contexte)} · {qui}{origine} : «{texte_affiche(m)[:400]}»"
+        # Contenu importé, cité comme dans le bloc de données : ni balise ni
+        # guillemet ne peut sortir de la citation.
+        return f"[{k}] {date_ligne(m, c.contexte)} · {qui}{origine} : «{citer(texte_affiche(m)[:400])}»"
 
     humains = _humains(c.contexte)
     i = next(k for k, m in enumerate(humains) if m.ordre == c.message.ordre)

@@ -172,3 +172,55 @@ def fournisseur_groq(s: Scenario, journal: Journal | None = None, *, refuser_jso
 
 
 FABRIQUES = {"anthropic": fournisseur_anthropic, "groq": fournisseur_groq}
+
+
+# --- Faux serveur Claude scénarisé (routes de JARVIS) ---------------------------
+
+def texte_utilisateur(corps: dict) -> str:
+    """Texte du dernier message `user` d'une requête Messages API."""
+    dernier = [m for m in corps["messages"] if m["role"] == "user"][-1]
+    return "\n".join(b["text"] for b in dernier["content"] if b["type"] == "text")
+
+
+class ServeurClaude:
+    """Faux point d'accès Messages API pour les routes de JARVIS.
+
+    `etapes` : réponses consommées dans l'ordre (erreurs HTTP, refus…) ;
+    ensuite, une requête de lot (output_config.format présent) reçoit le
+    JSON calculé par `lots(texte du dernier user)`, toute autre requête la
+    réponse `principal`."""
+
+    def __init__(self, principal: Scenario | None = None, lots=None, etapes=()) -> None:
+        self.principal = principal or Scenario()
+        self.lots = lots
+        self.etapes = list(etapes)
+        self.requetes: list[dict] = []
+
+    def __call__(self, requete: httpx2.Request) -> httpx2.Response:
+        corps = json.loads(requete.content)
+        self.requetes.append(corps)
+        if self.etapes:
+            s = self.etapes.pop(0)
+        elif (corps.get("output_config") or {}).get("format") and self.lots:
+            r = self.lots(texte_utilisateur(corps))      # JSON du lot, ou Scenario (erreur…)
+            s = r if isinstance(r, Scenario) else Scenario(json_texte=r, reflexion="", entree=700, sortie=500)
+        else:
+            s = self.principal
+        if s.statut != 200:
+            corps_erreur = s.corps_erreur or {"type": "error", "error": {"type": "api_error", "message": "erreur"}}
+            return httpx2.Response(s.statut, json=corps_erreur, headers=s.entetes)
+        return httpx2.Response(200, content=flux_anthropic(s), headers={"content-type": "text/event-stream"})
+
+    @property
+    def lots_recus(self) -> list[dict]:
+        return [r for r in self.requetes if (r.get("output_config") or {}).get("format")]
+
+    @property
+    def principales(self) -> list[dict]:
+        return [r for r in self.requetes if not (r.get("output_config") or {}).get("format")]
+
+    def fournisseur(self, **options) -> FournisseurAnthropic:
+        client = AsyncAnthropic(api_key=CLE_TEST, base_url="http://anthropic.test", max_retries=0,
+                                http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(self)))
+        return FournisseurAnthropic(cle=CLE_TEST, modele=options.pop("modele", "claude-modele-test"),
+                                    client=client, **options)

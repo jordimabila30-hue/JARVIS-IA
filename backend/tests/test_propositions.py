@@ -330,14 +330,15 @@ def test_quota_quotidien_message_honnete_sans_attente():
     import openai
     from app.api.v1 import chat
     from test_comprehension import erreur_api
+    from test_chat import erreur_groq
     exc = erreur_api(openai.RateLimitError, 429, {"retry-after": "632"},
                      {"code": "rate_limit_exceeded"})
     exc.args = ("Rate limit reached ... on tokens per day (TPD): Limit 200000, Used 195297",)
     exc.message = exc.args[0]
-    d = chat.describe_llm_error(exc)
+    d = chat.describe_llm_error(erreur_groq(exc))
     assert d["code"] == "llm_daily_quota"
     assert d["message"].endswith("Réessaie dans environ 11 minutes.")
-    assert chat.retry_delay(exc) is None
+    assert erreur_groq(exc).attente is None      # attendre ne sert à rien
 
 
 def test_formes_relachees_du_vrai_modele():
