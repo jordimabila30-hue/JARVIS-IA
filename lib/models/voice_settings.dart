@@ -1,3 +1,18 @@
+/// Interruption de la parole de JARVIS (vocal principal et JARVIS Touch).
+/// Le bouton « Arrêter la parole » existe dans les deux modes ;
+/// l'automatique (voix de l'utilisateur détectée pendant la réponse) reste
+/// indisponible tant que sa fiabilité n'est pas démontrée
+/// ([disponible] faux).
+enum ModeInterruption {
+  manuelle('Manuelle', true),
+  automatique('Automatique', false);
+
+  const ModeInterruption(this.libelle, this.disponible);
+
+  final String libelle;
+  final bool disponible;
+}
+
 /// Profils vocaux : des préréglages de débit et de hauteur.
 enum ProfilVocal {
   classique('Classique', 'Posé, légèrement grave'),
@@ -43,6 +58,7 @@ class VoiceSettings {
     this.volume = 1.0,
     this.microphoneId,
     this.reponseAutomatique = true,
+    this.interruption = ModeInterruption.manuelle,
   });
 
   final ProfilVocal profil;
@@ -63,6 +79,9 @@ class VoiceSettings {
   /// Vrai : JARVIS répond dès la fin de la phrase. Faux : la phrase
   /// reconnue attend une validation.
   final bool reponseAutomatique;
+
+  /// Interruption de la parole (manuelle par défaut, jamais supprimable).
+  final ModeInterruption interruption;
 
   // --- Bornes : une voix toujours utilisable, jamais caricaturale --------
 
@@ -91,6 +110,7 @@ class VoiceSettings {
     double? volume,
     String? Function()? microphoneId,
     bool? reponseAutomatique,
+    ModeInterruption? interruption,
   }) => VoiceSettings(
     profil: profil ?? this.profil,
     locale: locale ?? this.locale,
@@ -100,6 +120,7 @@ class VoiceSettings {
     volume: (volume ?? this.volume).clamp(0.0, 1.0),
     microphoneId: microphoneId != null ? microphoneId() : this.microphoneId,
     reponseAutomatique: reponseAutomatique ?? this.reponseAutomatique,
+    interruption: interruption ?? this.interruption,
   );
 
   /// Applique un profil prédéfini (vitesse et hauteur ; le volume reste
@@ -141,6 +162,7 @@ class VoiceSettings {
     'volume': volume,
     'microphoneId': microphoneId,
     'reponseAutomatique': reponseAutomatique,
+    'interruption': interruption.name,
   };
 
   /// Lecture tolérante : une valeur absente ou invalide reprend sa valeur
@@ -161,6 +183,11 @@ class VoiceSettings {
       orElse: () => defaut.profil,
     );
     final auto = json['reponseAutomatique'];
+    // Un mode encore indisponible n'est jamais relu comme actif.
+    final interruption = ModeInterruption.values.firstWhere(
+      (m) => m.name == json['interruption'] && m.disponible,
+      orElse: () => defaut.interruption,
+    );
     return const VoiceSettings().copyWith(
       profil: profil,
       locale: texte('locale') ?? defaut.locale,
@@ -170,6 +197,7 @@ class VoiceSettings {
       volume: nombre('volume', defaut.volume),
       microphoneId: () => texte('microphoneId'),
       reponseAutomatique: auto is bool ? auto : defaut.reponseAutomatique,
+      interruption: interruption,
     );
   }
 
@@ -183,7 +211,8 @@ class VoiceSettings {
       other.hauteur == hauteur &&
       other.volume == volume &&
       other.microphoneId == microphoneId &&
-      other.reponseAutomatique == reponseAutomatique;
+      other.reponseAutomatique == reponseAutomatique &&
+      other.interruption == interruption;
 
   @override
   int get hashCode => Object.hash(
@@ -195,6 +224,7 @@ class VoiceSettings {
     volume,
     microphoneId,
     reponseAutomatique,
+    interruption,
   );
 }
 

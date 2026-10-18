@@ -56,6 +56,18 @@ def test_convertir_claude_image_avant_le_texte():
     ]}]
 
 
+# --- Mode vocal : consigne orale -------------------------------------------------
+
+async def test_echange_vocal_consigne_orale(env):
+    serveur = ServeurClaude()
+    env.llm = serveur.fournisseur()
+    await post_chat(env, message="Explique la photosynthèse.", oral=True)
+    await post_chat(env, message="Explique la photosynthèse.")
+    vocal, ecrit = serveur.requetes
+    assert "dite à voix haute" in vocal["system"]
+    assert "dite à voix haute" not in ecrit["system"]
+
+
 # --- Route du chat -----------------------------------------------------------------
 
 async def test_fournisseur_sans_vision_refuse_avant_tout_appel(env):

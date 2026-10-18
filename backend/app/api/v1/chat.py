@@ -136,10 +136,25 @@ Date du jour (UTC) : {date}.
 Ton demandé : {ton}"""
 
 
-def build_system_prompt(ton: Ton, persona: str | None, now: datetime) -> str:
+# Échange du mode vocal : la réponse sera DITE (une seule réponse, écrite
+# telle quelle dans la conversation). Jamais de chiffre ni de fait modifié.
+CONSIGNE_ORALE = """Cette réponse sera dite à voix haute par JARVIS.
+Parle comme un assistant calme et précis qui explique, pas comme un document :
+- phrases naturelles et enchaînées (« d'abord », « ensuite », « enfin » si
+  c'est une suite d'étapes), sans titres, listes à puces, numéros, tableaux
+  ni mise en forme ;
+- question simple : réponse directe en une ou deux phrases ; explication :
+  progressive, sans introduction du type « voici les points essentiels » ;
+- garde exactement les chiffres, dates, unités, valeurs et conclusions ;
+  une citation ou une formule demandée mot à mot reste mot à mot."""
+
+
+def build_system_prompt(ton: Ton, persona: str | None, now: datetime, oral: bool = False) -> str:
     prompt = SYSTEM_PROMPT.format(date=now.date().isoformat(), ton=INSTRUCTIONS_TON[ton])
     if persona:
         prompt += f"\nPersona actif : {persona}"
+    if oral:
+        prompt += "\n\n" + CONSIGNE_ORALE
     return prompt
 
 
@@ -167,6 +182,8 @@ class ChatRequest(BaseModel):
     # Capture d'écran jointe (JARVIS Touch), chat ordinaire seulement :
     # contrôlée, jamais enregistrée en base (voir app/vision.py).
     image: vision.ImageJointe | None = None
+    # Échange du mode vocal : réponse formulée pour être dite.
+    oral: bool = False
 
 
 # --- Utilitaires --------------------------------------------------------------------
@@ -560,7 +577,7 @@ async def chat_stream(
             if history and history[-1]["role"] == "user" and history[-1]["content"] == question:
                 history = history[:-1]
 
-        systeme = build_system_prompt(body.ton, conversation.get("persona"), now)
+        systeme = build_system_prompt(body.ton, conversation.get("persona"), now, oral=body.oral)
         if contextes:
             # Aucun appel au fournisseur sans réponse explicite de
             # l'utilisateur sur l'envoi des messages WhatsApp.

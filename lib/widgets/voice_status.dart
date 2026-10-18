@@ -103,6 +103,10 @@ class _Conversation extends StatelessWidget {
               ),
           ],
         ),
+        // Bouton contextuel, zone de hauteur fixe : rien ne bouge quand il
+        // apparaît (« Arrêter la parole » pendant la parole, « Parler »
+        // après un arrêt, rien sinon).
+        SizedBox(height: 52, child: Center(child: _BoutonParole(session: session))),
         // Ce que l'utilisateur a dit.
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
@@ -181,7 +185,51 @@ class _Conversation extends StatelessWidget {
   }
 }
 
-/// « Écoute… », « Réflexion… », « JARVIS parle… » : petit, avec un point
+/// Arrêter la parole (JARVIS parle) ou Parler (après un arrêt) : un seul
+/// bouton, fondu court, jamais affiché dans un état qui ne lui correspond pas.
+class _BoutonParole extends StatelessWidget {
+  const _BoutonParole({required this.session});
+
+  final VoiceSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final parle = session.actif && session.etat == VoiceState.speaking;
+    final reprendre = session.actif && session.paroleInterrompue;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 150),
+      child: parle
+          ? FilledButton.icon(
+              key: const ValueKey('arreter'),
+              onPressed: session.arreterParole,
+              icon: const Icon(Icons.stop_rounded, size: 18),
+              label: const Text('Arrêter la parole'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD9473F),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            )
+          : reprendre
+          ? FilledButton.icon(
+              key: const ValueKey('parler'),
+              onPressed: session.parler,
+              icon: const Icon(Icons.mic_none_rounded, size: 18),
+              label: const Text('Parler'),
+              style: FilledButton.styleFrom(
+                backgroundColor: CouleursJarvis.signal,
+                foregroundColor: CouleursJarvis.ivoire,
+                minimumSize: const Size(0, 40),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            )
+          : const SizedBox.shrink(key: ValueKey('rien')),
+    );
+  }
+}
+
+/// « À l'écoute… », « JARVIS réfléchit… », « JARVIS parle… » : petit, avec un point
 /// de couleur qui indique l'état.
 class _Statut extends StatelessWidget {
   const _Statut({required this.session, required this.taille});

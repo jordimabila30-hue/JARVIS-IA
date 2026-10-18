@@ -76,6 +76,9 @@ class MoteurConversationIA {
       propositionsMessage: demande.propositionsMessage,
       longueurPropose: demande.longueurPropose,
       image: demande.image,
+      // Échange vocal : réponse formulée pour être dite (même et unique
+      // réponse, écrite telle quelle dans la conversation).
+      oral: demande.vocale,
       // Dès l'événement `meta` : même si la génération échoue ensuite,
       // ou si le fil a changé entre-temps, la conversation locale garde
       // sa conversation serveur.

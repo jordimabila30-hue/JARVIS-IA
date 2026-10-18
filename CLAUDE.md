@@ -726,6 +726,19 @@ JARVIS Touch, intégration (2026-10-18) :
   vocal fermé (reprenable dans l'accueil).
 - Menu : « Importer » → « Actions » (M'expliquer, Traduire, Aider à
   répondre, Mes raccourcis : « Bientôt disponible », aucun appel IA).
+- Voix (vocal principal et JARVIS Touch, même `VoiceSession`) : la voix
+  dit `TexteOral.preparer(texte)` (`services/texte_oral.dart` : Markdown
+  retiré, listes numérotées → « D'abord… Ensuite… Enfin… », unités et
+  symboles en mots, chiffres jamais modifiés) ; l'écrit reste inchangé dans
+  la conversation. Échange vocal : `oral: true` sur `/chat/stream` →
+  `CONSIGNE_ORALE` ajoutée au système (une seule réponse, formulée pour
+  être dite). Arrêt de la parole : `VoiceSession.arreterParole` (état
+  « Parole interrompue » immédiat, voix coupée, rien ne reprend seul) /
+  `parler` ; distinct de couper le micro, réduire et quitter. Boutons
+  contextuels en zone fixe (`VoiceStatus._BoutonParole`,
+  `VocalJarvisTouch.contextuel`). Réglage commun : Paramètres › Chat vocal ›
+  Interruption de la parole (`VoiceSettings.interruption` ; automatique
+  indisponible, jamais relu comme actif).
 - Téléphone USB : lancer avec `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`
   (+ `adb reverse tcp:8000 tcp:8000`), sinon l'appli vise 10.0.2.2.
 

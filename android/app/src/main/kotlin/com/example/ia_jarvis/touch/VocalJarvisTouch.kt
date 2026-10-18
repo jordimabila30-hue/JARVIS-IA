@@ -39,6 +39,8 @@ import kotlin.math.sin
  * Micro : couper / réactiver l'écoute. Chat : mini-chat écrit, même
  * conversation. Réduire : la session continue (bulle marquée, un toucher
  * la rouvre). Quitter : fin réelle, micro et voix libérés.
+ * Bouton contextuel (zone de hauteur fixe) : « Arrêter la parole » pendant
+ * que JARVIS parle, « Parler » après un arrêt ; rien sinon.
  */
 class VocalJarvisTouch(
     private val contexte: Context,
@@ -61,6 +63,8 @@ class VocalJarvisTouch(
     private val symbole = SymboleAudio(contexte)
     private val etatTexte = TextView(contexte)
     private val phrase = TextView(contexte)
+    private val contextuel = TextView(contexte)
+    private var actionContextuelle: String? = null
     private val micro = ImageView(contexte)
     private val libelleMicro = TextView(contexte)
     private var ajoutee = false
@@ -113,13 +117,21 @@ class VocalJarvisTouch(
     fun appliquer(e: Map<*, *>) {
         actif = e["actif"] == true
         val probleme = e["probleme"] as? String
+        val interrompue = actif && e["interrompue"] == true
         val etat = if (actif) e["etat"] as? String ?: "repos" else "coupe"
         symbole.changer(etat)
+        montrerContextuel(
+            when {
+                etat == "parole" -> "arreter"
+                interrompue -> "parler"
+                else -> null
+            }
+        )
         etatTexte.setTextColor(if (probleme != null) ERREUR else TEXTE)
         etatTexte.text = probleme ?: when (etat) {
-            "ecoute" -> "J’écoute…"
-            "reflexion" -> "Je réfléchis…"
-            "parole" -> "Je réponds…"
+            "ecoute" -> "À l’écoute…"
+            "reflexion" -> "JARVIS réfléchit…"
+            "parole" -> "JARVIS parle…"
             "coupe" -> "Micro coupé"
             else -> (e["statut"] as? String)?.takeIf { it.isNotBlank() } ?: "Prêt"
         }
@@ -133,6 +145,32 @@ class VocalJarvisTouch(
         phrase.visibility = if (phrase.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         micro.alpha = if (actif) 1f else 0.45f
         libelleMicro.text = if (actif) "Micro" else "Micro coupé"
+    }
+
+    /** Le bouton contextuel change de rôle, jamais de place (aucun saut). */
+    private fun montrerContextuel(action: String?) {
+        if (action == actionContextuelle) return
+        actionContextuelle = action
+        if (action == null) {
+            contextuel.animate().alpha(0f).setDuration(120).withEndAction {
+                if (actionContextuelle == null) contextuel.visibility = View.INVISIBLE
+            }.start()
+            return
+        }
+        val arreter = action == "arreter"
+        contextuel.text = if (arreter) "Arrêter la parole" else "Parler"
+        contextuel.contentDescription = contextuel.text
+        contextuel.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            if (arreter) R.drawable.touch_stop else R.drawable.touch_vocal, 0, 0, 0,
+        )
+        contextuel.background = GradientDrawable().apply {
+            cornerRadius = dp(22).toFloat()
+            setColor(if (arreter) Color.rgb(0xD9, 0x47, 0x3F) else Color.rgb(0x55, 0x59, 0xB8))
+        }
+        contextuel.visibility = View.VISIBLE
+        contextuel.animate().cancel()
+        contextuel.alpha = 0f
+        contextuel.animate().alpha(1f).setDuration(120).start()
     }
 
     /** Amplitude réelle (0 à 1) du micro ou de la voix de JARVIS. */
@@ -193,10 +231,33 @@ class VocalJarvisTouch(
         }
         racine.addView(phrase, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
+        contextuel.apply {
+            textSize = 14f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            compoundDrawablePadding = dp(8)
+            setPadding(dp(18), 0, dp(20), 0)
+            visibility = View.INVISIBLE
+            setOnClickListener {
+                val methode = if (actionContextuelle == "arreter") "vocalArreterParole" else "vocalParler"
+                // Réaction immédiate ; l'état réel suit (Dart).
+                if (methode == "vocalArreterParole") montrerContextuel(null)
+                CanalMiniChat.appeler(methode, null, {}, {})
+            }
+        }
+        // Zone fixe : la fenêtre ne change pas de taille quand le bouton
+        // apparaît ou disparaît.
+        val zoneContextuelle = FrameLayout(contexte)
+        zoneContextuelle.addView(contextuel, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(42), Gravity.CENTER))
+        racine.addView(zoneContextuelle, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(4) })
+
         val commandes = LinearLayout(contexte).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, 0)
+            setPadding(0, dp(6), 0, 0)
         }
         commandes.addView(commande(micro, libelleMicro, R.drawable.touch_vocal, "Micro", "Couper ou réactiver l’écoute") {
             CanalMiniChat.appeler("vocalMicro", null, { e -> (e as? Map<*, *>)?.let { appliquer(it) } }, {})

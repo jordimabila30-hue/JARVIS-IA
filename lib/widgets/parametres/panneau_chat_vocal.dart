@@ -37,7 +37,7 @@ class PanneauChatVocal extends StatelessWidget {
             const SizedBox(height: 28),
             CarteReglages(
               titre: 'Écoute',
-              enfants: [_micro(r), _reponseAuto(r)],
+              enfants: [_micro(r), _reponseAuto(r), _interruption(r)],
             ),
             const SizedBox(height: 28),
             CarteApercuVoix(session: session),
@@ -218,6 +218,38 @@ class PanneauChatVocal extends StatelessWidget {
               ),
             )
           : null,
+    );
+  }
+
+  /// Interruption de la parole : réglage commun au vocal principal et à
+  /// JARVIS Touch (une phrase, deux choix).
+  Widget _interruption(VoiceSettings r) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const TexteReglage(
+            titre: 'Interruption de la parole',
+            description: 'Touchez pour interrompre JARVIS.',
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final m in ModeInterruption.values)
+                PastilleReglage(
+                  libelle: m.disponible ? m.libelle : '${m.libelle} · bientôt',
+                  choisie: r.interruption == m,
+                  surChoix: m.disponible
+                      ? () => _service.choisirInterruption(m)
+                      : null,
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

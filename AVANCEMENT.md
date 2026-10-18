@@ -1638,3 +1638,29 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - Gestes simulés par `adb` : sensation réelle au doigt et vibrations à vérifier par l'utilisateur.
 - Deux séquences `adb` instantanées (tous les mouvements sans délai) ont refermé le menu ou révélé une autre ligne ; non reproduit à vitesse réaliste ni en test automatisé, cause non établie.
 - Web et Windows : couverts par les tests de widgets (souris : geste désactivé, bouton conservé), pas lancés réellement. iOS : non testé.
+
+## 2026-10-19 — Voix naturelle et arrêt de la parole (vocal principal + JARVIS Touch)
+
+### Fait
+- **Texte oral** (`TexteOral`, partagé) : plus aucun symbole prononcé (gras, puces, numéros, titres, tableaux, liens, code, émojis) ; listes numérotées dites « D'abord… Ensuite… Enfin… » ; km/h, °C, m², ≈, ≤, → en mots ; chiffres, dates et pourcentages intacts. Appliqué au chat vocal et à la lecture des réponses écrites.
+- **Consigne orale** (backend, échanges vocaux seulement, `oral: true`) : réponse naturelle, directe pour une question simple, progressive pour une explication, sans liste ni mise en forme, chiffres exacts. Un seul appel au modèle ; production mise à jour (image précédente : `backend-api:avant-oral`).
+- **Arrêt de la parole** (`VoiceSession.arreterParole` / `parler`) : état « Parole interrompue » immédiat, voix coupée, aucune reprise automatique (ni voix ni écoute), « Parler » relance une écoute ; distinct de Micro, Réduire, Quitter.
+- **Interfaces** : « À l'écoute… », « JARVIS réfléchit… », « JARVIS parle… » ; bouton rouge « Arrêter la parole » seulement pendant la parole, bouton « Parler » après un arrêt, dans une zone de hauteur fixe (rien ne bouge) ; même comportement dans JARVIS Touch (fenêtre de taille constante).
+- **Paramètres › Chat vocal › Interruption de la parole** : Manuelle (par défaut) · « Automatique · bientôt » (indisponible), une seule ligne d'aide ; enregistré, partagé par les deux interfaces.
+- **Interruption automatique non activée** : pas de détection fiable de la voix de l'utilisateur pendant la synthèse sur le S10+ (la reconnaissance Android est coupée pendant que JARVIS parle ; écho du haut-parleur non filtré) ; non simulée.
+
+### Tests
+- Flutter : `texte_oral_test` (7), `arret_parole_test` (2 : silence, aucune reprise, état immédiat, Parler, une seule demande IA ; quitter pendant la parole) ; suite complète : 833 réussis, 1 échec `gmail_test` sous charge (réussit seul, 19/19, fichier non modifié).
+- Backend : 517 réussis, 1 ignoré (dont consigne orale seulement si `oral`).
+- S10+ (phrase dite par la synthèse vocale du PC, vrai backend) : vocal principal → réponse orale naturelle (« D'abord, la chlorophylle… »), « Arrêter la parole » visible pendant la parole, arrêt, « Parler », aucune reprise en 16 s ; JARVIS Touch : même bouton, arrêt, « Parole interrompue » + « Parler », Quitter libère le micro.
+- Corrigé pendant l'essai : JARVIS Touch pouvait afficher un « JARVIS parle » périmé après l'arrêt (réponse d'appel arrivée après l'état poussé) ; l'état change désormais avant l'arrêt de la voix et la fenêtre ne suit que l'état poussé (test ajouté).
+
+### Mesures (S10+, journaux)
+- Début de la voix après réception de la réponse : 10 à 44 ms.
+- Arrêt de la voix après le toucher : 4 à 41 ms (6 mesures).
+- Mémoire après la séance vocale : 408 Mo PSS.
+
+### Limites
+- La réponse est dite en un seul énoncé, à la fin de la réception (comportement existant) : pas de lecture par segments pendant le flux.
+- Pendant l'essai, une autre personne a utilisé le téléphone (questions sur le soleil) : échanges réels, enregistrés dans la conversation.
+

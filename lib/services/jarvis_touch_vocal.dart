@@ -41,6 +41,13 @@ class PasserelleVocalTouch {
         return _quitter();
       case 'vocalFermer':
         return _fermer();
+      // L'état suit par `vocal` (poussé dans l'ordre) : jamais renvoyé ici,
+      // une réponse arrivée après lui afficherait un état périmé.
+      case 'vocalArreterParole':
+        return _session.arreterParole().then((_) => null);
+      case 'vocalParler':
+        _session.parler();
+        return Future.value(null);
     }
     return null;
   }
@@ -99,6 +106,7 @@ class PasserelleVocalTouch {
       VoiceState.idle => 'repos',
     },
     'actif': _session.actif,
+    'interrompue': _session.paroleInterrompue,
     'statut': _session.statut,
     'transcription': _session.transcription,
     'reponse': _session.reponse,

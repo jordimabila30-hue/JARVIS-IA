@@ -240,6 +240,7 @@ class ApiJarvis {
     String? propositionsMessage,
     String? longueurPropose,
     ImageAEnvoyer? image,
+    bool oral = false,
     void Function(String conversation)? surConversation,
     void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
@@ -263,6 +264,7 @@ class ApiJarvis {
         propositionsMessage: propositionsMessage,
         longueurPropose: longueurPropose,
         image: image,
+        oral: oral,
         surPreparation: surPreparation,
       ),
       ),
@@ -707,6 +709,7 @@ class ApiJarvis {
     String? propositionsMessage,
     String? longueurPropose,
     ImageAEnvoyer? image,
+    bool oral = false,
     void Function()? surPreparation,
   }) async {
     _Reponse<ReponseChat> echec(ErreurApi e, [String? detail]) =>
@@ -733,6 +736,7 @@ class ApiJarvis {
             'ton_propose': ?tonPropose,
             'propositions_message_id': ?propositionsMessage,
             'longueur_proposee': ?longueurPropose,
+            if (oral) 'oral': true,
             if (image != null)
               'image': {
                 'media_type': image.typeMedia,

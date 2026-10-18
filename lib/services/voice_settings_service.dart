@@ -269,6 +269,11 @@ class VoiceSettingsService extends ChangeNotifier {
   void choisirReponseAutomatique(bool actif) =>
       _mettreAJour(_reglages.copyWith(reponseAutomatique: actif));
 
+  /// Un mode indisponible (automatique non validé) n'est jamais choisi.
+  void choisirInterruption(ModeInterruption m) {
+    if (m.disponible) _mettreAJour(_reglages.copyWith(interruption: m));
+  }
+
   @override
   void dispose() {
     if (_minuteur?.isActive ?? false) enregistrer();
