@@ -176,3 +176,19 @@ def test_attachment_inconnu_ignore_par_les_lecteurs_existants():
     assert restauration.references(pieces) == [] if hasattr(restauration, "references") else True
     assert propositions.lues(pieces, "m") is None
     assert json.dumps(pieces)
+
+
+async def test_tours_consommes_comptes_meme_sans_reponse_finale(env):
+    # Le modèle demande des outils à chaque tour, même au dernier : la demande
+    # finit en erreur, mais les tours facturés sont comptés (une fois).
+    appels = [Scenario(textes=[], entree=100, sortie=10,
+                       appels=[(f"a{i}", "recherche_fictive", {"requete": f"q{i}"})]) for i in range(10)]
+    serveur = SERVEURS["groq"](etapes=appels)
+    env.llm = serveur.fournisseur()
+    ev = evenements((await chat_post(env)).text)
+    assert ev[-1][0] == "error" and ev[-1][1]["code"] == "odo_limite"
+    assert len(serveur.requetes) == settings.odo_max_tours
+    assert serveur.requetes[-1]["tool_choice"] == "none"            # dernier tour : réponse exigée
+    [(messages, tokens)] = env.supa.increments
+    assert messages == 1 and tokens == settings.odo_max_tours * 110
+    assert [x for x in env.supa.inserted if x["role"] == "assistant"] == []

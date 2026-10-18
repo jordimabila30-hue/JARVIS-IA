@@ -145,6 +145,45 @@ class SupabaseAdmin:
         resp.raise_for_status()
         return resp.json()
 
+    # Connexions externes (Gmail) ------------------------------------------------
+    # Le jeton de rafraîchissement reste dans Vault ; ces fonctions SQL sont
+    # réservées au backend (service_role). Jamais journalisé.
+
+    async def enregistrer_connexion(self, user_id: str, provider: str, email: str, scopes: list[str],
+                                    jeton: str) -> str:
+        resp = await self._http.post("/rpc/enregistrer_connexion_externe", json={
+            "p_user_id": user_id, "p_provider": provider, "p_email": email, "p_scopes": scopes, "p_jeton": jeton})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def jeton_connexion(self, user_id: str, provider: str) -> dict | None:
+        """{connexion_id, account_email, scopes, status, jeton} ou None."""
+        resp = await self._http.post("/rpc/jeton_connexion_externe",
+                                     json={"p_user_id": user_id, "p_provider": provider})
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def etat_connexion(self, user_id: str, provider: str) -> dict | None:
+        """Colonnes non sensibles de la connexion (jamais le jeton)."""
+        resp = await self._http.get("/external_connections", params={
+            "user_id": f"eq.{user_id}", "provider": f"eq.{provider}",
+            "select": "account_email,scopes,status,connected_at,last_used_at,last_error"})
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+    async def marquer_connexion(self, user_id: str, provider: str, status: str, erreur: str | None = None) -> None:
+        resp = await self._http.post("/rpc/marquer_connexion_externe", json={
+            "p_user_id": user_id, "p_provider": provider, "p_status": status, "p_erreur": erreur})
+        resp.raise_for_status()
+
+    async def supprimer_connexion(self, user_id: str, provider: str) -> bool:
+        resp = await self._http.post("/rpc/supprimer_connexion_externe",
+                                     json={"p_user_id": user_id, "p_provider": provider})
+        resp.raise_for_status()
+        return bool(resp.json())
+
     async def ping(self) -> None:
         resp = await self._http.get("/users", params={"select": "id", "limit": "1"})
         resp.raise_for_status()

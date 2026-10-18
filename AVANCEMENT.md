@@ -1442,3 +1442,67 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - Vérifier un échange réel Free (GroqCloud) depuis l'application quand tu le souhaites (appel facturable, avec ton accord).
 - Phase 2 d'ODO : Gmail.
+
+## 2026-10-18 — ODO, phase 2/2 : Gmail en lecture seule
+
+### Partie A — Routage réel Free → GroqCloud (S10+)
+- S10+ détecté et autorisé ; l'appli installée visait l'ancienne instance 8001 (supprimée) : réinstallée vers la production (8000) avec `adb reverse tcp:8000`.
+- 1er essai (« Réponds juste OK. ») : réponse LOCALE (« Très bien. »), aucun appel, rien compté.
+- 2e essai, 1 seul appel réel : « quel est la capital du Canada en 1 mot » → « Ottawa ».
+  - `POST https://api.groq.com/openai/v1/chat/completions` 200, modèle `openai/gpt-oss-120b` ;
+  - 1er fragment à 1,5 s, flux sans erreur ;
+  - jour : 1 → 2 messages, 238 → 503 tokens (+265 = 196 entrée + 69 sortie) ;
+  - `llm_usage` groq +1, Claude inchangé ;
+  - `/me/quota` relu après la réponse.
+
+### Fait (hors production)
+- **Supabase** : migration `20261018100000_connexions_externes` **appliquée** (accord).
+  - table `external_connections` sans jeton, RLS + droits par colonne ;
+  - jeton de rafraîchissement dans **Vault** ;
+  - fonctions `enregistrer_` / `jeton_` / `marquer_` / `supprimer_connexion_externe` (`service_role` seulement) ;
+  - secret supprimé avec la ligne ;
+  - aucun nouvel avis de sécurité.
+- **Backend** :
+  - `app/integrations/google.py` : OAuth « authorization code » + PKCE S256, `state` à usage unique lié au JWT, `gmail.readonly` seul, `prompt=select_account consent`, révocation, renouvellement, état « à renouveler » ;
+  - `app/integrations/gmail.py` : GET seulement, requête structurée, bornes, pièces jointes jamais téléchargées ;
+  - routes `/api/v1/integrations/gmail` (état, connexion, retour HTML, déconnexion) ;
+  - compétences ODO `gmail_rechercher`, `gmail_lire_message`, `gmail_lire_fil`, `gmail_preparer_resume` + `CONSIGNE_GMAIL` ;
+  - `ServiceODO.contexte_compte` / `note` (« connectez Gmail ») ;
+  - validation `pattern` ;
+  - `conftest.py` : tests isolés de la configuration privée.
+- **Flutter** :
+  - Paramètres › Gmail (`PanneauGmail` : connecter, attente, connecté, à renouveler, non configuré ; autorisations expliquées ; déconnexion confirmée) ;
+  - `ServiceGmail` (navigateur du système via `url_launcher`, attente du retour, premier plan) ;
+  - `EtatGmail` ;
+  - `ApiJarvis.etatGmail` / `urlConnexionGmail` / `deconnecterGmail` ;
+  - `DetecteurIntention.concerneMesEmails` : « résume mes mails » va au serveur (plus de « colle la conversation ») ;
+  - Android : lien `jarvis://gmail`.
+- **Vocal et JARVIS Touch** : rien de reconstruit, ils passent par la même `ConversationSession`.
+- **Doc** : `docs/backend/GMAIL.md` (+ guide Google Cloud), `ODO.md`, CLAUDE.md, `.env.example`.
+
+### Tests (aucun appel réel)
+- Backend : **500 réussis, 1 ignoré** (22 nouveaux `test_gmail`).
+- SQL : **169 réussis** (24 nouveaux `80_connexions_externes_test`).
+- Flutter : **792 réussis** (11 nouveaux `gmail_test`) ; 1 test vocal (`vocal_android_test`, non modifié) en échec sous charge, réussi seul (15/15).
+
+### État
+- Production `jarvis-api` (8000) **inchangée** pendant tout le développement : image `954d097068c5`, routage actif, sans ODO ni Gmail.
+- Instance isolée `jarvis-api-gmail` (port 8001, image `backend-api:gmail-test`, Redis base 2, ODO actif) : Gmail « non configuré » tant que les identifiants Google ne sont pas dans `backend/.env`.
+
+### Validation réelle sur le S10+ (instance de test 8001, compte Free → GroqCloud)
+- **Google Cloud** (fait par l'utilisateur) :
+  - projet JARVIS, API Gmail activée ;
+  - client OAuth « Application Web » avec les adresses de retour localhost 8001 et 8000 ;
+  - portées `gmail.readonly` (+ `gmail.send` déclarée, non utilisée) ;
+  - mode Test.
+- **Identifiants** : vérifiés auprès de Google sans appel utile (faux code → `invalid_grant`). Un caractère du secret mal recopié depuis une capture a été corrigé.
+- **Connexion Gmail sur le S10+** : choix du compte chez Google, retour automatique dans JARVIS (`jarvis://gmail`), page « Gmail connecté » (adresse, lecture seule). En base : connexion active, portée lecture seule, jeton dans Vault (1 secret).
+- **Compte d'école** (Google Workspace) : bloqué tant qu'il n'est pas utilisateur test (`403 access_denied`).
+- **« Résume mes 3 derniers mails » (écrit)** :
+  - 1er essai : 4 tours (lecture un par un) → `odo_limite`, et tours NON comptés ;
+  - corrigé : dernier tour à réponse forcée (`tool_choice` « none » pour Claude et GroqCloud), consigne « résumer en UN appel », tours consommés comptés même sans réponse (`consomme_sans_texte`) ;
+  - 2e essai : 3 tours (`gmail_rechercher` + `gmail_preparer_resume`), résumé avec « Interprétation globale », GroqCloud seulement, +1 message, +6 172 tokens, Gmail en GET seulement.
+- **Vocal** (« Regarde si j'ai reçu des mails importants aujourd'hui ») : même conversation, 2 tours, réponse lue par la synthèse vocale, +1 message.
+- **Défaut de sécurité vu en réel** : le modèle a recopié des codes de vérification reçus par e-mail. La consigne Gmail l'interdit désormais (codes, mots de passe, liens de connexion, numéros de carte ou de compte), avec un test.
+- **Lecture vocale** : la consigne demande des phrases simples, sans titres ni séparateurs.
+- **Tests après corrections** : backend 506 réussis, 1 ignoré.

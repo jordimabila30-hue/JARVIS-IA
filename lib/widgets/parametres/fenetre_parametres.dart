@@ -10,7 +10,9 @@ import '../../services/voice_session.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../models/forme_pim.dart';
 import '../../services/preferences_pim_service.dart';
+import '../../services/integrations/service_gmail.dart';
 import '../../services/utilisation/service_utilisation.dart';
+import '../integrations/panneau_gmail.dart';
 import '../utilisation/panneau_utilisation.dart';
 import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
@@ -23,6 +25,7 @@ import 'panneau_general.dart';
 enum SectionParametres {
   general('Général', Icons.tune_rounded),
   utilisation('Utilisation', Icons.data_usage_rounded),
+  gmail('Gmail', Icons.mail_outline_rounded),
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
   apparence('Apparence', Icons.palette_outlined),
@@ -57,6 +60,7 @@ Future<void> ouvrirParametres(
   VoidCallback? surConnexion,
   ConsentementAnalyse? consentement,
   ServiceUtilisation? utilisation,
+  ServiceGmail? gmail,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < largeurParametresCompacte;
   final route = RawDialogRoute<void>(
@@ -73,6 +77,7 @@ Future<void> ouvrirParametres(
       surConnexion: surConnexion,
       consentement: consentement,
       utilisation: utilisation,
+      gmail: gmail,
     ),
     transitionBuilder: (context, animation, _, enfant) {
       final courbe = CurvedAnimation(
@@ -125,12 +130,14 @@ class FenetreParametres extends StatefulWidget {
     this.surConnexion,
     this.consentement,
     this.utilisation,
+    this.gmail,
   });
 
   final VoiceSession session;
 
   /// Utilisation de l'IA du compte (null : sans compte).
   final ServiceUtilisation? utilisation;
+  final ServiceGmail? gmail;
 
   /// Accord pour l'analyse distante des conversations WhatsApp (null :
   /// sans compte).
@@ -258,6 +265,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             surConnexion: widget.surConnexion,
                             consentement: widget.consentement,
                             utilisation: widget.utilisation,
+                            gmail: widget.gmail,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -312,6 +320,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           surConnexion: widget.surConnexion,
                           consentement: widget.consentement,
                           utilisation: widget.utilisation,
+                          gmail: widget.gmail,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -685,11 +694,13 @@ class _Contenu extends StatelessWidget {
     this.surConnexion,
     this.consentement,
     this.utilisation,
+    this.gmail,
     this.avecTitre = true,
   });
 
   final SectionParametres section;
   final ServiceUtilisation? utilisation;
+  final ServiceGmail? gmail;
   final ConsentementAnalyse? consentement;
   final VoiceSession session;
   final PreferencesPimService formes;
@@ -747,6 +758,7 @@ class _Contenu extends StatelessWidget {
               switch (section) {
                 SectionParametres.general => const PanneauGeneral(),
                 SectionParametres.utilisation => PanneauUtilisation(service: utilisation),
+                SectionParametres.gmail => PanneauGmail(service: gmail),
                 SectionParametres.chatVocal => PanneauChatVocal(
                   session: session,
                 ),
@@ -852,6 +864,7 @@ class _SectionAVenir extends StatelessWidget {
       ),
       SectionParametres.confidentialite ||
       SectionParametres.utilisation ||
+      SectionParametres.gmail ||
       SectionParametres.chatVocal ||
       SectionParametres.particules ||
       SectionParametres.compte => ('', const []),

@@ -349,13 +349,21 @@ async def finalize_exchange(
     model: str,
     provider: str | None = None,
     attachments: list[dict] | None = None,
+    consomme_sans_texte: bool = False,
 ) -> None:
     """[user_row] None : la question est une consigne déjà enregistrée
     (pièce jointe) ; seule la réponse est insérée. [attachments] :
     références vérifiées, dans la même ligne que la réponse. [model] :
     modèle qui a réellement répondu (MIA)."""
     if not text:
-        await quota_service.release(reservation)
+        if consomme_sans_texte and prompt_tokens + completion_tokens > 0:
+            # Des tours du modèle ont été facturés (ODO), sans réponse finale :
+            # la consommation réelle est comptée, rien n'est enregistré.
+            await quota_service.record_usage(reservation, prompt_tokens + completion_tokens,
+                                             tokens_input=prompt_tokens, tokens_output=completion_tokens,
+                                             provider=provider, model=model)
+        else:
+            await quota_service.release(reservation)
         return
 
     assistant_row = {
@@ -679,13 +687,18 @@ async def chat_stream(
     # ODO : chat ordinaire seulement (WhatsApp et consignes : chemin actuel).
     # Identité et offre du serveur ; budget du jour revérifié avant chaque tour.
     execution = None
-    if preparation is None and consigne is None:
+    if odo.actif and preparation is None and consigne is None:
+        contexte_odo = await odo.contexte_compte(user_id=user_id, demande_id=demande_id,
+                                                 plan=reservation.status.plan, conversation_id=conversation_id)
         execution = odo.execution(
-            llm,
-            odo.contexte(user_id=user_id, demande_id=demande_id, plan=reservation.status.plan,
-                         conversation_id=conversation_id),
+            llm, contexte_odo,
             verifier_budget=lambda tokens: quota_service.budget_depasse(reservation, tokens),
         )
+        # Compétence existante mais non connectée (Gmail) : le modèle sait
+        # quoi répondre, sans outil ni appel supplémentaire.
+        note = odo.note(contexte_odo)
+        if note and prompt and prompt[0]["role"] == "system":
+            prompt = [{**prompt[0], "content": f"{prompt[0]['content']}\n\n{note}"}, *prompt[1:]]
     source = execution.flux if execution is not None else llm.flux
 
     async def event_stream():
@@ -915,6 +928,7 @@ async def chat_stream(
                 model=fin.modele if fin is not None else llm.modele,
                 provider=llm.nom,
                 attachments=stockees,
+                consomme_sans_texte=execution is not None and execution.tours > 0,
             ))
 
     return StreamingResponse(

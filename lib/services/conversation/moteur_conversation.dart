@@ -206,6 +206,11 @@ class MoteurConversationLocal implements MoteurConversation {
       'exemple :\nSarah : Tu viens ce soir ?\nMoi : Je ne sais pas encore.\n\n'
       'Je m’en occupe ensuite.';
 
+  /// Demande sur les e-mails sans serveur (JARVIS ouvert sans compte).
+  static const emailsSansServeur =
+      'Pour consulter vos e-mails, connectez-vous à JARVIS puis reliez votre '
+      'compte dans Paramètres › Gmail.';
+
   /// Pièce jointe enregistrée, mais aucune IA branchée : rien d'analysé.
   static const analyseIndisponible =
       'J’ai bien enregistré votre consigne avec la conversation WhatsApp, '
@@ -247,6 +252,11 @@ class MoteurConversationLocal implements MoteurConversation {
         r.texte,
         terminerSession: demande.vocale && r.terminerSession,
       );
+    }
+    // E-mails personnels (« résume mes mails ») : la compétence Gmail du
+    // serveur (ODO) s'en charge ; jamais « colle-moi la conversation ».
+    if (c == null && DetecteurIntention.concerneMesEmails(demande.texte)) {
+      return avecIA ? null : const ReponseJarvis(emailsSansServeur);
     }
     // Sans conversation connue, « résume la Révolution française » est une
     // vraie question pour l'IA ; « résume cette conversation » attend

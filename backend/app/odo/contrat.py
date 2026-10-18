@@ -35,6 +35,7 @@ class ContexteOutil:
     plan: str | None = None
     conversation_id: str | None = None
     connexions: frozenset[str] = frozenset()     # services externes connectés (phase 2 : « gmail »)
+    a_renouveler: frozenset[str] = frozenset()   # connexions existantes mais à renouveler
     environnement: str = "production"
 
 
@@ -64,6 +65,9 @@ class Outil(ABC):
     test_seulement: bool = False
     #: Délai d'exécution propre (secondes) ; None : réglage commun.
     delai: float | None = None
+    #: Consigne ajoutée au message système quand l'outil est proposé
+    #: (règles de présentation partagées par une famille d'outils).
+    consigne: str | None = None
 
     @abstractmethod
     async def executer(self, arguments: dict[str, Any], contexte: ContexteOutil) -> ResultatOutil:

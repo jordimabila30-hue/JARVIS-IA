@@ -49,11 +49,13 @@ class FauxLLM(FournisseurLLM):
         super().__init__("m")
         self.tours = list(tours)
         self.recus: list[tuple[list, list]] = []
+        self.forces: list[bool] = []
         self.erreur_au_tour = erreur_au_tour or {}
 
-    async def flux(self, messages, *, max_sortie, effort=None, outils=None):
+    async def flux(self, messages, *, max_sortie, effort=None, outils=None, forcer_reponse=False):
         n = len(self.recus)
         self.recus.append((list(messages), list(outils or [])))
+        self.forces.append(forcer_reponse)
         if n in self.erreur_au_tour:
             raise self.erreur_au_tour[n]
         for ev in self.tours.pop(0):
@@ -392,3 +394,21 @@ async def test_contexte_outil_identique_pour_tous_les_fournisseurs():
     llm = FauxLLM([tour(outil("a1", "lecture_fictive", fiche="agenda")), finale()])
     ev = await derouler(execution(llm))
     assert isinstance(ev[-1], Fin) and ev[-1].modele == "m"
+
+
+async def test_dernier_tour_reponse_forcee_jamais_d_erreur_seche():
+    # Le modèle lit les e-mails un par un : au dernier tour permis, il doit
+    # répondre avec ce qu'il a déjà lu (outils interdits pour ce tour).
+    llm = FauxLLM([tour(outil("a1", "lecture_fictive", fiche="meteo")),
+                   tour(outil("a2", "lecture_fictive", fiche="agenda")),
+                   finale("Voici le point.")])
+    ev = await derouler(execution(llm, max_tours=3))
+    assert textes(ev) == "Voici le point." and isinstance(ev[-1], Fin)
+    assert llm.forces == [False, False, True]
+
+
+async def test_plus_d_appels_possibles_reponse_forcee():
+    llm = FauxLLM([tour(outil("a1", "recherche_fictive", requete="a"), outil("a2", "recherche_fictive", requete="b")),
+                   finale("Résumé.")])
+    await derouler(execution(llm, max_appels=2))
+    assert llm.forces == [False, True]

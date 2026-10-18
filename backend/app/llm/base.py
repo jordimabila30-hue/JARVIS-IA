@@ -265,8 +265,11 @@ class FournisseurLLM(ABC):
 
     @abstractmethod
     def flux(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
-             outils: Sequence[DefinitionOutil] | None = None) -> AsyncIterator[Evenement]:
-        """Réponse en flux : des [Texte], puis une [Fin]."""
+             outils: Sequence[DefinitionOutil] | None = None,
+             forcer_reponse: bool = False) -> AsyncIterator[Evenement]:
+        """Réponse en flux : des [Texte], puis une [Fin]. [forcer_reponse] :
+        les outils restent déclarés (historique d'appels) mais le modèle doit
+        répondre en texte, sans nouvel appel (dernier tour d'ODO)."""
 
     @abstractmethod
     async def json(self, messages: Sequence[Message], *, max_sortie: int,

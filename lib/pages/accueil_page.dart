@@ -26,6 +26,7 @@ import '../services/importation/pont_android_importation.dart';
 import '../services/jarvis_touch_chat.dart';
 import '../services/jarvis_touch_service.dart';
 import '../services/preferences_pim_service.dart';
+import '../services/integrations/service_gmail.dart';
 import '../services/utilisation/service_utilisation.dart';
 import '../services/voice_session.dart';
 import '../theme/gabarit_jarvis.dart';
@@ -74,6 +75,7 @@ class AccueilPage extends StatefulWidget {
     this.ouvrirImport,
     this.consentement,
     this.utilisation,
+    this.gmail,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -120,6 +122,9 @@ class AccueilPage extends StatefulWidget {
   /// Utilisation de l'IA du compte (section « Utilisation » des
   /// Paramètres ; null : sans compte).
   final ServiceUtilisation? utilisation;
+
+  /// Connexion Gmail du compte (Paramètres › Gmail) ; null sans compte.
+  final ServiceGmail? gmail;
 
   /// Après un échec d'enregistrement d'une pièce jointe.
   static const pieceJointeGardee =
@@ -557,6 +562,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       surConnexion: widget.surConnexion,
       consentement: _consentement,
       utilisation: widget.utilisation,
+      gmail: widget.gmail,
     );
   }
 

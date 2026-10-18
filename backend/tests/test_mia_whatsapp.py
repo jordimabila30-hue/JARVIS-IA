@@ -209,7 +209,7 @@ async def test_odo_actif_ne_touche_pas_l_analyse_whatsapp(env, monkeypatch):
         return original(self, *a, **k)
 
     monkeypatch.setattr(service_odo.ServiceODO, "actif", property(lambda self: True))
-    monkeypatch.setattr(service_odo, "_registre", lambda s: RegistreOutils(outils_fictifs()))
+    monkeypatch.setattr(service_odo, "_registre", lambda s, google=None: RegistreOutils(outils_fictifs()))
     monkeypatch.setattr(service_odo.ServiceODO, "execution", espion)
     serveur = ServeurClaude(Scenario(textes=[ANNONCE]), lots=lots_corrects())
     ev, _, props = await demander(env, serveur.fournisseur())

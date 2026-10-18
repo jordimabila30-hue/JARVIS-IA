@@ -1,8 +1,9 @@
 # ODO — orchestrateur universel d'outils
 
 Phase 1 (2026-10-18) : moteur universel, outils fictifs, appels d'outils
-dans MIA universel. **ODO est désactivé en production** (`ODO_ACTIF=false`)
-et le registre de production est vide. Gmail : phase 2.
+dans MIA universel. Phase 2 : compétences Gmail en lecture seule
+(`docs/backend/GMAIL.md`). **ODO est désactivé en production**
+(`ODO_ACTIF=false`).
 
 Responsabilités séparées :
 
@@ -144,3 +145,21 @@ Ni l'orchestrateur ni MIA ne changent.
 
 Contrôle par mutations (copie jetable) : retirer la validation, la
 confirmation ou le routage fait échouer respectivement 1, 4 et 8 tests.
+
+## Phase 2 : Gmail (2026-10-18)
+
+- Compétences `gmail_rechercher`, `gmail_lire_message`, `gmail_lire_fil` et
+  `gmail_preparer_resume` (`app/odo/outils_gmail.py`, `connexion = "gmail"`).
+  Elles sont enregistrées par `registre_actif` dès que les identifiants
+  Google sont présents.
+- `ServiceODO.contexte_compte` lit l'état réel de la connexion du compte
+  (active / à renouveler). Les outils ne sont proposés que si la connexion
+  est active. Sinon, `ServiceODO.note` ajoute au message système une phrase
+  (« connectez / reconnectez Gmail dans Paramètres › Gmail »), sans outil ni
+  appel supplémentaire.
+- `Outil.consigne` : consigne partagée par une famille d'outils
+  (`CONSIGNE_GMAIL` : faits / interprétations, rien d'inventé, lecture seule),
+  ajoutée au message système quand ces outils sont proposés.
+- Validation : `pattern` pris en charge (dates, identifiants Gmail).
+- Le résumé est écrit par le modèle de l'abonnement au tour final : aucun
+  appel IA supplémentaire.

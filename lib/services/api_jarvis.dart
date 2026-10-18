@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/importation/propositions_reponse.dart';
+import '../models/integrations/etat_gmail.dart';
 import '../models/importation/reference_whatsapp.dart';
 import '../models/utilisation/utilisation.dart';
 import '../utils/format_utilisation.dart';
@@ -531,6 +532,37 @@ class ApiJarvis {
   /// `DELETE /api/v1/contexts/{id}` : la pièce jointe et ses messages.
   Future<ResultatApi<Map<String, dynamic>>> supprimerContexte(String id) =>
       _authentifie((j) => _json('DELETE', 'api/v1/contexts/$id', j));
+
+  // --- Gmail (ODO phase 2, lecture seule) -------------------------------------
+  // Les jetons Google restent sur le serveur : l'application ne reçoit que
+  // l'état et l'URL de la page Google à ouvrir dans le navigateur.
+
+  /// `GET /api/v1/integrations/gmail`.
+  Future<ResultatApi<EtatGmail>> etatGmail() async {
+    final r = await _authentifie((j) => _json('GET', 'api/v1/integrations/gmail', j));
+    return switch (r) {
+      SuccesApi(:final valeur) => SuccesApi(EtatGmail.depuisJson(valeur)),
+      EchecApi(:final type, :final detail) => EchecApi(type, detail: detail),
+    };
+  }
+
+  /// `POST /api/v1/integrations/gmail/connexion` : URL de Google (choix du
+  /// compte et consentement), à ouvrir dans le navigateur du système.
+  Future<ResultatApi<String>> urlConnexionGmail(String plateforme) async {
+    final r = await _authentifie(
+      (j) => _json('POST', 'api/v1/integrations/gmail/connexion', j, corps: {'plateforme': plateforme}),
+    );
+    return switch (r) {
+      SuccesApi(:final valeur) when valeur['url'] is String => SuccesApi(valeur['url'] as String),
+      SuccesApi() => const EchecApi(ErreurApi.serveur, detail: 'URL Google absente'),
+      EchecApi(:final type, :final detail) => EchecApi(type, detail: detail),
+    };
+  }
+
+  /// `DELETE /api/v1/integrations/gmail` : accès coupé, autorisation
+  /// révoquée chez Google (la boîte Gmail n'est jamais touchée).
+  Future<ResultatApi<Map<String, dynamic>>> deconnecterGmail() =>
+      _authentifie((j) => _json('DELETE', 'api/v1/integrations/gmail', j));
 
   Future<_Reponse<Map<String, dynamic>>> _json(
     String methode,

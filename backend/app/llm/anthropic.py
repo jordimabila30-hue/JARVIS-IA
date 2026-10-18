@@ -226,13 +226,16 @@ class FournisseurAnthropic(FournisseurLLM):
 
     def parametres(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
                    schema: dict[str, Any] | None = None,
-                   outils: Sequence[DefinitionOutil] | None = None) -> dict[str, Any]:
+                   outils: Sequence[DefinitionOutil] | None = None,
+                   forcer_reponse: bool = False) -> dict[str, Any]:
         systeme, tours = convertir(messages)
         params: dict[str, Any] = {"model": self.modele, "max_tokens": max_sortie, "messages": tours}
         if systeme:
             params["system"] = systeme
         if outils:
             params["tools"] = definitions(outils)
+            if forcer_reponse:
+                params["tool_choice"] = {"type": "none"}
         config: dict[str, Any] = {}
         niveau = effort_accepte(self.modele, effort or self.effort)
         if niveau:
@@ -271,8 +274,10 @@ class FournisseurAnthropic(FournisseurLLM):
     # --- Flux -------------------------------------------------------------------
 
     async def flux(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
-                   outils: Sequence[DefinitionOutil] | None = None) -> AsyncIterator[Evenement]:
-        params = self.parametres(messages, max_sortie=max_sortie, effort=effort, outils=outils)
+                   outils: Sequence[DefinitionOutil] | None = None,
+                   forcer_reponse: bool = False) -> AsyncIterator[Evenement]:
+        params = self.parametres(messages, max_sortie=max_sortie, effort=effort, outils=outils,
+                                 forcer_reponse=forcer_reponse)
         ecrit = False
         try:
             async with self._client.messages.stream(**params) as stream:

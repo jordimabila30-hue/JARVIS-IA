@@ -6,6 +6,7 @@ import 'pages/ecran_de_lancement.dart';
 import 'services/api_jarvis.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
+import 'services/integrations/service_gmail.dart';
 import 'services/utilisation/service_utilisation.dart';
 import 'theme/theme_jarvis.dart';
 import 'utils/chrono_perf.dart';
@@ -62,6 +63,9 @@ class _JarvisAppState extends State<JarvisApp> {
   /// Utilisation de l'IA du compte (`/me/quota`) : une seule instance,
   /// actualisée après chaque opération IA ([ApiJarvis.surConsommation]).
   late final _utilisation = ServiceUtilisation(_api);
+
+  /// Connexion Gmail (lecture seule) : état lu au serveur, jamais de jeton.
+  late final _gmail = ServiceGmail(_api);
   String? _compteUtilisation;
 
   // Lancée pendant l'animation de démarrage.
@@ -82,6 +86,7 @@ class _JarvisAppState extends State<JarvisApp> {
     _auth.removeListener(_surAuth);
     _api.surConsommation = null;
     _utilisation.dispose();
+    _gmail.dispose();
     if (widget.auth == null) _auth.dispose();
     if (widget.api == null) _api.fermer();
     super.dispose();
@@ -95,6 +100,7 @@ class _JarvisAppState extends State<JarvisApp> {
     if (compte != _compteUtilisation) {
       _compteUtilisation = compte;
       _utilisation.changerCompte();
+      _gmail.changerCompte();
     }
     final d = _destination;
     if (d == null) return;
@@ -131,6 +137,7 @@ class _JarvisAppState extends State<JarvisApp> {
             ? _depotConversations
             : null,
         utilisation: d == _Destination.accueilConnecte ? _utilisation : null,
+        gmail: d == _Destination.accueilConnecte ? _gmail : null,
       ),
       _Destination.connexion => _authentification(EcranAuth.connexion),
       _Destination.nouveauMotDePasse => _authentification(

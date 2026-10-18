@@ -33,6 +33,18 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Gmail : la page de retour de Google (serveur JARVIS) ramène
+                 JARVIS au premier plan par jarvis://gmail. Aucun paramètre
+                 n'est lu (jamais de jeton dans le lien) : l'application relit
+                 l'état de la connexion auprès du serveur. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="jarvis" android:host="gmail"/>
+            </intent-filter>
+            <!-- Le lien ne doit pas devenir une navigation Flutter. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
             <!-- Import WhatsApp : « Exporter la discussion » → JARVIS dans le
                  menu de partage. Export sans médias (TXT) ou archive (ZIP),
                  parfois mal étiquetée (octet-stream). singleTask : un partage

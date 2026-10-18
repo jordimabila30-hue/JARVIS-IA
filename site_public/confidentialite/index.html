@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JARVIS · Règles de confidentialité</title>
+  <meta name="description" content="Règles de confidentialité de JARVIS : données collectées, accès Gmail en lecture seule, conservation, suppression.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <a class="marque" href="/">JARVIS</a>
+  <h1>Règles de confidentialité</h1>
+  <p>Dernière mise à jour : 18 octobre 2026.</p>
+  <p>Cette page explique quelles données l'application <strong>JARVIS</strong> utilise, pourquoi,
+     et comment vous gardez le contrôle, en particulier pour l'accès à Gmail.</p>
+
+  <h2>1. Données de votre compte JARVIS</h2>
+  <p>Pour vous connecter, JARVIS utilise votre adresse e-mail et un mot de passe gérés par notre
+     service d'authentification (Supabase). Vos conversations avec JARVIS et votre consommation
+     quotidienne (nombre de messages, volume utilisé) sont enregistrées pour retrouver vos échanges
+     sur vos appareils et appliquer les limites de votre abonnement.</p>
+
+  <h2>2. Accès à Gmail (facultatif, lecture seule)</h2>
+  <p>Si vous choisissez de connecter Gmail, vous donnez votre accord directement chez Google.
+     JARVIS demande uniquement l'autorisation <strong>« Afficher vos e-mails et vos paramètres de
+     messagerie »</strong> (lecture seule). JARVIS ne vous demande jamais votre mot de passe Google.</p>
+  <ul>
+    <li><strong>Ce que JARVIS fait</strong> : quand vous le lui demandez (par exemple « résume mes
+        derniers mails »), il recherche et lit les e-mails utiles pour vous répondre.</li>
+    <li><strong>Ce que JARVIS ne fait jamais</strong> : envoyer, supprimer, archiver ou modifier vos
+        e-mails, changer vos libellés, marquer des messages comme lus.</li>
+    <li><strong>Pièces jointes</strong> : seuls leurs noms peuvent être lus ; leur contenu n'est pas
+        téléchargé.</li>
+  </ul>
+
+  <h2>3. Comment ces données sont protégées</h2>
+  <ul>
+    <li>L'autorisation donnée par Google (le « jeton ») est conservée <strong>chiffrée sur notre
+        serveur</strong>, jamais sur votre téléphone ou votre ordinateur, et n'est jamais visible
+        par l'application ni par un autre utilisateur.</li>
+    <li>Les e-mails sont lus <strong>uniquement pendant votre demande</strong>. Seuls les extraits
+        nécessaires sont transmis au service d'intelligence artificielle qui rédige la réponse
+        (Anthropic ou GroqCloud selon votre abonnement), puis ne sont pas conservés par JARVIS.
+        Seule la réponse de JARVIS reste dans votre historique de conversation.</li>
+    <li>Le contenu de vos e-mails n'est jamais vendu, jamais utilisé pour de la publicité et jamais
+        utilisé par JARVIS pour entraîner des modèles d'intelligence artificielle.</li>
+    <li>Chaque compte JARVIS n'accède qu'à sa propre connexion Gmail.</li>
+  </ul>
+  <div class="carte">
+    <p style="margin:0">L'utilisation et le transfert par JARVIS des informations reçues des API Google
+      respectent les <a href="https://developers.google.com/terms/api-services-user-data-policy"
+      rel="noopener">Règles relatives aux données utilisateur des services API Google</a>, y compris
+      les exigences d'utilisation limitée (« Limited Use »).</p>
+  </div>
+
+  <h2>4. Retirer l'accès et supprimer vos données</h2>
+  <ul>
+    <li>Dans JARVIS : <strong>Paramètres › Gmail › Déconnecter Gmail</strong>. L'accès est coupé
+        immédiatement, l'autorisation est retirée chez Google et le jeton est supprimé de notre
+        serveur. Vos e-mails, dans Gmail, ne sont pas touchés.</li>
+    <li>Chez Google, à tout moment :
+        <a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>.</li>
+    <li>La suppression de votre compte JARVIS supprime aussi sa connexion Gmail.</li>
+  </ul>
+
+  <h2>5. Contact</h2>
+  <p>Pour toute question sur vos données, écrivez à l'adresse indiquée comme contact d'assistance
+     sur l'écran d'autorisation Google de JARVIS.</p>
+
+  <footer>
+    <a href="/">Accueil</a>
+    <span>© 2026 JARVIS</span>
+  </footer>
+</main>
+</body>
+</html>

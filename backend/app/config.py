@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     odo_resultat_max_caracteres: int = 6000    # résultat renvoyé au modèle
     odo_confirmation_ttl: int = 300            # validité d'une action à confirmer (s)
 
+    # Gmail (ODO phase 2, lecture seule). Identifiants OAuth « Application
+    # Web » de Google Cloud : SECRETS serveur, jamais dans Flutter ni les
+    # journaux. Absents → Gmail « non configuré » (aucun outil Gmail).
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    # URL de retour enregistrée chez Google (ex. http://localhost:8000/api/v1/integrations/gmail/retour)
+    google_redirect_uri: str | None = None
+    gmail_max_resultats: int = 10              # e-mails par recherche (au plus)
+    gmail_corps_max_caracteres: int = 4000     # texte d'un e-mail renvoyé au modèle
+    gmail_fil_max_messages: int = 8            # messages d'un fil (les plus récents)
+    gmail_delai: float = 10.0                  # délai d'une requête Google (s)
+
     # GroqCloud (ou OpenAI) : fournisseur « groq », réservé aux tests.
     openai_api_key: str = ""
     openai_base_url: str | None = None

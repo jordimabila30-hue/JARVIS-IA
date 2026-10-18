@@ -8,6 +8,7 @@ injecté) ne peut pas glisser un argument supplémentaire (`user_id`…).
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 _TYPES = {
@@ -63,6 +64,8 @@ def valider(schema: dict[str, Any], valeur: Any, chemin: str = "arguments") -> l
             erreurs.append(f"{chemin} : trop court")
         if "maxLength" in schema and len(valeur) > schema["maxLength"]:
             erreurs.append(f"{chemin} : trop long (au plus {schema['maxLength']} caractères)")
+        if "pattern" in schema and not re.fullmatch(schema["pattern"], valeur):
+            erreurs.append(f"{chemin} : format invalide")
     if isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
         if "minimum" in schema and valeur < schema["minimum"]:
             erreurs.append(f"{chemin} : au moins {schema['minimum']}")

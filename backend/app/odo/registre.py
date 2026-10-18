@@ -5,8 +5,9 @@ Ajouter une compétence : écrire un [Outil] et l'enregistrer (ici, dans
 contrôlé à l'enregistrement (nom, schéma) : une erreur de déclaration est
 vue au démarrage, jamais pendant une conversation.
 
-Production : registre VIDE en phase 1 (les outils fictifs ne sont chargés
-que hors production, avec ODO_OUTILS_FICTIFS=true).
+Production : seulement les compétences réelles configurées (Gmail en
+lecture seule si les identifiants Google sont présents) ; les outils
+fictifs ne sont chargés que hors production, avec ODO_OUTILS_FICTIFS=true.
 """
 
 from __future__ import annotations
@@ -53,10 +54,16 @@ def est_production(settings: Settings) -> bool:
     return settings.environnement.strip().lower() in ("production", "prod")
 
 
-def registre_actif(settings: Settings) -> RegistreOutils:
-    """Outils disponibles pour ce serveur. Phase 1 : aucun outil réel ;
-    outils fictifs seulement hors production et sur demande explicite."""
+def registre_actif(settings: Settings, google=None) -> RegistreOutils:
+    """Outils disponibles pour ce serveur : Gmail (lecture seule) si la
+    connexion Google est configurée ; outils fictifs seulement hors
+    production et sur demande explicite."""
     registre = RegistreOutils()
+    if google is not None and google.configure:
+        from ..integrations.gmail import ClientGmail
+        from .outils_gmail import outils_gmail
+        for outil in outils_gmail(ClientGmail(google)):
+            registre.enregistrer(outil)
     if settings.odo_outils_fictifs and not est_production(settings):
         from .outils_fictifs import outils_fictifs
         for outil in outils_fictifs():

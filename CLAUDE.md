@@ -189,11 +189,13 @@ lib/
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
+│   ├── integrations/                 # Paramètres › Gmail (PanneauGmail : connecter, changer de compte, déconnecter, à renouveler)
 │   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
+│   ├── integrations/                 # ServiceGmail : état de la connexion Gmail, ouverture de Google (navigateur du système), attente du retour
 │   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s visible, compte)
 │   ├── microphone_service.dart       # permission micro (Android / iOS)
 │   ├── niveau_micro*.dart            # volume du micro sur le Web (Web Audio)
@@ -220,6 +222,7 @@ lib/
 │   ├── signal_vocal.dart             # bandes du micro + mots de JARVIS → PIM
 │   ├── forme_pim.dart                # sphère, cube, tétraèdre, Réacteur Arc : noms, tirage, durées
 │   ├── message_conversation.dart     # messages (écrits ou vocaux), conversation externe, tons, raccourcis
+│   ├── integrations/                 # EtatGmail (statut, adresse, lecture seule ; jamais de jeton)
 │   ├── utilisation/                  # Utilisation, Jauge, FournisseurIA (réponse de /me/quota, quotas quotidiens)
 │   ├── authentification/            # UtilisateurAuth, ResultatAuth / ErreurAuth
 │   ├── importation/                  # FichierExportWhatsApp (fichier reçu) ; ConversationWhatsApp, MessageWhatsApp (conversation lue)
@@ -239,7 +242,7 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour selon l'abonnement (sessions désactivées : plan_config.session_* NULL) (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic ; appels d'outils : DefinitionOutil, TourAssistant, ResultatAppel) — raccordé à chat_stream, appel_lot, contexts.completer ; odo/ = ODO (outils : registre, permissions, validation, sécurité, confirmations, orchestrateur ; ODO_ACTIF=false)
+├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour selon l'abonnement (sessions désactivées : plan_config.session_* NULL) (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic ; appels d'outils : DefinitionOutil, TourAssistant, ResultatAppel) — raccordé à chat_stream, appel_lot, contexts.completer ; odo/ = ODO (outils : registre, permissions, validation, sécurité, confirmations, orchestrateur, compétences Gmail lecture seule ; ODO_ACTIF=false) ; integrations/ = Google OAuth (Vault) + client Gmail (GET seulement)
 ├── tests/                            # pytest (417, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
@@ -248,7 +251,7 @@ supabase/migrations/                  # évolutions datées, appliquées : conte
 supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
-docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE, MIA_UNIVERSEL, ABONNEMENTS, ODO, AUDIT_ARCHITECTURE_ODO
+docs/backend/                         # README, GUIDE_DEV, DEPLOIEMENT, HORLOGE, CONTEXTES_WHATSAPP, COMPREHENSION_CONVERSATIONNELLE, MIA_UNIVERSEL, ABONNEMENTS, ODO, GMAIL (+ guide Google Cloud), AUDIT_ARCHITECTURE_ODO
 config_locale.json                    # URL + clé PUBLIQUE Supabase pour Flutter (non versionné ; modèle : config_locale.example.json)
 ```
 
@@ -644,6 +647,16 @@ entre les tours ; actions sensibles confirmées par `POST
 `outil`, `confirmation` (ignorés par les anciennes applis). Indépendant de
 `ABONNEMENTS_ROUTAGE` (Free → GroqCloud, Pro → Claude, `plan_config` ;
 vérification : `python -m scripts.verifier_routage`).
+
+Gmail (ODO phase 2, doc `docs/backend/GMAIL.md`) : lecture seule. Paramètres ›
+Gmail → navigateur du système → Google (choix du compte, gmail.readonly) →
+retour sur le serveur (`/api/v1/integrations/gmail/retour`, state + PKCE).
+Jeton de rafraîchissement dans Supabase Vault (`external_connections`,
+fonctions backend seulement) ; jamais dans Flutter. Compétences ODO
+`gmail_*` proposées seulement si la connexion est active ; sinon note
+« connectez Gmail ». « Résume mes mails » n'est plus intercepté par le
+moteur local (`DetecteurIntention.concerneMesEmails`). Android : retour par
+`jarvis://gmail`.
 
 ---
 

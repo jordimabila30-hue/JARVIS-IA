@@ -139,3 +139,14 @@ async def test_groq_arguments_illisibles_jamais_devines(nom):
     fin = (await lire(serveur.fournisseur(), outils=[METEO]))[-1]
     assert [a.erreur_arguments for a in fin.appels] == ["JSON illisible", "arguments non objet"]
     assert all(a.arguments == {} for a in fin.appels)
+
+
+async def test_reponse_forcee_outils_declares_mais_interdits(nom):
+    serveur = SERVEURS[nom]()
+    await lire(serveur.fournisseur(), outils=[METEO], forcer_reponse=True)
+    req = serveur.requetes[0]
+    assert req["tools"]
+    assert req["tool_choice"] == ({"type": "none"} if nom == "anthropic" else "none")
+    serveur2 = SERVEURS[nom]()
+    await lire(serveur2.fournisseur(), outils=[METEO])
+    assert "tool_choice" not in serveur2.requetes[0]

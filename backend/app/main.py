@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 
 from . import console
-from .api.v1 import chat, contexts, local_exchanges, odo
+from .api.v1 import chat, contexts, integrations, local_exchanges, odo
 from .llm import FournisseurNonConfigure, selection
 from .auth import AuthUser, get_current_user
 from .config import Settings, get_settings
+from .integrations.google import close_google, init_google
 from .horloge import (
     close_surveillance_horloge,
     get_surveillance_horloge,
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
     redis = await init_redis(settings.redis_url)
     supabase = init_supabase(settings.supabase_url, settings.supabase_service_role_key)
     init_quota_service(redis, supabase, limits_cache_ttl=settings.quota_limits_cache_ttl)
+    google = init_google(settings, redis, supabase)
     # Mesures en arrière-plan : ne retarde pas le démarrage.
     init_surveillance_horloge(
         settings.clock_reference,
@@ -54,11 +56,13 @@ async def lifespan(app: FastAPI):
         if manquants:
             logger.error("Routage actif mais fournisseur(s) non configuré(s) : %s", ", ".join(manquants))
     logger.info("ODO : %s", "ACTIF" if settings.odo_actif else "inactif (aucun outil proposé)")
+    logger.info("Gmail : %s", "configuré (lecture seule)" if google.configure else "non configuré")
     yield
     await close_surveillance_horloge()
     # Laisse les sauvegardes de fin de flux se terminer avant de fermer les clients.
     await chat.wait_background_tasks()
     await selection.fermer_tous()
+    await close_google()
     await close_supabase()
     await close_redis()
 
@@ -90,6 +94,7 @@ app.include_router(local_exchanges.router, prefix="/api/v1")
 app.include_router(contexts.conversations_router, prefix="/api/v1")
 app.include_router(contexts.contexts_router, prefix="/api/v1")
 app.include_router(odo.router, prefix="/api/v1")
+app.include_router(integrations.router, prefix="/api/v1")
 app.include_router(console.router)
 
 

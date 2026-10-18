@@ -175,13 +175,16 @@ class FournisseurGroq(FournisseurLLM):
     # --- Flux -------------------------------------------------------------------
 
     async def flux(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
-                   outils: Sequence[DefinitionOutil] | None = None) -> AsyncIterator[Evenement]:
+                   outils: Sequence[DefinitionOutil] | None = None,
+                   forcer_reponse: bool = False) -> AsyncIterator[Evenement]:
         options: dict[str, Any] = {
             "model": self.modele, "messages": convertir(messages), "max_tokens": max_sortie,
             "stream": True, "stream_options": {"include_usage": True},
         }
         if outils:
             options["tools"] = definitions(outils)
+            if forcer_reponse:
+                options["tool_choice"] = "none"
         raisonnement = _effort_groq(self.modele, effort)
         if raisonnement:
             options["extra_body"] = {"reasoning_effort": raisonnement}

@@ -170,6 +170,27 @@ class DetecteurIntention {
     return IntentionMessage.discussion;
   }
 
+  static const _motsEmail = [
+    'mail', 'mails', 'email', 'emails', 'e mail', 'e mails', 'courriel', 'courriels', 'mel', 'mels',
+  ];
+  static const _personnel = [
+    'mes', 'mon', 'ma', 'j ai recu', 'j ai recus', 'recu', 'recus', 'dernier', 'derniers', 'derniere',
+    'dernieres', 'important', 'importants', 'non lu', 'non lus', 'aujourd hui', 'hier', 'cette semaine',
+    'ce matin', 'ce soir', 'boite',
+  ];
+
+  /// Vrai si [demande] porte sur les e-mails PERSONNELS de l'utilisateur
+  /// (sa boîte Gmail) : « résume mes mails », « regarde si j'ai reçu des
+  /// mails importants », « le dernier mail de mon prof ». Ces demandes vont
+  /// au serveur (compétence Gmail d'ODO) au lieu de demander de coller une
+  /// conversation. « Résume ce mail » (sans repère personnel) reste local.
+  static bool concerneMesEmails(String demande) {
+    final t = ' ${normaliser(demande)} ';
+    bool a(String m) => t.contains(' $m ');
+    if (a('gmail') || a('boite mail') || a('boite mails') || a('boite de reception')) return true;
+    return _motsEmail.any(a) && _personnel.any(a);
+  }
+
   /// Vrai si [demande] concerne visiblement une conversation (sert à
   /// accepter une conversation d'un seul message).
   bool concerneUneConversation(String demande) =>

@@ -116,7 +116,8 @@ class ExecutionODO:
 
     async def flux(self, prompt: Sequence[Message], *, max_sortie: int) -> AsyncIterator[EvenementODO]:
         self._reinitialiser()
-        messages = _avec_consigne(list(prompt))
+        consignes = list(dict.fromkeys(o.consigne for o in self.outils.values() if o.consigne))
+        messages = _avec_consigne(list(prompt), consignes)
         definitions = [o.definition() for o in self.outils.values()]
         texte_emis = False
         while True:
@@ -131,8 +132,12 @@ class ExecutionODO:
             self.prompt_courant, self.texte_tour = messages, ""
             fin: Fin | None = None
             separer = texte_emis
+            # Dernier tour permis (ou plus d'appels possibles) : le modèle
+            # répond avec ce qu'il a déjà lu, sans nouvel outil.
+            dernier = self.tours == self.max_tours - 1 or self.appels >= self.max_appels
             try:
-                async for ev in self.llm.flux(messages, max_sortie=max_sortie, outils=definitions):
+                async for ev in self.llm.flux(messages, max_sortie=max_sortie, outils=definitions,
+                                              forcer_reponse=dernier and self.tours > 0):
                     if isinstance(ev, Texte):
                         if separer:
                             separer = False
@@ -236,8 +241,10 @@ class ExecutionODO:
             self.resultat_max)))
 
 
-def _avec_consigne(messages: list[Message]) -> list[Message]:
-    """Règle des outils ajoutée au message système du début (canal fiable)."""
+def _avec_consigne(messages: list[Message], consignes: Sequence[str] = ()) -> list[Message]:
+    """Règle des outils (et consignes des outils proposés) ajoutée au message
+    système du début (canal fiable)."""
+    regle = "\n\n".join([CONSIGNE_OUTILS, *consignes])
     if messages and messages[0]["role"] == "system":
-        return [{**messages[0], "content": f"{messages[0]['content']}\n\n{CONSIGNE_OUTILS}"}, *messages[1:]]
-    return [{"role": "system", "content": CONSIGNE_OUTILS}, *messages]
+        return [{**messages[0], "content": f"{messages[0]['content']}\n\n{regle}"}, *messages[1:]]
+    return [{"role": "system", "content": regle}, *messages]
