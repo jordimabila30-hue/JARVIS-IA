@@ -169,7 +169,7 @@ lib/
 │   ├── conversation_page.dart        # fil (zone qui défile) + zone PIM réservée au-dessus de la barre
 │   ├── importation_whatsapp_page.dart # import WhatsApp : recevoir un export ZIP / TXT, le lire (étape 2), résumé + aperçu
 │   ├── resume_whatsapp_page.dart     # « Voir les messages » : discussion en bulles ; .surMessage : ouverte sur un message (référence), éclairé
-│   ├── utilisation_page.dart         # « Voir les détails » de l'utilisation (offre, fournisseur, session, jour, restes, remises à zéro)
+│   ├── utilisation_page.dart         # « Voir les détails » de l'utilisation (offre, fournisseur, jour, restes, remise à zéro)
 │   ├── filtrage_whatsapp_page.dart   # interface 2 : filtrer (par période / par messages), aperçu cochable, compteur, « Continuer vers l'enregistrement »
 │   ├── joindre_whatsapp_page.dart    # interface 3 : nom, nombre, période, participants, « Vous êtes : », « Joindre la conversation »
 │   └── authentification/            # parcours (authentification_page), connexion, inscription, mot de passe oublié
@@ -194,7 +194,7 @@ lib/
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
-│   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s, compte)
+│   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s visible, compte)
 │   ├── microphone_service.dart       # permission micro (Android / iOS)
 │   ├── niveau_micro*.dart            # volume du micro sur le Web (Web Audio)
 │   ├── reconnaissance_navigateur*.dart  # voix → texte sur le Web (API Web Speech directe)
@@ -220,7 +220,7 @@ lib/
 │   ├── signal_vocal.dart             # bandes du micro + mots de JARVIS → PIM
 │   ├── forme_pim.dart                # sphère, cube, tétraèdre, Réacteur Arc : noms, tirage, durées
 │   ├── message_conversation.dart     # messages (écrits ou vocaux), conversation externe, tons, raccourcis
-│   ├── utilisation/                  # Utilisation, Jauge, SessionUtilisation, FournisseurIA (réponse de /me/quota)
+│   ├── utilisation/                  # Utilisation, Jauge, FournisseurIA (réponse de /me/quota, quotas quotidiens)
 │   ├── authentification/            # UtilisateurAuth, ResultatAuth / ErreurAuth
 │   ├── importation/                  # FichierExportWhatsApp (fichier reçu) ; ConversationWhatsApp, MessageWhatsApp (conversation lue)
 │   └── conversations/                # SourceConversation (JARVIS, WhatsApp, Gmail, Messenger, Instagram), ApercuConversation
@@ -239,12 +239,12 @@ lib/
 
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
-├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour ET par session selon l'abonnement (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — raccordé à chat_stream, appel_lot, contexts.completer (phase 2)
+├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour selon l'abonnement (sessions désactivées : plan_config.session_* NULL) (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic) — raccordé à chat_stream, appel_lot, contexts.completer (phase 2)
 ├── tests/                            # pytest (417, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
-supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages), offres Free & Pro (plan_config), abonnements phase 2 (limites_effectives, usage_sessions, llm_usage)
+supabase/migrations/                  # évolutions datées, appliquées : contextes WhatsApp (conversation_contexts, context_messages), offres Free & Pro (plan_config), abonnements phase 2 (limites_effectives, usage_sessions, llm_usage), quotas quotidiens + synchro users ↔ plan_config (déclencheurs)
 supabase/tests/                       # tests SQL en PostgreSQL local jetable (lancer_tests.sh, Docker)
 deploy/oracle/                        # déploiement futur (non utilisé pour l'instant)
 scripts/windows/                      # synchroniser_horloge.ps1 (admin), verifier_horloge.ps1 (diagnostic)
@@ -614,18 +614,23 @@ avant les lots) → `ConversationSession.preparationEnCours(id)` →
 `propositions` / `done` ; battements SSE pendant les lots (le client coupe
 après 30 s de silence).
 
-Utilisation (abonnements phase 3, doc `docs/backend/ABONNEMENTS.md` §10) :
-Paramètres › Utilisation (`PanneauUtilisation`) et `UtilisationPage`.
-Tout vient de `GET /me/quota` (`ApiJarvis.utilisation`) : offre, fournisseur,
-limites, seuil critique, session (`ends_at`), remises à zéro ; rien de codé
-en dur. `ServiceUtilisation` (une instance dans `JarvisApp`) relit à
-l'ouverture, toutes les 30 s pendant l'affichage, 2 s après chaque appel IA
+Utilisation (abonnements, doc `docs/backend/ABONNEMENTS.md` §10-11) :
+Paramètres › Utilisation (`PanneauUtilisation`) et `UtilisationPage` :
+quotas QUOTIDIENS seulement (Messages / Tokens aujourd'hui ; aucune
+session, aucun hebdomadaire). Tout vient de `GET /me/quota`
+(`ApiJarvis.utilisation`) : offre, fournisseur, limites, seuil critique,
+remise à zéro ; rien de codé en dur. Aucun bouton d'actualisation :
+`ServiceUtilisation` (une instance dans `JarvisApp`) relit à l'ouverture
+(panneau, page), toutes les 30 s tant qu'un écran est visible (suspendu
+appli masquée), 2 s après chaque appel IA ou refus
 (`ApiJarvis.surConsommation`), au retour au premier plan, au changement de
-compte ; lecture en cours partagée, jamais l'IA. Délai d'une modification
-Supabase : ≤ 30 s (cache serveur) + ≤ 30 s (relecture). 429 typés
-(`ApiJarvis.messageLimite` : jour / session × messages / tokens, heure réelle
-de `resets_at`) ; limite du fournisseur IA = autre message. Routage inactif :
-le panneau dit quel fournisseur sert réellement (`fournisseur_actif`).
+compte ; lecture partagée, jamais l'IA ; seule la 1re lecture montre un
+chargement ; erreur → dernières valeurs + note discrète. Supabase :
+`users.daily_*` = limites effectives (déclencheurs `users_suivre_offre`,
+`plan_config_propager`, sauf exception). 429 typés
+(`ApiJarvis.messageLimite`, heure réelle de `resets_at`) ; limite du
+fournisseur IA = autre message. Routage inactif : le panneau dit quel
+fournisseur sert réellement (`fournisseur_actif`).
 
 ---
 

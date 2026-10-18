@@ -18,11 +18,15 @@ import '../api_jarvis.dart';
 ///    dépassé compris) : [signalerConsommation], différée de
 ///    [delaiApresConsommation] (le serveur enregistre la consommation juste
 ///    APRÈS la fin du flux) ;
-///  - retour de l'application au premier plan ;
+///  - retour de l'application au premier plan (la relecture périodique est
+///    suspendue quand l'application est masquée, reprise au retour) ;
 ///  - changement de compte ([changerCompte]) ;
 ///  - fin de session constatée par l'écran ([actualiser]).
 /// Jamais d'appel en double : une lecture en cours est partagée, et une
 /// lecture de moins de [intervalleMin] n'est pas refaite (sauf `force`).
+/// Invisible : seule la toute première lecture annonce un chargement ; les
+/// suivantes remplacent les valeurs sans état intermédiaire, et un échec
+/// garde les dernières valeurs connues ([erreur] les signale).
 /// Lire l'utilisation n'appelle jamais l'IA.
 class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   ServiceUtilisation(
@@ -85,7 +89,8 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _lire() async {
     final compte = _compte;
     chargement = true;
-    notifyListeners();
+    // Valeurs déjà affichées : rien à annoncer (pas de chargement visible).
+    if (donnees == null) notifyListeners();
     final r = await _api.utilisation();
     if (_ferme || compte != _compte) return;     // compte changé entre-temps
     chargement = false;
@@ -113,22 +118,27 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   /// Un écran Utilisation s'ouvre : lecture immédiate, puis périodique.
   void suivre() {
     _suivis++;
-    if (_suivis == 1) {
-      _periodique = Timer.periodic(intervalleSuivi, (_) => actualiser(force: true));
-    }
+    if (_suivis == 1) _demarrerPeriodique();
     // Appelé depuis initState : la lecture (qui notifie les autres écrans
     // ouverts) part juste après la construction en cours.
     Future.microtask(() => actualiser(force: true));
+  }
+
+  void _demarrerPeriodique() {
+    _periodique?.cancel();
+    _periodique = Timer.periodic(intervalleSuivi, (_) => actualiser(force: true));
+  }
+
+  void _arreterPeriodique() {
+    _periodique?.cancel();
+    _periodique = null;
   }
 
   /// Un écran Utilisation se ferme.
   void cesserDeSuivre() {
     if (_suivis == 0) return;
     _suivis--;
-    if (_suivis == 0) {
-      _periodique?.cancel();
-      _periodique = null;
-    }
+    if (_suivis == 0) _arreterPeriodique();
   }
 
   /// Autre compte (ou déconnexion) : rien de l'ancien compte n'est gardé.
@@ -145,8 +155,14 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && (suivie || donnees != null)) {
-      actualiser();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (suivie) _demarrerPeriodique();
+        if (suivie || donnees != null) actualiser();
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        _arreterPeriodique();      // écran invisible : aucune relecture
+      case AppLifecycleState.inactive || AppLifecycleState.detached:
+        break;
     }
   }
 

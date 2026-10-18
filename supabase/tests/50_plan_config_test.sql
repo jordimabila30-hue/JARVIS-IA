@@ -1,6 +1,14 @@
 -- Abonnements Free & Pro, phase 1 : public.plan_config (après 40_*).
 \set ON_ERROR_STOP on
 
+-- La migration 20261017200000 a vidé les sessions (quotas quotidiens
+-- seulement) ; le mécanisme de session reste éprouvé par 50 et 60 avec les
+-- valeurs de la phase 1, puis 70 les vide de nouveau.
+update public.plan_config set session_duration_minutes = 300, session_message_limit = 25,
+  session_token_limit = 15000 where plan = 'free';
+update public.plan_config set session_duration_minutes = 300, session_message_limit = 50,
+  session_token_limit = 30000 where plan = 'pro';
+
 -- Valeurs initiales -----------------------------------------------------------
 select tests.ok((select count(*) from public.plan_config) = 2, 'ABO une ligne par abonnement (free, pro)');
 select tests.ok(exists(select 1 from public.plan_config

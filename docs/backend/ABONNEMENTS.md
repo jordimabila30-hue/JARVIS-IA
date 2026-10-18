@@ -4,6 +4,9 @@
 - **Phase 2** (2026-10-17) : limites effectives, exceptions explicites, sessions,
   routage MIA par abonnement (activation contrôlée), `/me/quota`, suivi par fournisseur.
 - **Phase 3** (2026-10-17) : interface Utilisation Flutter (section 10).
+- **Correction** (2026-10-18) : quotas **quotidiens seulement** (sessions
+  vidées dans `plan_config`), `users` ↔ `plan_config` synchronisées par
+  déclencheurs, Utilisation actualisée sans bouton (section 11).
 
 Règle : **`plan_config` définit les limites de chaque offre ; `users.plan` dit
 à quelle offre appartient un compte.** Une limite personnelle ne s'applique
@@ -85,6 +88,10 @@ porte que sur les limites quotidiennes).
   enregistrement des pièces jointes.
 
 ## 4. Sessions
+
+> **Désactivées depuis le 2026-10-18** (migration `20261017200000`) : les
+> colonnes de session de `plan_config` sont `NULL`, le backend n'ouvre plus
+> aucune session. Mécanisme conservé : remettre une durée le réactiverait.
 
 - Ouverte au **premier appel IA autorisé** (le quota du jour est vérifié
   AVANT : un appel refusé n'ouvre rien), par `ouvrir_session` (verrou par
@@ -195,16 +202,16 @@ vient de `GET /me/quota` : aucune limite, aucun fournisseur ni modèle n'est
 
 | Fichier | Rôle |
 |---|---|
-| `lib/models/utilisation/utilisation.dart` | lecture de la réponse (`Utilisation`, `Jauge`, `SessionUtilisation`, `FournisseurIA`) ; `null` = illimité, rien d'inventé |
+| `lib/models/utilisation/utilisation.dart` | lecture de la réponse (`Utilisation`, `Jauge`, `FournisseurIA`) ; `null` = illimité, rien d'inventé |
 | `lib/services/api_jarvis.dart` | `utilisation()` (`GET /me/quota`, jamais l'IA) ; `surConsommation` après chaque opération IA (réponse, interruption, refus, « Reprendre ») ; `messageLimite` (429) |
-| `lib/services/utilisation/service_utilisation.dart` | quand relire : ouverture, toutes les 30 s pendant l'affichage, 2 s après une opération IA, retour au premier plan, changement de compte, fin de session constatée ; jamais de lecture en double |
+| `lib/services/utilisation/service_utilisation.dart` | quand relire : ouverture, toutes les 30 s pendant l'affichage, 2 s après une opération IA, retour au premier plan, changement de compte ; suspendu quand l'application est masquée ; jamais de lecture en double |
 | `lib/widgets/utilisation/jauge_utilisation.dart` | jauge en lecture seule, animée 450 ms ; bleu (`CouleursJarvis.signal`) puis orange (`CouleursJarvis.critique`) dès `critical_threshold_percent` ; « Limite atteinte » à 100 % |
-| `lib/widgets/utilisation/panneau_utilisation.dart` | synthèse : offre, fournisseur et modèle, session (la ressource la plus consommée, détail messages / tokens), messages et tokens du jour, réinitialisations |
-| `lib/pages/utilisation_page.dart` | détail : offre, fournisseur utilisé, session (début, fin, durée, restants), journée (restants, prochaine remise à zéro) |
+| `lib/widgets/utilisation/panneau_utilisation.dart` | synthèse : offre, fournisseur et modèle, messages et tokens du jour, remise à zéro, « Voir les détails » (aucun bouton d'actualisation) |
+| `lib/pages/utilisation_page.dart` | détail : offre, fournisseur utilisé, journée (restants, prochaine remise à zéro) |
 
 Délai d'affichage d'une modification faite dans Supabase : **≤ 30 s** de
 cache serveur + **≤ 30 s** d'actualisation périodique de l'écran ouvert
-(immédiat avec le bouton Actualiser une fois le cache serveur expiré).
+(mesuré : ≈ 7 s à 35 s sur le S10+).
 
 Limites atteintes (429) : message selon `detail.kind` (messages / tokens, du
 jour ou de la session) et SA réinitialisation (`detail.resets_at` : fin de
@@ -214,3 +221,27 @@ fournisseur IA (événement `error` du flux) reste un message distinct.
 Routage par abonnement inactif : la page indique le fournisseur réellement
 utilisé (`fournisseur_actif`) en plus de celui de l'offre ; elle n'annonce
 jamais un fournisseur qui ne sert pas.
+
+## 11. Quotas quotidiens seulement et synchronisation (2026-10-18)
+
+Migration `supabase/migrations/20261017200000_quotas_quotidiens_synchro.sql`
+(appliquée, tests `supabase/tests/70_quotas_quotidiens_synchro_test.sql`) :
+
+- `plan_config.session_*` : facultatives et vidées → aucun quota de session
+  (ni hebdomadaire). Jauges Flutter : Messages aujourd'hui, Tokens aujourd'hui.
+- `users.daily_message_limit` / `daily_token_limit` = limites EFFECTIVES :
+  déclencheur `users_suivre_offre` (création, changement de `plan`, exception
+  retirée, écriture à la main sans exception → valeurs de l'offre) et
+  `plan_config_propager` (offre modifiée → tous ses comptes sans exception).
+  Exception (`limits_override = true`) : valeurs personnelles gardées.
+  Fonctions SECURITY DEFINER, non appelables par anon / authenticated.
+- Consommation (`quota_usage`, `usage_sessions`, `llm_usage`) jamais touchée.
+
+Flutter : plus de bouton ni de « Mis à jour » ; `ServiceUtilisation` relit à
+l'ouverture du panneau et de la page de détails, toutes les 30 s tant que
+l'un d'eux est affiché (suspendu quand l'application est masquée, repris au
+retour), après chaque réponse IA ou refus de quota, au retour au premier
+plan, au changement de compte. Seule la première lecture montre un
+chargement ; ensuite les valeurs sont remplacées sur place (jauges animées).
+Erreur réseau : dernières valeurs gardées + note discrète « Dernières
+valeurs connues : elles peuvent ne plus être à jour. »

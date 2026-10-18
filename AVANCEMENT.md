@@ -1349,3 +1349,22 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Accord pour déployer la nouvelle image backend puis activer `ABONNEMENTS_ROUTAGE`.
+
+## 2026-10-18 — Utilisation : quotas quotidiens seulement, synchro Supabase, actualisation invisible
+
+### Fait
+- Migration `supabase/migrations/20261017200000_quotas_quotidiens_synchro.sql`, **appliquée** sur « Jarvis » : colonnes de session de `plan_config` facultatives et vidées (plus aucun quota de session ; mécanisme backend conservé) ; déclencheurs `users_suivre_offre` et `plan_config_propager` : `users.daily_message_limit` / `daily_token_limit` = limites de l'offre, sauf exception (`limits_override`). Compte aligné : 60 / 100 000 (anciennes valeurs ignorées) → 150 / 50 000 (offre Free). Consommation intacte.
+- Flutter : panneau et page Utilisation avec les deux seules jauges quotidiennes ; « Mis à jour à l'instant », icône et bouton d'actualisation, « Réessayer » retirés ; « Voir les détails » conservé. Modèle sans session.
+- `ServiceUtilisation` conservé : ouverture du panneau et de la page, toutes les 30 s tant que visible, suspendu quand l'application est masquée et repris au retour, après chaque réponse IA ou refus de quota, premier plan, changement de compte. Seule la première lecture annonce un chargement ; ensuite une seule notification par relecture. Erreur réseau : dernières valeurs + note discrète.
+- Doc : `docs/backend/ABONNEMENTS.md` (§4, §10, §11), CLAUDE.md.
+
+### Tests (aucun appel IA)
+- SQL : 145 réussis, 0 échec (13 nouveaux, `70_quotas_quotidiens_synchro_test.sql`).
+- `test/utilisation_test.dart` : 29 tests (ouverture, périodique et arrêt, appli masquée, après réponse IA, après erreur de quota, aucune requête inutile, changement d'abonnement, limites modifiées, erreur réseau, une notification par relecture, panneau à 2 jauges sans bouton, valeurs remplacées sans chargement, page de détails relue à l'ouverture).
+- Suite complète : 781 réussis ; 1 test sans rapport (`reponses_envoyees_test`, défilement) en échec sous charge, réussi seul (20/20).
+- Avis de sécurité Supabase : rien de nouveau.
+
+- Windows (instance 8001, capture de la fenêtre) : panneau à 2 jauges, sans actualisation visible ; Free 150 → 160 à 11:46:39 UTC → `users` suit aussitôt (160) → « 0 / 160 messages » affiché en ≤ 65 s ; retour 150 à 11:48:32 → « 0 / 150 » en ≤ 65 s. `plan_config` remis à l'identique. Web (localhost:3000, confirmé par l'utilisateur) : « 0 / 150 messages », deux jauges, aucun bouton d'actualisation. S10+ : non disponible ce jour.
+
+### Prochaine étape
+- Valider le S10+ dès qu'il est disponible, puis commit avec accord.

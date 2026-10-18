@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../models/utilisation/utilisation.dart';
@@ -10,24 +8,6 @@ import '../../theme/theme_jarvis.dart';
 import '../../utils/format_utilisation.dart';
 import '../parametres/elements_parametres.dart';
 import 'jauge_utilisation.dart';
-
-/// « Réinitialisation dans 2 h 14 min » ou, sans session en cours,
-/// « Commence au prochain message · 5 h ».
-String texteSession(Utilisation u, DateTime maintenant) {
-  final s = u.session;
-  final fin = s.fin;
-  if (s.active && fin != null) {
-    final reste = fin.difference(maintenant);
-    return reste.isNegative
-        ? 'Session terminée : la suivante commence au prochain message.'
-        : 'Réinitialisation dans ${dureeRestante(reste)} (${momentLocal(fin, maintenant)})';
-  }
-  final duree = s.dureeMinutes;
-  return duree == null
-      ? 'Aucune session en cours.'
-      : 'Aucune session en cours : elle commencera au prochain message '
-            'et durera ${dureeRestante(Duration(minutes: duree))}.';
-}
 
 /// « Remise à zéro demain à 02:00 ».
 String texteJour(Utilisation u, DateTime maintenant) {
@@ -50,6 +30,13 @@ String? texteFournisseurActif(Utilisation u) {
       'l’attribution du fournisseur selon l’abonnement n’est pas encore activée.';
 }
 
+/// Dernière lecture échouée alors que des valeurs sont affichées : elles
+/// restent, signalées discrètement (null : à jour).
+String? texteDonneesAnciennes(ServiceUtilisation service) =>
+    service.erreur != null && service.donnees != null
+    ? 'Dernières valeurs connues : elles peuvent ne plus être à jour.'
+    : null;
+
 /// Message d'une lecture impossible.
 String texteIndisponible(ErreurApi? e) => switch (e) {
   ErreurApi.nonConnecte || ErreurApi.sessionExpiree =>
@@ -58,8 +45,9 @@ String texteIndisponible(ErreurApi? e) => switch (e) {
   _ => 'Utilisation indisponible pour le moment.',
 };
 
-/// Section « Utilisation » des Paramètres : synthèse (offre, session,
-/// jour) et accès aux détails. Ne montre que ce que le serveur envoie.
+/// Section « Utilisation » des Paramètres : offre, deux jauges
+/// quotidiennes (messages, tokens) et accès aux détails. Actualisation
+/// automatique et invisible (aucun bouton, aucun chargement répété). Ne montre que ce que le serveur envoie.
 class PanneauUtilisation extends StatefulWidget {
   const PanneauUtilisation({super.key, required this.service, this.horloge});
 
@@ -72,30 +60,19 @@ class PanneauUtilisation extends StatefulWidget {
 }
 
 class _PanneauUtilisationState extends State<PanneauUtilisation> {
-  Timer? _minute;
-  bool _detailsSession = false;
-
   DateTime get _maintenant => (widget.horloge ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
+    // Lecture immédiate puis toutes les 30 s tant que le panneau est
+    // affiché ; tout le reste (après l'IA, premier plan, compte) est géré
+    // par le service.
     widget.service?.suivre();
-    // Compte à rebours de la session (aucun appel réseau) ; fin constatée
-    // → nouvelle lecture du serveur.
-    _minute = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!mounted) return;
-      final u = widget.service?.donnees;
-      if (u != null && u.session.termineeA(_maintenant)) {
-        widget.service?.actualiser(force: true);
-      }
-      setState(() {});
-    });
   }
 
   @override
   void dispose() {
-    _minute?.cancel();
     widget.service?.cesserDeSuivre();
     super.dispose();
   }
@@ -117,50 +94,14 @@ class _PanneauUtilisationState extends State<PanneauUtilisation> {
         final u = service.donnees;
         if (u == null) return _Attente(service: service);
         final maintenant = _maintenant;
-        final s = u.session;
-        final principale = s.principale;
         final actif = texteFournisseurActif(u);
+        final ancien = texteDonneesAnciennes(service);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CarteReglages(
               enfants: [
                 _EnTete(utilisation: u),
-                JaugeUtilisation(
-                  key: const ValueKey('jauge-session'),
-                  titre: 'Limite de session',
-                  jauge: principale,
-                  unite: identical(principale, s.tokens) ? 'tokens' : 'messages',
-                  sousTitre: texteSession(u, maintenant),
-                ),
-                if (_detailsSession) ...[
-                  JaugeUtilisation(
-                    key: const ValueKey('jauge-session-messages'),
-                    titre: 'Messages de la session',
-                    jauge: s.messages,
-                    unite: 'messages',
-                    compacte: true,
-                  ),
-                  JaugeUtilisation(
-                    key: const ValueKey('jauge-session-tokens'),
-                    titre: 'Tokens de la session',
-                    jauge: s.tokens,
-                    unite: 'tokens',
-                    compacte: true,
-                  ),
-                ],
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _detailsSession = !_detailsSession),
-                    icon: Icon(_detailsSession ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 18),
-                    label: Text(_detailsSession ? 'Masquer le détail de la session' : 'Détail de la session'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: CouleursJarvis.signal,
-                      minimumSize: const Size(0, 40),
-                    ),
-                  ),
-                ),
                 JaugeUtilisation(
                   key: const ValueKey('jauge-messages-jour'),
                   titre: 'Messages aujourd’hui',
@@ -177,12 +118,19 @@ class _PanneauUtilisationState extends State<PanneauUtilisation> {
                 ),
               ],
             ),
+            if (ancien != null) ...[
+              const SizedBox(height: 10),
+              _NoteDiscrete(ancien, key: const ValueKey('donnees-anciennes')),
+            ],
             if (actif != null) ...[
               const SizedBox(height: 12),
               NoteReglage(actif),
             ],
             const SizedBox(height: 12),
-            _Pied(service: service, maintenant: maintenant),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _VoirDetails(service: service),
+            ),
           ],
         );
       },
@@ -265,59 +213,52 @@ class _Pastille extends StatelessWidget {
   }
 }
 
-/// Mise à jour, actualisation manuelle, « Voir les détails ».
-class _Pied extends StatelessWidget {
-  const _Pied({required this.service, required this.maintenant});
+class _VoirDetails extends StatelessWidget {
+  const _VoirDetails({required this.service});
 
   final ServiceUtilisation service;
-  final DateTime maintenant;
 
   @override
   Widget build(BuildContext context) {
-    final maj = service.miseAJour;
-    final erreur = service.erreur;
-    final etat = erreur != null
-        ? 'Actualisation impossible — ${texteIndisponible(erreur).toLowerCase()}'
-        : maj == null
-        ? ''
-        : 'Mis à jour ${maintenant.difference(maj).inMinutes < 1 ? 'à l’instant' : 'il y a ${dureeRestante(maintenant.difference(maj))}'}';
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 8,
+    return FilledButton.icon(
+      onPressed: () => ouvrirPageUtilisation(context, service),
+      icon: const Icon(Icons.insights_rounded, size: 18),
+      label: const Text('Voir les détails'),
+      style: FilledButton.styleFrom(
+        backgroundColor: CouleursJarvis.signal,
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+}
+
+/// Petite ligne grise avec une icône (données peut-être anciennes).
+class _NoteDiscrete extends StatelessWidget {
+  const _NoteDiscrete(this.texte, {super.key});
+
+  final String texte;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Actualiser',
-              onPressed: service.chargement ? null : () => service.actualiser(force: true),
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-              color: CouleursJarvis.texteSecondaire,
-            ),
-            Flexible(
-              child: Text(etat, style: const TextStyle(fontSize: 12, color: CouleursJarvis.texteSecondaire)),
-            ),
-          ],
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(Icons.cloud_off_rounded, size: 15, color: CouleursJarvis.texteSecondaire),
         ),
-        FilledButton.icon(
-          onPressed: () => ouvrirPageUtilisation(context, service),
-          icon: const Icon(Icons.insights_rounded, size: 18),
-          label: const Text('Voir les détails'),
-          style: FilledButton.styleFrom(
-            backgroundColor: CouleursJarvis.signal,
-            minimumSize: const Size(0, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(texte, style: const TextStyle(fontSize: 12, color: CouleursJarvis.texteSecondaire)),
         ),
       ],
     );
   }
 }
 
-/// Première lecture en cours, ou impossible (avec « Réessayer »).
+/// Première lecture en cours, ou impossible (nouvel essai automatique).
 class _Attente extends StatelessWidget {
   const _Attente({required this.service});
 
@@ -342,19 +283,7 @@ class _Attente extends StatelessWidget {
                     Text('Lecture de votre utilisation…', style: TextStyle(color: CouleursJarvis.texteSecondaire)),
                   ],
                 )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    NoteReglage(texteIndisponible(erreur)),
-                    if (erreur != ErreurApi.nonConnecte && erreur != ErreurApi.sessionExpiree)
-                      TextButton.icon(
-                        onPressed: service.chargement ? null : () => service.actualiser(force: true),
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Réessayer'),
-                        style: TextButton.styleFrom(foregroundColor: CouleursJarvis.signal),
-                      ),
-                  ],
-                ),
+              : NoteReglage(texteIndisponible(erreur)),
         ),
       ],
     );

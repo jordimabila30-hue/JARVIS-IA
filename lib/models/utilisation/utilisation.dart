@@ -1,6 +1,7 @@
 /// Utilisation de l'IA par le compte, telle que la calcule le SERVEUR
 /// (`GET /me/quota`) : offre (Supabase `plan_config`, sauf exception),
-/// consommation du jour et de la session, réinitialisations, seuil critique.
+/// consommation du jour, remise à zéro quotidienne, seuil critique.
+/// Quotas QUOTIDIENS seulement (aucune session, aucun quota hebdomadaire).
 ///
 /// Aucune limite n'est connue de l'application : tout vient de cette
 /// réponse. Une limite `null` = illimitée ; une information absente reste
@@ -47,36 +48,6 @@ class Jauge {
   }
 }
 
-/// Session d'utilisation (fenêtre ouverte au premier appel IA).
-class SessionUtilisation {
-  const SessionUtilisation({
-    required this.active,
-    required this.messages,
-    required this.tokens,
-    this.debut,
-    this.fin,
-    this.dureeMinutes,
-  });
-
-  /// false : aucune session en cours (la prochaine commencera au prochain
-  /// appel IA) ; les limites et la durée sont celles de l'offre.
-  final bool active;
-  final DateTime? debut;
-  final DateTime? fin;
-  final int? dureeMinutes;
-  final Jauge messages;
-  final Jauge tokens;
-
-  /// Jauge de la session : la ressource la plus consommée (messages ou
-  /// tokens), comme une limite unique de session.
-  Jauge get principale =>
-      tokens.fraction > messages.fraction ? tokens : messages;
-
-  /// Terminée d'après l'heure de fin donnée par le serveur.
-  bool termineeA(DateTime maintenant) =>
-      active && fin != null && !maintenant.isBefore(fin!);
-}
-
 /// Fournisseur IA (nom technique du serveur, modèle).
 class FournisseurIA {
   const FournisseurIA({this.nom, this.modele});
@@ -101,7 +72,6 @@ class Utilisation {
     required this.offre,
     required this.messagesJour,
     required this.tokensJour,
-    required this.session,
     this.finJour,
     this.actif,
     this.routageAbonnement,
@@ -125,7 +95,6 @@ class Utilisation {
 
   /// Prochaine remise à zéro quotidienne (heure du serveur).
   final DateTime? finJour;
-  final SessionUtilisation session;
   final int? seuilCritique;
 
   /// Limites quotidiennes personnelles (exception) au lieu de l'offre.
@@ -156,9 +125,6 @@ class Utilisation {
       throw const FormatException('réponse /me/quota incomplète');
     }
     final seuil = _entier(j['critical_threshold_percent']);
-    final s = j['session'] is Map<String, dynamic>
-        ? j['session'] as Map<String, dynamic>
-        : const <String, dynamic>{};
     final actif = j['fournisseur_actif'] is Map<String, dynamic>
         ? j['fournisseur_actif'] as Map<String, dynamic>
         : null;
@@ -180,22 +146,6 @@ class Utilisation {
       finJour: _date(j['resets_at']),
       seuilCritique: seuil,
       exception: j['exception'] == true,
-      session: SessionUtilisation(
-        active: s['active'] == true,
-        debut: _date(s['started_at']),
-        fin: _date(s['ends_at']),
-        dureeMinutes: _entier(s['duration_minutes']),
-        messages: Jauge(
-          utilise: _entier(s['messages_used']) ?? 0,
-          limite: _entier(s['messages_limit']),
-          seuilCritique: seuil,
-        ),
-        tokens: Jauge(
-          utilise: _entier(s['tokens_used']) ?? 0,
-          limite: _entier(s['tokens_limit']),
-          seuilCritique: seuil,
-        ),
-      ),
     );
   }
 }

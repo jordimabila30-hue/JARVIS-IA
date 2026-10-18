@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../models/utilisation/utilisation.dart';
 import '../services/utilisation/service_utilisation.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/format_utilisation.dart';
-import '../utils/local_date_time.dart';
 import '../widgets/parametres/elements_parametres.dart';
 import '../widgets/utilisation/jauge_utilisation.dart';
 import '../widgets/utilisation/panneau_utilisation.dart';
@@ -17,8 +14,9 @@ Future<void> ouvrirPageUtilisation(BuildContext context, ServiceUtilisation serv
       MaterialPageRoute<void>(builder: (_) => UtilisationPage(service: service)),
     );
 
-/// Détail de l'utilisation : offre et fournisseur, session, journée,
-/// restants, fin de session et prochaine remise à zéro. Toutes les valeurs
+/// Détail de l'utilisation : offre et fournisseur, consommation du jour,
+/// restants et prochaine remise à zéro (quotas quotidiens seulement).
+/// Actualisée automatiquement, sans bouton. Toutes les valeurs
 /// viennent du serveur (`/me/quota`).
 class UtilisationPage extends StatefulWidget {
   const UtilisationPage({super.key, required this.service, this.horloge});
@@ -31,25 +29,16 @@ class UtilisationPage extends StatefulWidget {
 }
 
 class _UtilisationPageState extends State<UtilisationPage> {
-  Timer? _minute;
-
   DateTime get _maintenant => (widget.horloge ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
     widget.service.suivre();
-    _minute = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!mounted) return;
-      final u = widget.service.donnees;
-      if (u != null && u.session.termineeA(_maintenant)) widget.service.actualiser(force: true);
-      setState(() {});
-    });
   }
 
   @override
   void dispose() {
-    _minute?.cancel();
     widget.service.cesserDeSuivre();
     super.dispose();
   }
@@ -70,7 +59,7 @@ class _UtilisationPageState extends State<UtilisationPage> {
                   final marge = c.maxWidth < 600 ? 16.0 : 32.0;
                   return CustomScrollView(
                     slivers: [
-                      SliverToBoxAdapter(child: _Barre(service: widget.service)),
+                      const SliverToBoxAdapter(child: _Barre()),
                       SliverPadding(
                         padding: EdgeInsets.fromLTRB(marge, 4, marge, 32),
                         sliver: SliverToBoxAdapter(
@@ -101,9 +90,7 @@ class _UtilisationPageState extends State<UtilisationPage> {
 }
 
 class _Barre extends StatelessWidget {
-  const _Barre({required this.service});
-
-  final ServiceUtilisation service;
+  const _Barre();
 
   @override
   Widget build(BuildContext context) {
@@ -129,12 +116,6 @@ class _Barre extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
-            tooltip: 'Actualiser',
-            onPressed: service.chargement ? null : () => service.actualiser(force: true),
-            icon: const Icon(Icons.refresh_rounded),
-            color: CouleursJarvis.texteSecondaire,
-          ),
         ],
       ),
     );
@@ -156,7 +137,6 @@ class _Contenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = utilisation;
-    final s = u.session;
     final actif = u.actif;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -177,34 +157,6 @@ class _Contenu extends StatelessWidget {
               const _Ligne('Limites quotidiennes', 'personnelles (exception de votre compte)'),
             if (u.seuilCritique != null)
               _Ligne('Seuil d’alerte des jauges', '${u.seuilCritique} %'),
-          ],
-        ),
-        const SizedBox(height: 22),
-        CarteReglages(
-          titre: 'Session',
-          enfants: [
-            _Ligne('État', s.active && !s.termineeA(maintenant) ? 'En cours' : 'Aucune session en cours'),
-            if (s.active) ...[
-              _Ligne('Début', _instant(s.debut)),
-              _Ligne('Fin de session', _instant(s.fin)),
-            ],
-            if (s.dureeMinutes != null) _Ligne('Durée d’une session', dureeRestante(Duration(minutes: s.dureeMinutes!))),
-            JaugeUtilisation(
-              key: const ValueKey('detail-session-messages'),
-              titre: 'Messages de la session',
-              jauge: s.messages,
-              unite: 'messages',
-              sousTitre: 'Restants : ${_reste(s.messages, 'messages')}',
-            ),
-            JaugeUtilisation(
-              key: const ValueKey('detail-session-tokens'),
-              titre: 'Tokens de la session',
-              jauge: s.tokens,
-              unite: 'tokens',
-              sousTitre: 'Restants : ${_reste(s.tokens, 'tokens')}',
-            ),
-            NoteReglage(texteSession(u, maintenant)),
-            const SizedBox(height: 12),
           ],
         ),
         const SizedBox(height: 22),
@@ -230,8 +182,8 @@ class _Contenu extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         NoteReglage(
-          'Valeurs calculées par le serveur JARVIS d’après votre abonnement'
-          '${service.miseAJour == null ? '' : ' — mises à jour à ${heureCourte(service.miseAJour!)}'}.',
+          texteDonneesAnciennes(service) ??
+              'Valeurs calculées par le serveur JARVIS d’après votre abonnement, actualisées automatiquement.',
         ),
       ],
     );
