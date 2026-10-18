@@ -7,99 +7,86 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Une capture d'écran de JARVIS Touch, en mémoire et dans le cache privé :
- * l'image d'origine et, au plus, UN recadrage (toujours tiré de l'origine,
- * en pleine résolution : aucune perte). « Annuler le recadrage » revient à
- * l'origine. Rien n'est envoyé : la phase 3B lira [fichierValide] après
- * une action explicite de l'utilisateur.
+ * Une capture d'écran de JARVIS Touch, en mémoire et dans le cache privé.
+ * Le recadrage n'est appliqué qu'à la validation ([valider]) : les pixels
+ * gardés sont copiés tels quels (aucun agrandissement), puis l'image
+ * d'origine et son fichier sont libérés. Rien n'est envoyé : la phase 3B
+ * lira [fichierValide] après une action explicite de l'utilisateur.
  *
- * Utilisée sur le thread principal seulement. Avant [recadrer],
- * [annulerRecadrage] ou [supprimer], la vue qui affiche [actuelle] doit
- * l'avoir lâchée (les images remplacées sont libérées).
+ * Utilisée sur le thread principal seulement. La vue qui affiche [image]
+ * doit l'avoir lâchée avant [valider] ou [supprimer] (les images
+ * remplacées sont libérées après leur écriture, sur le fil du dépôt).
  */
-class CaptureTouch(private val contexte: Context, val originale: Bitmap) {
+class CaptureTouch(private val contexte: Context, image: Bitmap) {
 
     val id: String = UUID.randomUUID().toString()
 
-    /** Zone retenue, en pixels de l'image d'origine (null : image entière). */
-    var zone: Rect? = null
+    var image: Bitmap = image
         private set
 
-    private var recadree: Bitmap? = null
-    private var fichierOriginal: File? = null
-    private var fichierRecadre: File? = null
-    private var version = 0
+    /** Vrai après « Valider » : prête pour une future utilisation. */
+    var validee = false
+        private set
+
     var supprimee = false
         private set
 
-    /** Image à montrer (et, plus tard, à transmettre si l'utilisateur le demande). */
-    val actuelle: Bitmap get() = recadree ?: originale
-
-    val recadrageApplique: Boolean get() = recadree != null
+    private var fichier: File? = null
+    private var version = 0
 
     init {
-        DepotCaptures.ecrire(contexte, originale, "capture_$id") { f ->
-            if (supprimee) DepotCaptures.supprimer(listOf(f)) else fichierOriginal = f
-        }
+        ecrire(image)
     }
 
-    /** Recadre l'origine sur [z] (bornée à l'image). Faux si la mémoire manque. */
-    fun recadrer(z: Rect): Boolean {
-        val borne = Rect(z)
-        if (!borne.intersect(0, 0, originale.width, originale.height) || borne.width() < 2 || borne.height() < 2) {
-            return false
-        }
-        if (borne.width() == originale.width && borne.height() == originale.height) {
-            annulerRecadrage()
-            return true
-        }
-        val image = try {
-            Bitmap.createBitmap(originale, borne.left, borne.top, borne.width(), borne.height())
-        } catch (_: OutOfMemoryError) {
-            return false
-        }
-        oublierRecadrage()
-        recadree = image
-        zone = borne
+    private fun ecrire(b: Bitmap) {
         val v = ++version
-        DepotCaptures.ecrire(contexte, image, "capture_${id}_recadree_$v") { f ->
-            // Recadrage remplacé ou capture supprimée entre-temps.
-            if (supprimee || v != version || recadree !== image) DepotCaptures.supprimer(listOf(f))
-            else fichierRecadre = f
+        val nom = if (v == 1) "capture_$id" else "capture_${id}_$v"
+        DepotCaptures.ecrire(contexte, b, nom) { f ->
+            // Image remplacée ou capture supprimée entre-temps.
+            if (supprimee || v != version) DepotCaptures.supprimer(listOf(f)) else fichier = f
         }
-        return true
-    }
-
-    fun annulerRecadrage() {
-        oublierRecadrage()
-        version++
-    }
-
-    private fun oublierRecadrage() {
-        val ancienne = recadree ?: return
-        DepotCaptures.supprimer(listOf(fichierRecadre), listOf(ancienne))
-        recadree = null
-        fichierRecadre = null
-        zone = null
-    }
-
-    /** « Supprimer » : fichiers effacés et images libérées. */
-    fun supprimer() {
-        if (supprimee) return
-        supprimee = true
-        DepotCaptures.supprimer(listOf(fichierOriginal, fichierRecadre), listOf(recadree, originale))
-        recadree = null
-        fichierOriginal = null
-        fichierRecadre = null
     }
 
     /**
-     * Phase 3B : fichier PNG de l'image retenue (recadrée si un recadrage
-     * est appliqué), une fois son écriture terminée ; null si supprimée.
+     * Garde la zone [z] (pixels de l'image, bornée) et marque la capture
+     * validée. Faux si la mémoire manque (l'image n'a pas changé).
+     */
+    fun valider(z: Rect): Boolean {
+        if (supprimee) return false
+        val borne = Rect(z)
+        if (!borne.intersect(0, 0, image.width, image.height) || borne.width() < 2 || borne.height() < 2) {
+            return false
+        }
+        if (borne.width() < image.width || borne.height() < image.height) {
+            val recadree = try {
+                Bitmap.createBitmap(image, borne.left, borne.top, borne.width(), borne.height())
+            } catch (_: OutOfMemoryError) {
+                return false
+            }
+            val ancienne = image
+            val ancienFichier = fichier
+            image = recadree
+            fichier = null
+            ecrire(recadree)
+            DepotCaptures.supprimer(listOf(ancienFichier), listOf(ancienne))
+        }
+        validee = true
+        return true
+    }
+
+    /** Abandon : fichiers effacés et image libérée. */
+    fun supprimer() {
+        if (supprimee) return
+        supprimee = true
+        DepotCaptures.supprimer(listOf(fichier), listOf(image))
+        fichier = null
+    }
+
+    /**
+     * Phase 3B : fichier PNG de la capture validée, une fois son écriture
+     * terminée ; null si elle n'est pas validée ou a été supprimée.
      */
     fun fichierValide(rappel: (File?) -> Unit) {
-        DepotCaptures.apres {
-            rappel(if (supprimee) null else if (recadree != null) fichierRecadre else fichierOriginal)
-        }
+        DepotCaptures.apres { rappel(if (supprimee || !validee) null else fichier) }
     }
 }

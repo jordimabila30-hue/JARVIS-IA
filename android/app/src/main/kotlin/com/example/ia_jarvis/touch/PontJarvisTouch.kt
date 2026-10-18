@@ -7,13 +7,16 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import com.example.ia_jarvis.touch.capture.CaptureEcran
+import com.example.ia_jarvis.touch.capture.ServiceAccessibiliteJarvis
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
  * Canal `jarvis/touch` : autorisation de superposition, démarrage et
- * arrêt de [ServiceJarvisTouch]. `demarrer` ne répond qu'une fois la bulle
+ * arrêt de [ServiceJarvisTouch], état réel de la capture d'écran
+ * (Paramètres › Général › JARVIS Touch › Capture d'écran). `demarrer` ne répond qu'une fois la bulle
  * réellement affichée (ou en échec).
  */
 class PontJarvisTouch(
@@ -38,6 +41,18 @@ class PontJarvisTouch(
                 result.success(null)
             }
             "estActif" -> result.success(ServiceJarvisTouch.actif)
+            // Ce que le système permet vraiment : capture sans autorisation
+            // à chaque fois (accessibilité activée par l'utilisateur) ou non.
+            "etatCapture" -> result.success(
+                mapOf(
+                    "sansAutorisationPossible" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R),
+                    "sansAutorisation" to ServiceAccessibiliteJarvis.disponible,
+                )
+            )
+            "ouvrirReglagesCapture" -> {
+                CaptureEcran.ouvrirReglagesAccessibilite(activite)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }

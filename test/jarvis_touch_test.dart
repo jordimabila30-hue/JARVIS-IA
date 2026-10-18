@@ -30,6 +30,18 @@ class _FausseBulle implements PlateformeJarvisTouch {
 
   @override
   Future<bool> estActif() async => affichee;
+
+  bool captureSansAutorisation = false;
+  int reglagesCapture = 0;
+
+  @override
+  Future<CaptureEcranTouch> etatCapture() async => CaptureEcranTouch(
+    sansAutorisationPossible: true,
+    sansAutorisation: captureSansAutorisation,
+  );
+
+  @override
+  Future<void> ouvrirReglagesCapture() async => reglagesCapture++;
 }
 
 void main() {
@@ -143,5 +155,35 @@ void main() {
     await monter(service(disponible: false));
     expect(find.text('JARVIS Touch'), findsNothing);
     expect(find.text('Version'), findsOneWidget);
+  });
+
+  testWidgets('Capture d’écran : état réel du système, réglages d’Android', (
+    tester,
+  ) async {
+    final s = service();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(child: PanneauGeneral(touch: s)),
+        ),
+      ),
+    );
+    expect(find.text('Sans autorisation à chaque capture'), findsOneWidget);
+    expect(find.text('…'), findsOneWidget);
+
+    await tester.runAsync(s.synchroniser);
+    await tester.pump();
+    expect(find.text('Désactivée'), findsOneWidget);
+    // Aucun faux interrupteur : seul celui de JARVIS Touch existe.
+    expect(find.byType(Switch), findsOneWidget);
+
+    await tester.tap(find.text('Ouvrir les réglages d’accessibilité'));
+    await tester.pump();
+    expect(bulle.reglagesCapture, 1);
+
+    bulle.captureSansAutorisation = true;
+    await tester.runAsync(s.synchroniser);
+    await tester.pump();
+    expect(find.text('Activée'), findsOneWidget);
   });
 }

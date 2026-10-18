@@ -659,22 +659,29 @@ fonctions backend seulement) ; jamais dans Flutter. Compétences ODO
 moteur local (`DetecteurIntention.concerneMesEmails`). Android : retour par
 `jarvis://gmail`.
 
-JARVIS Touch › « Analyser l'écran » (phase 3A, natif seulement,
-`android/.../touch/capture/`) : capture d'une image, aperçu, recadrage,
-suppression ; aucune IA, aucun envoi. Voie principale :
-`ServiceAccessibiliteJarvis` (activé une fois dans Paramètres ›
-Accessibilité, Android 11+, `takeScreenshot`, aucun contenu de fenêtre
-lu). Secours : MediaProjection (`ActiviteCaptureEcran` transparente dans sa
-propre tâche → `ServiceCaptureEcran` premier plan `mediaProjection`, une
-image puis tout est libéré ; consentement à chaque fois). `CaptureEcran` :
-une capture à la fois, issue (`Reussie` / `Echec` / `Annulee`).
-`CaptureTouch` : origine + un recadrage au plus (pleine résolution) ;
+JARVIS Touch › « Capturer » (phases 3A / 3A.1, natif seulement,
+`android/.../touch/capture/`) : capture d'une image puis éditeur plein écran
+(`EditeurCaptureTouch` : Fermer = capture supprimée, Annuler / Rétablir
+visibles seulement si possible, Valider), sélection active dès l'ouverture
+(`RecadrageVue` : grille 3 × 3 pendant le geste seulement, double-toucher
+= image entière, un geste = une étape d'historique, 30 au plus) ; aucune
+IA, aucun envoi. Voie principale : `ServiceAccessibiliteJarvis` (activé une
+fois dans Paramètres › Accessibilité d'Android, Android 11+,
+`takeScreenshot`, aucun contenu de fenêtre lu ; désactivé par Android à
+chaque réinstallation de développement). Secours : MediaProjection
+(`ActiviteCaptureEcran` transparente dans sa propre tâche →
+`ServiceCaptureEcran` premier plan `mediaProjection`, une image puis tout
+est libéré ; consentement à chaque fois). `CaptureEcran` : une capture à
+la fois, issue (`Reussie` / `Echec` / `Annulee`). `CaptureTouch` : le
+recadrage n'est appliqué qu'à `valider` (pixels d'origine copiés, original
+et son fichier libérés) ; une capture validée reste jusqu'à la suivante ;
 phase 3B : `fichierValide`. `DepotCaptures` : PNG dans
 `cache/captures_touch/` (un seul fil : écriture, suppression, libération),
-tout effacé au démarrage de la bulle / de JARVIS sans bulle. Aperçu
-(`ApercuCaptureTouch`) : FLAG_SECURE, refermé à l'extinction de l'écran,
-refusé écran verrouillé. Bulle masquée pendant la capture, rendue dans
-tous les cas.
+tout effacé au démarrage de la bulle / de JARVIS sans bulle. Éditeur :
+FLAG_SECURE, abandonné à l'extinction de l'écran, refusé écran verrouillé.
+Réglages réels : Paramètres › Général › JARVIS Touch · Capture d'écran
+(`JarvisTouchService.capture`, canal `jarvis/touch` : `etatCapture`,
+`ouvrirReglagesCapture` ; aucun faux interrupteur).
 
 ---
 

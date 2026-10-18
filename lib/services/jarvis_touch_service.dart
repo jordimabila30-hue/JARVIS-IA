@@ -21,6 +21,21 @@ enum EtatJarvisTouch {
 }
 
 /// Accès au module natif (canal `jarvis/touch`). Séparé pour les tests.
+/// Capture d'écran de JARVIS Touch, telle que le système la permet.
+class CaptureEcranTouch {
+  const CaptureEcranTouch({
+    required this.sansAutorisationPossible,
+    required this.sansAutorisation,
+  });
+
+  /// Android 11+ : la capture peut se passer de l'autorisation à chaque
+  /// fois, si l'utilisateur active le service d'accessibilité.
+  final bool sansAutorisationPossible;
+
+  /// Service d'accessibilité activé : aucune autorisation demandée.
+  final bool sansAutorisation;
+}
+
 abstract class PlateformeJarvisTouch {
   Future<bool> autorisationAccordee();
   Future<void> demanderAutorisation();
@@ -30,6 +45,11 @@ abstract class PlateformeJarvisTouch {
   Future<bool> demarrer();
   Future<void> arreter();
   Future<bool> estActif();
+
+  Future<CaptureEcranTouch> etatCapture();
+
+  /// Paramètres › Accessibilité d'Android (l'utilisateur seul active).
+  Future<void> ouvrirReglagesCapture();
 }
 
 class PlateformeJarvisTouchAndroid implements PlateformeJarvisTouch {
@@ -55,6 +75,19 @@ class PlateformeJarvisTouchAndroid implements PlateformeJarvisTouch {
   @override
   Future<bool> estActif() async =>
       await _canal.invokeMethod<bool>('estActif') ?? false;
+
+  @override
+  Future<CaptureEcranTouch> etatCapture() async {
+    final m = await _canal.invokeMapMethod<String, Object?>('etatCapture');
+    return CaptureEcranTouch(
+      sansAutorisationPossible: m?['sansAutorisationPossible'] == true,
+      sansAutorisation: m?['sansAutorisation'] == true,
+    );
+  }
+
+  @override
+  Future<void> ouvrirReglagesCapture() =>
+      _canal.invokeMethod<void>('ouvrirReglagesCapture');
 }
 
 /// JARVIS Touch : bulle flottante au-dessus des autres applications
@@ -98,6 +131,30 @@ class JarvisTouchService extends ChangeNotifier with WidgetsBindingObserver {
 
   bool _souhaite = false;
   bool _observe = false;
+
+  /// État réel de la capture d'écran (null : pas encore lu), relu avec le
+  /// reste au retour au premier plan (retour des réglages d'Android).
+  CaptureEcranTouch? get capture => _capture;
+  CaptureEcranTouch? _capture;
+
+  Future<void> ouvrirReglagesCapture() async {
+    if (!disponible) return;
+    _observer();
+    try {
+      await _plateforme.ouvrirReglagesCapture();
+    } catch (e) {
+      debugPrint('[JARVIS Touch] réglages de capture : $e');
+    }
+  }
+
+  Future<void> _relireCapture() async {
+    try {
+      _capture = await _plateforme.etatCapture();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[JARVIS Touch] état de la capture : $e');
+    }
+  }
 
   static const refus =
       'Autorisation refusée : JARVIS Touch a besoin de « Afficher par-dessus '
@@ -153,6 +210,7 @@ class JarvisTouchService extends ChangeNotifier with WidgetsBindingObserver {
   /// arrêté par le système, retour des réglages d'Android.
   Future<void> synchroniser() async {
     if (!disponible) return;
+    await _relireCapture();
     if (_etat == EtatJarvisTouch.attenteAutorisation) {
       // Certains Android annoncent l'autorisation avec un léger retard.
       var oui = await _autorise();

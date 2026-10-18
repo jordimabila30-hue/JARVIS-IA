@@ -1570,3 +1570,26 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - Retour arrière prêt : `docker tag backend-api:avant-odo-gmail backend-api:latest` + `.env.sauvegarde-20261018` + `docker compose up -d --no-deps --no-build api`.
 - Instance de test `jarvis-api-gmail` (8001) toujours en marche (à arrêter seulement sur demande).
 - Prochaine étape : essai réel « Résume mes mails » sur 8000 (facturable, sur accord) ; qualité des résumés (chantier séparé).
+
+## 2026-10-18 — JARVIS Touch, phase 3A.1 : menu refait, éditeur de capture plein écran
+
+### Fait
+- **Menu** (`MenuJarvisTouch`) : panneau sombre translucide (dégradé violet, coins 30 dp, liseré violet, une seule ombre), grille 2 × 2 séparée par de fins traits, pastilles 56 dp, ouverture 170 ms ; « Analyser l'écran » devient « Capturer » ; « Vocal » / « Importer » : « Disponible prochainement » dans l'en-tête (plus de ligne réservée).
+- **Éditeur plein écran** (`EditeurCaptureTouch`, remplace `ApercuCaptureTouch`) ouvert dès la capture : barre du haut Fermer (supprime) · Annuler / Rétablir (cachés tant qu'impossibles) · Valider ; fond sombre, aucun texte.
+- **Recadrage** (`RecadrageVue`) : sélection active sur toute l'image, voile extérieur, poignées aux coins et au milieu des bords, grille 3 × 3 seulement pendant le geste, double-toucher = image entière (dans l'historique, jamais pendant un glissement), une étape par geste, 30 au plus, « Rétablir » effacé par une nouvelle modification ; aucune allocation pendant le geste.
+- **Validation** (`CaptureTouch.valider`) : recadrage appliqué une seule fois, pixels d'origine copiés tels quels, PNG en arrière-plan, original et son fichier libérés ; capture validée gardée dans le cache privé jusqu'à la suivante.
+- **Paramètres › Général › JARVIS Touch · Capture d'écran** : état réel (« Activée » / « Désactivée »), bouton vers l'accessibilité d'Android, note de confidentialité ; aucun faux interrupteur. Retirés de l'éditeur : textes de confidentialité, lien d'autorisation, boutons textuels.
+
+### Testé
+- Flutter : `test/jarvis_touch_test.dart` 8/8 (1 nouveau : section Capture d'écran) ; `flutter analyze` sans remarque sur les fichiers touchés.
+- S10+ : menu (ouverture, placement à côté de la bulle à gauche, Discuter → mini-chat), Capturer → éditeur direct, Annuler / Rétablir selon l'historique, nouvelle modification qui efface Rétablir, double-toucher réinitialisant (vérifié par l'historique), Valider (749 × 1246, net, original effacé), Fermer (0 fichier restant), bulle rendue.
+- Mesures : capture (secours MediaProjection) 583 ms dont 450 ms d'attente volontaire ; PNG plein écran 367 ms, recadré 92 ms, en arrière-plan. Mémoire sur 8 captures + fermetures : « Graphics » plafonné (~116 Mo), PSS 503 → 509 Mo (dérive légère, à surveiller).
+
+### Limites
+- Éditeur et grille protégés (FLAG_SECURE) : non photographiables par adb, vérifiés par l'arbre d'accessibilité et les fichiers.
+- Une réinstallation de développement désactive le service d'accessibilité : à réactiver (l'appli bascule seule sur MediaProjection).
+- Fluidité du geste non chiffrée (pas de mesure d'images par seconde).
+
+### Prochaine étape
+- Phase 3B : utiliser la capture validée dans le mini-chat (`CaptureTouch.fichierValide`), sur action explicite.
+
