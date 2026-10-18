@@ -27,6 +27,34 @@ Les filtres, validations et règles métier (repères `[[n]]`, correction des
 attributions, bloc `<propositions>`, lots, ciblage, consentement) sont
 inchangés : ils travaillent sur le texte, quel que soit le fournisseur.
 
+## Appels d'outils (utilisés par ODO, 2026-10-18)
+
+Le contrat accepte des outils, sans changer le comportement sans outils
+(aucun champ `tools` envoyé, mêmes événements) :
+
+| Élément | Rôle |
+|---|---|
+| `flux(messages, *, max_sortie, effort, outils=[DefinitionOutil])` | outils proposés (nom, description, JSON Schema d'un objet) ; noms et schémas contrôlés (`verifier_outils`) |
+| `Fin(raison=OUTIL, tour=TourAssistant)` | le modèle demande des outils : `tour.appels` (`AppelOutil` : id, nom, arguments COMPLETS ; `erreur_arguments` si illisibles), `tour.texte`, `tour.brut` (blocs du fournisseur, jamais affichés) |
+| `message_appels(tour)` / `message_resultats([ResultatAppel])` | suite de la conversation : `{"role": "assistant", "tour"}` puis `{"role": "outil", "resultats"}` |
+
+Claude (`anthropic.py`) : `tools` (`input_schema`) ; arguments lus dans le
+message final (`get_final_message`, fragments `input_json_delta` déjà
+assemblés par le SDK) ; le tour est rejoué tel quel (blocs `thinking`
+**signés**, `text`, `tool_use`), puis les résultats en blocs `tool_result`
+en tête du message user (`is_error` si erreur). Réflexion jamais diffusée ni
+journalisée. Tour produit par un autre fournisseur : reconstruit sans
+réflexion.
+
+GroqCloud (`groq.py`) : `tools` au format fonctions ; `delta.tool_calls`
+réassemblés par `index` (id, nom, fragments d'arguments) ; JSON illisible ou
+non objet → `erreur_arguments` (jamais exécuté, jamais deviné) ; suite :
+message assistant `tool_calls` puis un message `tool` par résultat.
+
+MIA n'exécute jamais d'outil et ne connaît aucune permission : c'est le rôle
+d'ODO (`docs/backend/ODO.md`). Tests : `tests/test_llm_outils.py` (deux
+formats, vrais SDK, transport simulé).
+
 ## Comportements garantis
 
 - **Réflexion interne** : jamais diffusée (seuls les `text_delta` de Claude,

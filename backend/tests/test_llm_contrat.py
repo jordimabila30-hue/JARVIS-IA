@@ -148,10 +148,24 @@ async def test_json_coupe_par_le_plafond(nom):
     assert r.donnees is None and r.raison is RaisonArret.LONGUEUR
 
 
-async def test_outils_reserves_a_odo(nom):
-    f = FABRIQUES[nom](Scenario())
-    with pytest.raises(NotImplementedError):
-        await lire(f, outils=[DefinitionOutil("heure", "Donne l'heure", {"type": "object"})])
+async def test_sans_outils_requete_inchangee(nom):
+    # Rétrocompatibilité : aucun champ d'outils sans outils (tests ODO :
+    # test_llm_outils.py).
+    journal = Journal()
+    f = FABRIQUES[nom](Scenario(), journal)
+    ev = await lire(f)
+    assert "tools" not in journal.requetes[0]
+    assert ev[-1].tour is None and ev[-1].appels == ()
+
+
+async def test_definition_d_outil_invalide_refusee_sans_appel(nom):
+    journal = Journal()
+    f = FABRIQUES[nom](Scenario(), journal)
+    with pytest.raises(ValueError):
+        await lire(f, outils=[DefinitionOutil("heure", "Donne l'heure", {"type": "string"})])
+    with pytest.raises(ValueError):
+        await lire(f, outils=[DefinitionOutil("a b", "x", {"type": "object"})])
+    assert journal.requetes == []
 
 
 @pytest.mark.parametrize("messages", [

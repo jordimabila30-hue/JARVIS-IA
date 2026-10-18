@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 
 from . import console
-from .api.v1 import chat, contexts, local_exchanges
+from .api.v1 import chat, contexts, local_exchanges, odo
 from .llm import FournisseurNonConfigure, selection
 from .auth import AuthUser, get_current_user
 from .config import Settings, get_settings
@@ -47,6 +47,13 @@ async def lifespan(app: FastAPI):
         logger.error("Fournisseur IA « %s » non configuré : le chat répondra 503 (llm_config).", actif)
     logger.info("Routage par abonnement : %s", "ACTIF (offre du compte, plan_config)"
                 if settings.abonnements_routage else f"inactif ({actif} pour tous)")
+    if settings.abonnements_routage:
+        # Chaque offre peut viser un autre fournisseur : tous doivent être
+        # prêts (sinon les comptes concernés recevront 503 llm_config).
+        manquants = [nom for nom, ok in selection.configures(settings).items() if not ok]
+        if manquants:
+            logger.error("Routage actif mais fournisseur(s) non configuré(s) : %s", ", ".join(manquants))
+    logger.info("ODO : %s", "ACTIF" if settings.odo_actif else "inactif (aucun outil proposé)")
     yield
     await close_surveillance_horloge()
     # Laisse les sauvegardes de fin de flux se terminer avant de fermer les clients.
@@ -82,6 +89,7 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(local_exchanges.router, prefix="/api/v1")
 app.include_router(contexts.conversations_router, prefix="/api/v1")
 app.include_router(contexts.contexts_router, prefix="/api/v1")
+app.include_router(odo.router, prefix="/api/v1")
 app.include_router(console.router)
 
 

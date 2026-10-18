@@ -10,11 +10,17 @@ reste en place et inchangé tant que la phase 2 n'a pas raccordé les routes :
     JSON si le fournisseur refuse ce mode (mémorisé pour ce client) ;
   - modèles `gpt-oss` : `reasoning_effort` (« low » par défaut pour le JSON,
     comme les lots de propositions) ; le raisonnement n'est jamais diffusé ;
-  - aucun nouvel essai automatique : l'appelant gère les attentes (429).
+  - aucun nouvel essai automatique : l'appelant gère les attentes (429) ;
+  - outils : `tools` au format fonctions OpenAI ; les `tool_calls` du flux
+    arrivent en fragments (par `index`) et sont réassemblés ; arguments JSON
+    illisibles → `AppelOutil.erreur_arguments` (jamais exécutés). Suite de
+    la conversation : message assistant `tool_calls`, puis un message `tool`
+    par résultat (`tool_call_id`).
 """
 
 from __future__ import annotations
 
+import json as _json
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -23,6 +29,7 @@ from openai import AsyncOpenAI
 
 from .base import (
     MESSAGES,
+    AppelOutil,
     DefinitionOutil,
     Effort,
     ErreurFournisseur,
@@ -36,13 +43,14 @@ from .base import (
     ReponseJSON,
     RequeteTropGrande,
     Texte,
+    TourAssistant,
     Usage,
     attente_conseillee,
     estimer_tokens,
     lire_json,
-    refuser_outils,
     secondes,
     verifier_messages,
+    verifier_outils,
 )
 
 BASE_GROQ = "https://api.groq.com/openai/v1"
@@ -74,6 +82,46 @@ def _effort_groq(modele: str, effort: Effort | None) -> str | None:
 
 def _raison(finish: str | None) -> RaisonArret:
     return _RAISONS.get(finish or "stop", RaisonArret.AUTRE)
+
+
+def convertir(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    """Format commun → messages Chat Completions (format OpenAI)."""
+    verifier_messages(messages)
+    sortie: list[dict[str, Any]] = []
+    for m in messages:
+        if m["role"] == "outil":
+            sortie += [{"role": "tool", "tool_call_id": r.id, "content": r.contenu} for r in m["resultats"]]
+        elif m.get("tour") is not None:
+            tour = m["tour"]
+            sortie.append({
+                "role": "assistant",
+                "content": tour.texte or None,
+                "tool_calls": [{"id": a.id, "type": "function",
+                                "function": {"name": a.nom,
+                                             "arguments": _json.dumps(a.arguments, ensure_ascii=False)}}
+                               for a in tour.appels],
+            })
+        else:
+            sortie.append({"role": m["role"], "content": m["content"]})
+    return sortie
+
+
+def definitions(outils: Sequence[DefinitionOutil] | None) -> list[dict[str, Any]]:
+    """Définitions communes → `tools` (fonctions) de Chat Completions."""
+    return [{"type": "function", "function": {"name": o.nom, "description": o.description, "parameters": o.schema}}
+            for o in verifier_outils(outils)]
+
+
+def _appel(fragment: dict[str, Any]) -> AppelOutil:
+    """Appel réassemblé ; arguments illisibles signalés, jamais devinés."""
+    brut = "".join(fragment["arguments"]).strip() or "{}"
+    try:
+        arguments = _json.loads(brut)
+    except ValueError:
+        return AppelOutil(id=fragment["id"], nom=fragment["nom"], erreur_arguments="JSON illisible")
+    if not isinstance(arguments, dict):
+        return AppelOutil(id=fragment["id"], nom=fragment["nom"], erreur_arguments="arguments non objet")
+    return AppelOutil(id=fragment["id"], nom=fragment["nom"], arguments=arguments)
 
 
 class FournisseurGroq(FournisseurLLM):
@@ -128,12 +176,12 @@ class FournisseurGroq(FournisseurLLM):
 
     async def flux(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
                    outils: Sequence[DefinitionOutil] | None = None) -> AsyncIterator[Evenement]:
-        verifier_messages(messages)
-        refuser_outils(outils)
         options: dict[str, Any] = {
-            "model": self.modele, "messages": [dict(m) for m in messages], "max_tokens": max_sortie,
+            "model": self.modele, "messages": convertir(messages), "max_tokens": max_sortie,
             "stream": True, "stream_options": {"include_usage": True},
         }
+        if outils:
+            options["tools"] = definitions(outils)
         raisonnement = _effort_groq(self.modele, effort)
         if raisonnement:
             options["extra_body"] = {"reasoning_effort": raisonnement}
@@ -142,6 +190,7 @@ class FournisseurGroq(FournisseurLLM):
         usage = None
         modele = self.modele
         finish = None
+        fragments: dict[int, dict[str, Any]] = {}     # tool_calls par index
         try:
             stream = await self._client.chat.completions.create(**options)
             async for chunk in stream:
@@ -157,15 +206,30 @@ class FournisseurGroq(FournisseurLLM):
                 if getattr(choix, "finish_reason", None):
                     finish = choix.finish_reason
                 # `delta.reasoning` (gpt-oss) n'est jamais diffusé.
-                contenu = getattr(getattr(choix, "delta", None), "content", None)
+                delta = getattr(choix, "delta", None)
+                contenu = getattr(delta, "content", None)
                 if contenu:
                     parts.append(contenu)
                     yield Texte(contenu)
+                for tc in getattr(delta, "tool_calls", None) or ():
+                    f = fragments.setdefault(getattr(tc, "index", 0) or 0, {"id": "", "nom": "", "arguments": []})
+                    if getattr(tc, "id", None):
+                        f["id"] = tc.id
+                    fonction = getattr(tc, "function", None)
+                    if getattr(fonction, "name", None):
+                        f["nom"] += fonction.name
+                    if getattr(fonction, "arguments", None):
+                        f["arguments"].append(fonction.arguments)
         except openai.APIError as exc:
             raise self.erreur(exc, apres_texte=bool(parts)) from exc
 
-        yield Fin(raison=_raison(finish), usage=self._usage(usage, messages, "".join(parts)),
-                  modele=modele, detail=finish)
+        tour = None
+        if fragments:
+            appels = tuple(_appel(fragments[i]) for i in sorted(fragments))
+            tour = TourAssistant(texte="".join(parts), appels=appels, fournisseur=self.nom)
+        raison = RaisonArret.OUTIL if tour is not None else _raison(finish)
+        yield Fin(raison=raison, usage=self._usage(usage, messages, "".join(parts)),
+                  modele=modele, detail=finish, tour=tour)
 
     # --- JSON -------------------------------------------------------------------
 
@@ -173,8 +237,7 @@ class FournisseurGroq(FournisseurLLM):
                    schema: dict[str, Any] | None = None, effort: Effort | None = None) -> ReponseJSON:
         """`schema` n'est pas imposé par GroqCloud (mode JSON simple) : la
         consigne du prompt décrit la forme, la lecture reste tolérante."""
-        verifier_messages(messages)
-        options: dict[str, Any] = {"model": self.modele, "messages": [dict(m) for m in messages],
+        options: dict[str, Any] = {"model": self.modele, "messages": convertir(messages),
                                    "max_tokens": max_sortie}
         raisonnement = _effort_groq(self.modele, effort or "low")
         if raisonnement:

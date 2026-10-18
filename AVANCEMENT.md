@@ -1382,3 +1382,63 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - S10+ : réinstaller l'appli (`flutter run`) pour avoir l'interface Utilisation (l'APK installé est antérieur), `adb reverse tcp:8000 tcp:8000`.
 - Activer `ABONNEMENTS_ROUTAGE` (Free → GroqCloud) avec accord.
+
+## 2026-10-18 — ODO, phase 1/2 : moteur universel + routage Free/Pro prêt
+
+### Fait
+- Point de restauration : tag `sauvegarde-avant-odo-phase1`, image `backend-api:avant-odo`.
+- **MIA universel** (`app/llm/`) : appels d'outils, rétrocompatibles (sans outils : requêtes et événements identiques).
+  - `base.py` : `TourAssistant`, `ResultatAppel`, `message_appels`, `message_resultats`, `Fin.tour` / `Fin.appels`, `verifier_outils`, messages `outil`.
+  - `anthropic.py` : `tools`, lecture des `tool_use`, tour rejoué tel quel (réflexion signée), `tool_result`.
+  - `groq.py` : `tools`, `tool_calls` réassemblés par index, JSON illisible signalé, messages `tool`.
+- **ODO** (`app/odo/`, nouveau) : contrat, registre, permissions, validation stricte, sécurité (enveloppe `<resultat_outil>`, neutralisation, troncature), confirmations Redis (usage unique, par compte, TTL), orchestrateur borné (tours, appels, délais, doublons, budget entre les tours, interruption), journal sans données, 3 outils fictifs (hors production), `service.py` (`ODO_ACTIF`).
+- **Route** :
+  - `chat_stream` raccordé autour de `llm.flux` (chat ordinaire seulement) ;
+  - événements SSE `outil` / `confirmation` ;
+  - usage des tours compté même en cas d'interruption ;
+  - `POST /api/v1/odo/confirmations/{id}`.
+- **Routage Free / Pro** : code revu, correct (fournisseur et modèle de `plan_config`, identité du JWT, aucun repli). Ajouts : alerte au démarrage si un fournisseur manque, `scripts/verifier_routage.py`, `SupabaseAdmin.list_plan_config`.
+- **Configuration** : `ODO_ACTIF=false`, `ODO_OUTILS_FICTIFS=false`, `ODO_MAX_TOURS` / `ODO_MAX_APPELS` / `ODO_DELAI_OUTIL` / `ODO_RESULTAT_MAX_CARACTERES` / `ODO_CONFIRMATION_TTL` ; `.env.example`.
+- **Doc** : `docs/backend/ODO.md` (nouveau), `MIA_UNIVERSEL.md`, `ABONNEMENTS.md` §12, CLAUDE.md.
+
+### Tests (aucun appel réel)
+- Backend : **478 réussis, 1 ignoré** (sans objet pour Claude), 0 échec. 59 nouveaux :
+  - `test_odo` 24, `test_odo_chat` 9, `test_llm_outils` 15, `test_routage` 10, WhatsApp avec ODO forcé 1 ;
+  - 1 test de contrat remplacé (« outils refusés » → « sans outils, requête inchangée »).
+- Mutations (copie jetable) : retirer la validation, la confirmation ou le routage fait échouer respectivement 1, 4 et 8 tests.
+- SQL : 145 réussis (aucune migration dans cette phase).
+- Flutter (aucun fichier Flutter modifié) : chat IA, écriture progressive, Utilisation, 96 réussis.
+- Instance de test `jarvis-api-test` (port 8001, routage ACTIF, ODO inactif, Redis base 1) : santé ok, `/me/quota` 401 sans jeton, aucune alerte de fournisseur. `verifier_routage` : Free → groq / openai/gpt-oss-120b prêt, Pro → anthropic / claude-opus-5-5 prêt ; compte réel (Free) routé vers GroqCloud.
+
+### État
+- Production `jarvis-api` (8000) **inchangée** : `ABONNEMENTS_ROUTAGE=false` (Claude pour tous), sans le code ODO.
+- `ODO_ACTIF` : false partout ; jamais activé en production.
+- Gmail : non développé.
+
+### Prochaine étape
+- Accord pour activer `ABONNEMENTS_ROUTAGE=true` en production (procédure : ABONNEMENTS.md §12).
+- Phase 2 : Gmail (OAuth, lecture seule), cartes de confirmation Flutter, interception locale du mot « mail ».
+
+## 2026-10-18 — Routage Free / Pro activé en production
+
+### Fait (avec accord)
+- `backend/.env` : `ABONNEMENTS_ROUTAGE=true` ajouté (copie de l'ancien fichier gardée hors du dépôt). `jarvis-api` recréé sur la même image de production (`954d097068c5`, sans ODO), démarré à 13:55:40 UTC.
+- Contrôles sans appel IA :
+  - santé ok, Redis et Supabase ok, `/me/quota` 401 sans jeton ;
+  - route ODO absente (404) ;
+  - journal : « Routage par abonnement : ACTIF » ;
+  - Free → groq / openai/gpt-oss-120b prêt, Pro → anthropic / claude-opus-5-5 prêt ;
+  - compte réel (Free) → GroqCloud.
+- `ODO_ACTIF` : absent en production (code ODO non déployé).
+- Instance de test `jarvis-api-test` (8001) retirée ; image `backend-api:odo-test` gardée.
+
+### Incident
+- Production arrêtée par erreur de 13:45:00 à 13:55:40 UTC (≈ 11 min). Une commande de nettoyage des conteneurs de test (`docker stop` filtré sur l'image `backend-api`) a aussi visé `jarvis-api`. Aucune donnée touchée (Redis, Supabase intacts). Retour en service avec l'activation du routage.
+- Mesure : conteneurs visés par leur nom exact uniquement.
+
+### Retour arrière
+- `ABONNEMENTS_ROUTAGE=false` dans `backend/.env`, puis `docker compose up -d api`.
+
+### Prochaine étape
+- Vérifier un échange réel Free (GroqCloud) depuis l'application quand tu le souhaites (appel facturable, avec ton accord).
+- Phase 2 d'ODO : Gmail.

@@ -6,9 +6,8 @@
   groq.py        GroqCloud (SDK `openai`), tests et comparaisons
   selection.py   choix du fournisseur (LLM_PROVIDER, anthropic par défaut)
 
-Phase 1 : la couche existe et est testée, mais les routes de production
-(`api/v1/chat.py`, `api/v1/contexts.py`) utilisent encore leur propre client
-GroqCloud. Le raccordement est la phase 2.
+Utilisée par toutes les routes qui appellent un modèle (`api/v1/chat.py`,
+`api/v1/contexts.py`) et par ODO (`app/odo/`, appels d'outils).
 Indépendant de FastAPI, Supabase, Redis et du transport SSE.
 """
 
@@ -25,13 +24,18 @@ from .base import (
     Refus,
     ReponseJSON,
     RequeteTropGrande,
+    ResultatAppel,
     Texte,
+    TourAssistant,
     Usage,
+    message_appels,
+    message_resultats,
 )
 from .selection import FournisseurInconnu, FournisseurNonConfigure, creer, fournisseur
 
 __all__ = [
     "AppelOutil", "DefinitionOutil", "ErreurFournisseur", "ErreurLLM", "Evenement", "Fin",
     "FournisseurInconnu", "FournisseurLLM", "FournisseurNonConfigure", "LimiteDebit", "RaisonArret",
-    "Refus", "ReponseJSON", "RequeteTropGrande", "Texte", "Usage", "creer", "fournisseur",
+    "Refus", "ReponseJSON", "RequeteTropGrande", "ResultatAppel", "Texte", "TourAssistant", "Usage",
+    "creer", "fournisseur", "message_appels", "message_resultats",
 ]

@@ -12,7 +12,11 @@ Conversion du format commun (voir base.py) vers l'API Messages :
     est neutralisée dans tout texte qui n'est pas une enveloppe ;
   - messages vides ignorés, rôles identiques consécutifs fusionnés,
     réponse(s) `assistant` en tête retirées (historique tronqué) ;
-  - la conversation doit finir par `user` (pas de pré-remplissage).
+  - la conversation doit finir par `user` (pas de pré-remplissage) ;
+  - outils : `tools` (nom, description, input_schema) ; un tour qui demande
+    des outils est renvoyé tel quel (`TourAssistant.brut` : blocs `thinking`
+    signés, `text`, `tool_use`, exigés par l'API pour continuer), puis les
+    résultats en blocs `tool_result` (toujours en tête du message user).
 
 Réflexion interne : jamais diffusée (seuls les `text_delta` deviennent des
 [Texte]). Le paramètre `thinking` n'est pas envoyé : chaque modèle garde
@@ -39,6 +43,7 @@ from anthropic import AsyncAnthropic
 
 from .base import (
     EFFORTS,
+    AppelOutil,
     DefinitionOutil,
     Effort,
     ErreurFournisseur,
@@ -53,11 +58,12 @@ from .base import (
     ReponseJSON,
     RequeteTropGrande,
     Texte,
+    TourAssistant,
     Usage,
     attente_conseillee,
     lire_json,
-    refuser_outils,
     verifier_messages,
+    verifier_outils,
 )
 
 BALISE_CONSIGNES = "consignes_systeme"
@@ -117,6 +123,31 @@ def effort_accepte(modele: str, effort: Effort | None) -> str | None:
     return effort
 
 
+def _blocs_assistant(m: Message) -> list[dict[str, Any]]:
+    """Tour assistant : texte seul, ou tour d'outils rejoué à l'identique."""
+    tour = m.get("tour")
+    if tour is None:
+        return [{"type": "text", "text": neutraliser(m["content"].strip())}]
+    if tour.fournisseur == "anthropic" and tour.brut:
+        return [dict(b) for b in tour.brut]
+    # Tour produit par un autre fournisseur : reconstruit (sans réflexion).
+    blocs: list[dict[str, Any]] = []
+    if tour.texte.strip():
+        blocs.append({"type": "text", "text": neutraliser(tour.texte.strip())})
+    blocs += [{"type": "tool_use", "id": a.id, "name": a.nom, "input": a.arguments} for a in tour.appels]
+    return blocs
+
+
+def _blocs_resultats(m: Message) -> list[dict[str, Any]]:
+    return [{"type": "tool_result", "tool_use_id": r.id, "content": neutraliser(r.contenu),
+             **({"is_error": True} if r.erreur else {})} for r in m["resultats"]]
+
+
+def _a_outils(tour: dict[str, Any]) -> bool:
+    """Un tour d'outils (tool_use / tool_result) n'est jamais fusionné."""
+    return any(b.get("type") in ("tool_use", "tool_result") for b in tour["content"])
+
+
 def convertir(messages: Sequence[Message]) -> tuple[str | None, list[dict[str, Any]]]:
     """Format commun → (system, messages) de l'API Messages."""
     verifier_messages(messages)
@@ -126,24 +157,33 @@ def convertir(messages: Sequence[Message]) -> tuple[str | None, list[dict[str, A
     debut = True
     for m in messages:
         role, contenu = m["role"], m["content"].strip()
-        if not contenu:
-            continue
         if role == "system":
+            if not contenu:
+                continue
             if debut:
                 systeme.append(contenu)
             else:
                 rappels.append(envelopper(contenu))
             continue
+        if role == "outil":
+            # Résultats d'outils : message user, blocs tool_result en tête.
+            debut = False
+            tours.append({"role": "user", "content": _blocs_resultats(m) +
+                          [{"type": "text", "text": r} for r in rappels]})
+            rappels = []
+            continue
+        if not contenu and "tour" not in m:
+            continue
         debut = False
-        contenu = neutraliser(contenu)
         if role == "assistant" and not tours:
             continue        # historique tronqué : une conversation commence par l'utilisateur
-        blocs = []
-        if role == "user" and rappels:
+        if role == "assistant":
+            blocs = _blocs_assistant(m)
+        else:
             blocs = [{"type": "text", "text": r} for r in rappels]
             rappels = []
-        blocs.append({"type": "text", "text": contenu})
-        if tours and tours[-1]["role"] == role:
+            blocs.append({"type": "text", "text": neutraliser(contenu)})
+        if tours and tours[-1]["role"] == role and "tour" not in m and not _a_outils(tours[-1]):
             tours[-1]["content"].extend(blocs)
         else:
             tours.append({"role": role, "content": blocs})
@@ -157,6 +197,12 @@ def convertir(messages: Sequence[Message]) -> tuple[str | None, list[dict[str, A
     if tours[-1]["role"] != "user":
         raise ValueError("la conversation doit se terminer par un message user")
     return ("\n\n".join(systeme) or None), tours
+
+
+def definitions(outils: Sequence[DefinitionOutil] | None) -> list[dict[str, Any]]:
+    """Définitions communes → `tools` de l'API Messages."""
+    return [{"name": o.nom, "description": o.description, "input_schema": o.schema}
+            for o in verifier_outils(outils)]
 
 
 class FournisseurAnthropic(FournisseurLLM):
@@ -179,11 +225,14 @@ class FournisseurAnthropic(FournisseurLLM):
     # --- Requête ----------------------------------------------------------------
 
     def parametres(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
-                   schema: dict[str, Any] | None = None) -> dict[str, Any]:
+                   schema: dict[str, Any] | None = None,
+                   outils: Sequence[DefinitionOutil] | None = None) -> dict[str, Any]:
         systeme, tours = convertir(messages)
         params: dict[str, Any] = {"model": self.modele, "max_tokens": max_sortie, "messages": tours}
         if systeme:
             params["system"] = systeme
+        if outils:
+            params["tools"] = definitions(outils)
         config: dict[str, Any] = {}
         niveau = effort_accepte(self.modele, effort or self.effort)
         if niveau:
@@ -223,8 +272,7 @@ class FournisseurAnthropic(FournisseurLLM):
 
     async def flux(self, messages: Sequence[Message], *, max_sortie: int, effort: Effort | None = None,
                    outils: Sequence[DefinitionOutil] | None = None) -> AsyncIterator[Evenement]:
-        refuser_outils(outils)
-        params = self.parametres(messages, max_sortie=max_sortie, effort=effort)
+        params = self.parametres(messages, max_sortie=max_sortie, effort=effort, outils=outils)
         ecrit = False
         try:
             async with self._client.messages.stream(**params) as stream:
@@ -238,9 +286,9 @@ class FournisseurAnthropic(FournisseurLLM):
                 final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise self.erreur(exc, apres_texte=ecrit) from exc
-        yield Fin(raison=_RAISONS.get(final.stop_reason or "", RaisonArret.AUTRE),
-                  usage=self._usage(final.usage), modele=final.model or self.modele,
-                  detail=self._detail(final))
+        raison = _RAISONS.get(final.stop_reason or "", RaisonArret.AUTRE)
+        yield Fin(raison=raison, usage=self._usage(final.usage), modele=final.model or self.modele,
+                  detail=self._detail(final), tour=self._tour(final) if raison is RaisonArret.OUTIL else None)
 
     # --- JSON -------------------------------------------------------------------
 
@@ -273,6 +321,23 @@ class FournisseurAnthropic(FournisseurLLM):
             cache_lecture=getattr(u, "cache_read_input_tokens", None) or 0,
             cache_ecriture=getattr(u, "cache_creation_input_tokens", None) or 0,
         )
+
+    def _tour(self, final) -> TourAssistant | None:
+        """Appels demandés (arguments complets, lus dans le message final) et
+        blocs à renvoyer tels quels au tour suivant."""
+        appels = []
+        for b in final.content:
+            if b.type != "tool_use":
+                continue
+            if isinstance(b.input, dict):
+                appels.append(AppelOutil(id=b.id, nom=b.name, arguments=b.input))
+            else:
+                appels.append(AppelOutil(id=b.id, nom=b.name, erreur_arguments="arguments non objet"))
+        if not appels:
+            return None
+        texte = "".join(b.text for b in final.content if b.type == "text")
+        brut = [b.model_dump(mode="json", exclude_none=True) for b in final.content]
+        return TourAssistant(texte=texte, appels=tuple(appels), fournisseur=self.nom, brut=brut)
 
     @staticmethod
     def _detail(final) -> str | None:

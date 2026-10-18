@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     llm_selection_manuelle: bool = False
     llm_admins: list[str] = []
 
+    # ODO (outils), indépendant de ABONNEMENTS_ROUTAGE. false = chat inchangé :
+    # aucun outil proposé, aucun appel supplémentaire. Outils fictifs : tests
+    # hors production seulement. Les limites ci-dessous sont des garde-fous
+    # techniques par demande, jamais des quotas utilisateur.
+    odo_actif: bool = False
+    odo_outils_fictifs: bool = False
+    odo_max_tours: int = 4                     # tours du modèle par demande
+    odo_max_appels: int = 8                    # appels d'outils par demande
+    odo_delai_outil: float = 10.0              # secondes par exécution
+    odo_resultat_max_caracteres: int = 6000    # résultat renvoyé au modèle
+    odo_confirmation_ttl: int = 300            # validité d'une action à confirmer (s)
+
     # GroqCloud (ou OpenAI) : fournisseur « groq », réservé aux tests.
     openai_api_key: str = ""
     openai_base_url: str | None = None

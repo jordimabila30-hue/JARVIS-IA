@@ -249,3 +249,36 @@ plan, au changement de compte. Seule la première lecture montre un
 chargement ; ensuite les valeurs sont remplacées sur place (jauges animées).
 Erreur réseau : dernières valeurs gardées + note discrète « Dernières
 valeurs connues : elles peuvent ne plus être à jour. »
+
+## 12. Routage Free / Pro : vérification et activation (ODO phase 1, 2026-10-18)
+
+Revue du code : le routage était déjà correct. `fournisseur_attendu` lit
+le fournisseur et le modèle de `limites_effectives`, donc de `plan_config`.
+`get_fournisseur` se fonde sur l'identité du JWT ; l'en-tête est réservé aux
+tests et aucun repli n'existe (503 `llm_config`). Le cache est de 30 s et
+`/me/quota` affiche la même règle. Il manquait seulement :
+
+- au démarrage, avec `ABONNEMENTS_ROUTAGE=true`, une alerte si un
+  fournisseur n'est pas configuré (`main.py`) ;
+- `python -m scripts.verifier_routage` : pour chaque offre, fournisseur et
+  modèle, et adaptateur prêt (sans appel ni clé affichée) ;
+- les tests de bout en bout `tests/test_routage.py`.
+
+Instance de test (port 8001, `jarvis-api-test`, image `backend-api:odo-test`,
+Redis base 1) : routage actif, ODO inactif. Résultat : Free → `groq /
+openai/gpt-oss-120b` prêt, Pro → `anthropic / claude-opus-5-5` prêt, compte
+réel (Free) routé vers GroqCloud.
+
+Activation en production (avec accord) : ajouter `ABONNEMENTS_ROUTAGE=true`
+dans `backend/.env`, puis `docker compose up -d api` (image de production
+actuelle, sans ODO), puis `docker exec jarvis-api python -m
+scripts.verifier_routage`. Retour arrière : `ABONNEMENTS_ROUTAGE=false`, puis
+`docker compose up -d api`. GroqCloud : limite de débit par organisation,
+partagée par tous les comptes Free.
+
+**Activé en production le 2026-10-18 à 13:55:40 UTC** : `ABONNEMENTS_ROUTAGE=true`
+dans `backend/.env`, conteneur `jarvis-api` recréé sur la même image
+(`954d097068c5`, sans le code ODO). Contrôles sans appel IA : santé ok,
+`Routage par abonnement : ACTIF`, deux fournisseurs prêts, Free → groq /
+openai/gpt-oss-120b, Pro → anthropic / claude-opus-5-5, compte réel (Free) →
+GroqCloud. Retour arrière : `ABONNEMENTS_ROUTAGE=false`, puis `docker compose up -d api`.

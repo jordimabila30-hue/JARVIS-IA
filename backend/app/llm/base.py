@@ -26,9 +26,16 @@ attentes sur limite de débit restent décidées par l'appelant (les clients
 des SDK sont créés sans nouvel essai automatique) ; le flux est un simple
 itérateur asynchrone, compatible avec les battements SSE existants.
 
-Outils (ODO, plus tard) : [DefinitionOutil], [AppelOutil] et
-`RaisonArret.OUTIL` réservent la place ; aucun adaptateur ne les prend en
-charge pour l'instant (`outils` non vide → NotImplementedError).
+Outils (appels d'outils, utilisés par ODO) : `flux(..., outils=[DefinitionOutil])`.
+Quand le modèle demande des outils, le flux se termine par
+`Fin(raison=OUTIL, tour=TourAssistant)` : le tour complet (texte, appels
+avec leurs arguments déjà assemblés, blocs bruts du fournisseur à renvoyer
+tels quels). La suite de la conversation s'écrit avec deux messages :
+  message_appels(tour)                  {"role": "assistant", "content", "tour"}
+  message_resultats([ResultatAppel])    {"role": "outil", "content", "resultats"}
+Chaque adaptateur les convertit dans le format de son fournisseur. MIA
+n'exécute jamais un outil et ne connaît aucune permission (rôle d'ODO).
+Sans outils, le comportement est inchangé.
 """
 
 from __future__ import annotations
@@ -41,8 +48,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
 
-Message = Mapping[str, str]
-"""{"role": "system" | "user" | "assistant", "content": str}"""
+Message = Mapping[str, Any]
+"""{"role": "system" | "user" | "assistant", "content": str}, plus, pour les
+outils : {"role": "assistant", "content", "tour": TourAssistant} et
+{"role": "outil", "content", "resultats": (ResultatAppel, …)}."""
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 EFFORTS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
@@ -87,6 +96,11 @@ class Fin:
     usage: Usage
     modele: str              # modèle qui a réellement répondu
     detail: str | None = None    # raison brute du fournisseur, catégorie de refus…
+    tour: "TourAssistant | None" = None   # raison OUTIL : appels demandés
+
+    @property
+    def appels(self) -> tuple["AppelOutil", ...]:
+        return self.tour.appels if self.tour is not None else ()
 
 
 Evenement = Texte | Fin
@@ -101,20 +115,71 @@ class ReponseJSON:
     raison: RaisonArret = RaisonArret.FIN
 
 
-# --- Outils (réservé à ODO) -----------------------------------------------------
+# --- Outils (utilisés par ODO) -----------------------------------------------------
+
+_NOM_OUTIL = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
+
 
 @dataclass(frozen=True)
 class DefinitionOutil:
     nom: str
     description: str
-    schema: dict[str, Any]
+    schema: dict[str, Any]       # JSON Schema d'un objet (arguments)
 
 
 @dataclass(frozen=True)
 class AppelOutil:
+    """Appel demandé par le modèle, arguments complets. `erreur_arguments` :
+    le modèle a produit des arguments illisibles (jamais exécutés)."""
+
     id: str
     nom: str
     arguments: dict[str, Any] = field(default_factory=dict)
+    erreur_arguments: str | None = None
+
+
+@dataclass(frozen=True)
+class TourAssistant:
+    """Réponse du modèle qui demande des outils, à renvoyer telle quelle au
+    tour suivant. `brut` : blocs propres au fournisseur (réflexion signée
+    de Claude…), jamais affichés ni journalisés."""
+
+    texte: str
+    appels: tuple[AppelOutil, ...]
+    fournisseur: str
+    brut: Any = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class ResultatAppel:
+    """Résultat d'un appel, renvoyé au modèle (texte déjà préparé par ODO)."""
+
+    id: str
+    contenu: str
+    erreur: bool = False
+
+
+def message_appels(tour: TourAssistant) -> dict[str, Any]:
+    return {"role": "assistant", "content": tour.texte, "tour": tour}
+
+
+def message_resultats(resultats: Sequence[ResultatAppel]) -> dict[str, Any]:
+    return {"role": "outil", "content": "\n".join(r.contenu for r in resultats), "resultats": tuple(resultats)}
+
+
+def verifier_outils(outils: Sequence[DefinitionOutil] | None) -> list[DefinitionOutil]:
+    """Définitions valides et noms uniques (une erreur de programmation, pas
+    du modèle : ValueError)."""
+    vus: set[str] = set()
+    for o in outils or ():
+        if not _NOM_OUTIL.match(o.nom):
+            raise ValueError(f"nom d'outil invalide : {o.nom!r}")
+        if o.nom in vus:
+            raise ValueError(f"outil en double : {o.nom!r}")
+        if not isinstance(o.schema, dict) or o.schema.get("type") != "object":
+            raise ValueError(f"schéma de l'outil {o.nom!r} : un objet JSON est attendu")
+        vus.add(o.nom)
+    return list(outils or ())
 
 
 # --- Erreurs ----------------------------------------------------------------------
@@ -234,15 +299,17 @@ def verifier_messages(messages: Sequence[Message]) -> None:
     if not messages:
         raise ValueError("conversation vide")
     for m in messages:
-        if m.get("role") not in ("system", "user", "assistant"):
-            raise ValueError(f"rôle inconnu : {m.get('role')!r}")
+        role = m.get("role")
+        if role not in ("system", "user", "assistant", "outil"):
+            raise ValueError(f"rôle inconnu : {role!r}")
         if not isinstance(m.get("content"), str):
             raise ValueError("contenu attendu : du texte")
-
-
-def refuser_outils(outils: Sequence[DefinitionOutil] | None) -> None:
-    if outils:
-        raise NotImplementedError("outils (ODO) : pas encore pris en charge")
+        if role == "outil":
+            resultats = m.get("resultats")
+            if not resultats or not all(isinstance(r, ResultatAppel) for r in resultats):
+                raise ValueError("message d'outil sans résultats")
+        if "tour" in m and (role != "assistant" or not isinstance(m["tour"], TourAssistant)):
+            raise ValueError("tour d'outils attendu dans un message assistant")
 
 
 def estimer_tokens(texte: str) -> int:

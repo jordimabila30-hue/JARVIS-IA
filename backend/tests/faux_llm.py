@@ -38,6 +38,9 @@ class Scenario:
     json_texte: str | None = None    # sortie non diffusée (JSON)
     modele: str = "modele-servi"
     usage_absent: bool = False
+    # Appels d'outils demandés : (id, nom, arguments) ; arguments en texte =
+    # JSON brut envoyé tel quel (GroqCloud : arguments illisibles).
+    appels: list[tuple] = field(default_factory=list)
 
 
 @dataclass
@@ -47,7 +50,7 @@ class Journal:
 
 # --- Claude ---------------------------------------------------------------------
 
-_RAISONS_ANTHROPIC = {"fin": "end_turn", "longueur": "max_tokens", "refus": "refusal"}
+_RAISONS_ANTHROPIC = {"fin": "end_turn", "longueur": "max_tokens", "refus": "refusal", "outil": "tool_use"}
 
 
 def _sse(evenements: list[tuple[str, dict]]) -> bytes:
@@ -82,7 +85,17 @@ def flux_anthropic(s: Scenario) -> bytes:
             ev.append(("error", {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}))
             return _sse(ev)
     ev.append(("content_block_stop", {"type": "content_block_stop", "index": i}))
-    delta: dict = {"stop_reason": _RAISONS_ANTHROPIC[s.raison], "stop_sequence": None}
+    for ident, nom, arguments in s.appels:
+        i += 1
+        brut = json.dumps(arguments)
+        ev.append(("content_block_start", {"type": "content_block_start", "index": i, "content_block": {
+            "type": "tool_use", "id": ident, "name": nom, "input": {}}}))
+        for morceau in (brut[: len(brut) // 2], brut[len(brut) // 2:]):     # arguments fragmentés
+            ev.append(("content_block_delta", {"type": "content_block_delta", "index": i,
+                                               "delta": {"type": "input_json_delta", "partial_json": morceau}}))
+        ev.append(("content_block_stop", {"type": "content_block_stop", "index": i}))
+    raison = "outil" if s.appels else s.raison
+    delta: dict = {"stop_reason": _RAISONS_ANTHROPIC[raison], "stop_sequence": None}
     if s.raison == "refus":
         delta["stop_details"] = {"type": "refusal", "category": "cyber", "explanation": None}
     ev.append(("message_delta", {"type": "message_delta", "delta": delta,
@@ -109,7 +122,7 @@ def fournisseur_anthropic(s: Scenario, journal: Journal | None = None, **options
 
 # --- GroqCloud --------------------------------------------------------------------
 
-_RAISONS_GROQ = {"fin": "stop", "longueur": "length", "refus": "content_filter"}
+_RAISONS_GROQ = {"fin": "stop", "longueur": "length", "refus": "content_filter", "outil": "tool_calls"}
 
 
 def _chunk(s: Scenario, delta: dict, finish: str | None = None) -> dict:
@@ -127,7 +140,13 @@ def flux_groq(s: Scenario) -> bytes:
             morceaux.append({"error": {"message": "Service unavailable", "type": "server_error"}})
             break
     else:
-        morceaux.append(_chunk(s, {}, _RAISONS_GROQ[s.raison]))
+        for index, (ident, nom, arguments) in enumerate(s.appels):
+            brut = arguments if isinstance(arguments, str) else json.dumps(arguments)
+            morceaux.append(_chunk(s, {"tool_calls": [{"index": index, "id": ident, "type": "function",
+                                                       "function": {"name": nom, "arguments": ""}}]}))
+            for morceau in (brut[: len(brut) // 2], brut[len(brut) // 2:]):   # arguments fragmentés
+                morceaux.append(_chunk(s, {"tool_calls": [{"index": index, "function": {"arguments": morceau}}]}))
+        morceaux.append(_chunk(s, {}, _RAISONS_GROQ["outil" if s.appels else s.raison]))
         if not s.usage_absent:
             morceaux.append({"id": "c1", "object": "chat.completion.chunk", "created": 0, "model": s.modele,
                              "choices": [], "usage": {"prompt_tokens": s.entree, "completion_tokens": s.sortie,
@@ -224,3 +243,31 @@ class ServeurClaude:
                                 http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(self)))
         return FournisseurAnthropic(cle=CLE_TEST, modele=options.pop("modele", "claude-modele-test"),
                                     client=client, **options)
+
+
+class ServeurGroq:
+    """Faux point d'accès Chat Completions : `etapes` consommées dans l'ordre,
+    puis `principal`."""
+
+    def __init__(self, principal: Scenario | None = None, etapes=()) -> None:
+        self.principal = principal or Scenario()
+        self.etapes = list(etapes)
+        self.requetes: list[dict] = []
+
+    def __call__(self, requete: httpx.Request) -> httpx.Response:
+        corps = json.loads(requete.content)
+        self.requetes.append(corps)
+        s = self.etapes.pop(0) if self.etapes else self.principal
+        if s.statut != 200:
+            corps_erreur = s.corps_erreur or {"error": {"message": "erreur", "type": "server_error"}}
+            return httpx.Response(s.statut, json=corps_erreur, headers=s.entetes)
+        return httpx.Response(200, content=flux_groq(s), headers={"content-type": "text/event-stream"})
+
+    def fournisseur(self, **options) -> FournisseurGroq:
+        client = AsyncOpenAI(api_key=CLE_TEST, base_url="http://groq.test/openai/v1", max_retries=0,
+                             http_client=httpx.AsyncClient(transport=httpx.MockTransport(self)))
+        return FournisseurGroq(cle=CLE_TEST, modele=options.pop("modele", "openai/gpt-oss-120b"),
+                               client=client, **options)
+
+
+SERVEURS = {"anthropic": ServeurClaude, "groq": ServeurGroq}

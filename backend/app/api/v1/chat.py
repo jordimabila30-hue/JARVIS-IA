@@ -12,6 +12,10 @@ Ensuite, le flux `text/event-stream` émet :
   event: propositions {"message_id", "statut", "mode", "tons"} (WhatsApp) aide à répondre :
                      statut "complet" (toutes les combinaisons) ou
                      "incomplet" (quota / erreur : « Reprendre »)
+  event: outil  {"nom", "etat", "code"}                       (ODO) état d'un outil :
+                     en_cours | termine | erreur | refuse | confirmation
+  event: confirmation {"id", "outil", "resume", "expire_at"}  (ODO) action sensible
+                     préparée, à confirmer par POST /api/v1/odo/confirmations/{id}
   event: done   {"message_id", "usage", "quota"}              fin normale
   event: error  {"code", "message"}                           échec de génération,
                      refus du modèle (llm_refus) ou réponse coupée par
@@ -40,6 +44,12 @@ Conversations WhatsApp jointes (app/comprehension/) : si le chat en a,
   la consigne devient la question sans être réinsérée.
 Limite de débit du fournisseur (429) : attente conseillée (au plus
 `LLM_RATE_LIMIT_MAX_WAIT` s), flux ouvert grâce à des commentaires SSE.
+
+ODO (outils, ODO_ACTIF, désactivé par défaut) : seulement pour un chat
+ordinaire (ni pièce jointe WhatsApp, ni consigne) et si des outils sont
+autorisés pour le compte ; sinon, flux strictement inchangé. Plusieurs tours
+du modèle → UN message compté, tokens additionnés, budget revérifié entre
+les tours. Les anciennes applications ignorent `outil` et `confirmation`.
 
 Contexte court (Redis) :
   ctx:{conversation_id}   liste JSON {role, content}, N derniers messages, TTL 1 h
@@ -79,6 +89,8 @@ from ...llm import (
     selection,
 )
 from ...llm.base import MESSAGES as MESSAGES_LLM
+from ...odo.contrat import DemandeConfirmation, EtatOutil
+from ...odo.service import ServiceODO, get_odo
 from ...comprehension.instructions import NOTE_PIECE_SUPPRIMEE
 from ...comprehension import ciblage, generation, memoire, propositions as aide, reperes, restauration
 from ...comprehension.attribution import CorrecteurAttributions
@@ -488,6 +500,7 @@ async def chat_stream(
     redis: Redis = Depends(get_redis),
     settings: Settings = Depends(get_settings),
     comprehension: MoteurComprehension = Depends(get_comprehension),
+    odo: ServiceODO = Depends(get_odo),
 ) -> StreamingResponse:
     user_id = reservation.user.id
     now = datetime.now(timezone.utc)
@@ -663,6 +676,18 @@ async def chat_stream(
 
     demande_id = consigne["id"] if consigne is not None else user_row["id"]
 
+    # ODO : chat ordinaire seulement (WhatsApp et consignes : chemin actuel).
+    # Identité et offre du serveur ; budget du jour revérifié avant chaque tour.
+    execution = None
+    if preparation is None and consigne is None:
+        execution = odo.execution(
+            llm,
+            odo.contexte(user_id=user_id, demande_id=demande_id, plan=reservation.status.plan,
+                         conversation_id=conversation_id),
+            verifier_budget=lambda tokens: quota_service.budget_depasse(reservation, tokens),
+        )
+    source = execution.flux if execution is not None else llm.flux
+
     async def event_stream():
         nonlocal prompt, preparation
         parts: list[str] = []
@@ -709,9 +734,16 @@ async def chat_stream(
             premier = None
             while True:
                 try:
-                    async for ev in _avec_battement(llm.flux(prompt, max_sortie=max_sortie)):
+                    async for ev in _avec_battement(source(prompt, max_sortie=max_sortie)):
                         if ev is None:
                             yield b": le modele reflechit\n\n"
+                        elif isinstance(ev, EtatOutil):
+                            yield sse("outil", {"nom": ev.nom, "etat": ev.etat, "code": ev.code})
+                        elif isinstance(ev, DemandeConfirmation):
+                            confirmation = {"id": ev.id, "outil": ev.outil, "resume": ev.resume,
+                                            "expire_at": ev.expire_a}
+                            stockees.append({"type": "odo_confirmation", **confirmation})
+                            yield sse("confirmation", confirmation)
                         elif isinstance(ev, Texte):
                             if premier is None:
                                 premier = time.perf_counter()
@@ -860,7 +892,11 @@ async def chat_stream(
                 text = filtre.visible
             else:
                 text = "".join(parts)
-            prompt_tokens, completion_tokens = _token_counts(fin.usage if fin else None, prompt, text)
+            if fin is None and execution is not None:
+                # Interrompu pendant ODO : tours terminés + tour en cours (estimé).
+                prompt_tokens, completion_tokens = execution.usage_consomme()
+            else:
+                prompt_tokens, completion_tokens = _token_counts(fin.usage if fin else None, prompt, text)
             prompt_tokens += lots[0]
             completion_tokens += lots[1]
             _spawn(_finalize_safely(

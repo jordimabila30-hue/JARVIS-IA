@@ -138,6 +138,13 @@ class SupabaseAdmin:
         )
         resp.raise_for_status()
 
+    async def list_plan_config(self) -> list[dict]:
+        """Offres (fournisseur, modèle) : vérification du routage, jamais une clé."""
+        resp = await self._http.get("/plan_config", params={"select": "plan,llm_provider,llm_model",
+                                                             "order": "plan"})
+        resp.raise_for_status()
+        return resp.json()
+
     async def ping(self) -> None:
         resp = await self._http.get("/users", params={"select": "id", "limit": "1"})
         resp.raise_for_status()
