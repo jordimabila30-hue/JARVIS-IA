@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ia_jarvis/models/conversations/apercu_conversation.dart';
 import 'package:ia_jarvis/models/conversations/source_conversation.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
@@ -515,6 +516,130 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    /// Balayage lent (aucun lancer), pas à pas.
+    Future<void> balayer(
+      WidgetTester tester,
+      String titre,
+      List<double> pas,
+    ) async {
+      final geste = await tester.startGesture(
+        tester.getCenter(find.text(titre)),
+      );
+      for (final dx in pas) {
+        await geste.moveBy(Offset(dx, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 200));
+      await geste.up();
+      await _images(tester, 30);
+    }
+
+    ApercuConversation conv(String titre) =>
+        _whatsapp.conversations.firstWhere((c) => c.titre == titre);
+
+    for (final ecran in const [
+      Size(320, 568),
+      Size(390, 844),
+      Size(1366, 768),
+    ]) {
+      testWidgets('${ecran.width.toInt()} px : balayage complet vers la '
+          'droite, épinglée au relâchement, une seule fois', (tester) async {
+        await _accueil(tester, ecran);
+        await _ouvrir(tester);
+        await _choisir(tester, SourceConversation.whatsapp);
+        final depart = _gauche(tester, 'Contact 2');
+        final largeur = tester
+            .getSize(find.byType(LigneConversation).first)
+            .width;
+        // Au-delà du seuil complet (60 % de la ligne), relâché lentement.
+        await balayer(tester, 'Contact 2', [
+          for (var i = 0; i < 12; i++) largeur * 0.07,
+        ]);
+        expect(_multicanal.epingles.estEpinglee(conv('Contact 2')), isTrue);
+        final premiere = tester.widget<LigneConversation>(_lignes.first);
+        expect(premiere.conversation.titre, 'Contact 2');
+        // Ligne revenue en place, bouton refermé.
+        expect(find.text(LigneConversation.boutonEpingler), findsNothing);
+        expect(_gauche(tester, 'Contact 2'), closeTo(depart, 0.5));
+        // Désépingler de la même façon.
+        await balayer(tester, 'Contact 2', [
+          for (var i = 0; i < 12; i++) largeur * 0.07,
+        ]);
+        expect(_multicanal.epingles.estEpinglee(conv('Contact 2')), isFalse);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('balayage intermédiaire : bouton seulement ; revenir en '
+        'deçà du seuil complet annule l’action', (tester) async {
+      await _accueil(tester, const Size(390, 844));
+      await _ouvrir(tester);
+      await _choisir(tester, SourceConversation.whatsapp);
+      final largeur = tester
+          .getSize(find.byType(LigneConversation).first)
+          .width;
+      // Seuil complet : 60 % de la ligne, jamais moins de 1,6 bouton.
+      expect(largeur * LigneConversation.seuilComplet, greaterThan(88 * 1.6));
+      // Jusqu'à 45 % de la ligne : bouton révélé, rien d'épinglé.
+      await balayer(tester, 'Contact 2', [
+        for (var i = 0; i < 6; i++) largeur * 0.075,
+      ]);
+      expect(find.text(LigneConversation.boutonEpingler), findsOneWidget);
+      expect(_multicanal.epingles.estEpinglee(conv('Contact 2')), isFalse);
+      await tester.tap(find.text('Contact 2'));
+      await _images(tester, 20);
+      // Au-delà du seuil puis retour : aucune action, bouton révélé.
+      await balayer(tester, 'Contact 2', [
+        for (var i = 0; i < 12; i++) largeur * 0.07,
+        for (var i = 0; i < 5; i++) -largeur * 0.07,
+      ]);
+      expect(_multicanal.epingles.estEpinglee(conv('Contact 2')), isFalse);
+      expect(find.text(LigneConversation.boutonEpingler), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('balayage complet vers la gauche : la ligne part, la '
+        'confirmation reste ; annuler la ramène, confirmer supprime', (
+      tester,
+    ) async {
+      await _accueil(tester, const Size(390, 844));
+      await _ouvrir(tester);
+      await _choisir(tester, SourceConversation.whatsapp);
+      final c = conv('Contact 4');
+      final depart = _gauche(tester, 'Contact 4');
+      final largeur = tester
+          .getSize(find.byType(LigneConversation).first)
+          .width;
+      await balayer(tester, 'Contact 4', [
+        for (var i = 0; i < 12; i++) -largeur * 0.07,
+      ]);
+      // Jamais supprimée sans confirmation.
+      expect(find.text('Supprimer cette conversation ?'), findsOneWidget);
+      expect(_whatsapp.conversations, contains(c));
+      await tester.tap(find.text('Annuler'));
+      await _images(tester, 30);
+      expect(_whatsapp.conversations, contains(c));
+      expect(_gauche(tester, 'Contact 4'), closeTo(depart, 0.5));
+      expect(find.text(LigneConversation.boutonSupprimer), findsNothing);
+
+      await balayer(tester, 'Contact 4', [
+        for (var i = 0; i < 12; i++) -largeur * 0.07,
+      ]);
+      // Un seul dialogue, même si le doigt insiste.
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Supprimer'),
+        ),
+      );
+      await _images(tester, 30);
+      expect(find.text('Contact 4'), findsNothing);
+      expect(_whatsapp.conversations, isNot(contains(c)));
+      expect(_menuOuvert(), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('une seule ligne ouverte à la fois', (tester) async {
       await _accueil(tester, const Size(390, 844));
       await _ouvrir(tester);
@@ -604,11 +729,11 @@ void main() {
       await _envoyer(tester, 'Bonjour JARVIS');
       await _ouvrir(tester);
       expect(_menuOuvert(), isTrue);
-      // Existant : entrées, « EN COURS », perle, Paramètres.
+      // Existant : entrées, « EN COURS », avatar du compte, Paramètres.
       expect(find.text('Nouvelle conversation'), findsWidgets);
       expect(find.text('Chat vocal'), findsOneWidget);
       expect(find.text('EN COURS'), findsOneWidget);
-      expect(find.byTooltip('Accueil JARVIS'), findsOneWidget);
+      expect(find.byKey(const ValueKey('avatar-compte')), findsOneWidget);
       expect(find.byTooltip('Paramètres'), findsOneWidget);
       // Nouveau : titre, cinq sources dans l'ordre, logos locaux.
       expect(find.text(SectionConversations.titre), findsOneWidget);

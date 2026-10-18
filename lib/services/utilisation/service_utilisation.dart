@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../models/utilisation/utilisation.dart';
 import '../api_jarvis.dart';
+import 'cache_utilisation.dart';
 
 /// Utilisation de l'IA du compte connecté : lit `GET /me/quota` (le
 /// serveur calcule tout d'après Supabase) et décide QUAND relire. Aucune
@@ -27,6 +28,14 @@ import '../api_jarvis.dart';
 /// Invisible : seule la toute première lecture annonce un chargement ; les
 /// suivantes remplacent les valeurs sans état intermédiaire, et un échec
 /// garde les dernières valeurs connues ([erreur] les signale).
+///
+/// Affichage immédiat : la dernière lecture réussie est gardée sur
+/// l'appareil ([CacheUtilisation], rattachée au compte) et rechargée dès
+/// que le compte est connu ([changerCompte]) ; l'écran l'affiche aussitôt
+/// ([depuisCache]) puis la remplace en silence par la réponse du serveur.
+/// Une copie d'une journée terminée ([journeeTerminee]) n'est jamais
+/// présentée comme la consommation du jour. Copie d'affichage seulement :
+/// le serveur seul décide des quotas.
 /// Lire l'utilisation n'appelle jamais l'IA.
 class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   ServiceUtilisation(
@@ -35,12 +44,15 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
     this.intervalleSuivi = const Duration(seconds: 30),
     this.intervalleMin = const Duration(seconds: 5),
     this.delaiApresConsommation = const Duration(seconds: 2),
-  }) : _horloge = horloge ?? DateTime.now {
+    CacheUtilisation? cache,
+  }) : _horloge = horloge ?? DateTime.now,
+       _cache = cache ?? CacheUtilisation() {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final ApiJarvis _api;
   final DateTime Function() _horloge;
+  final CacheUtilisation _cache;
   final Duration intervalleSuivi;
   final Duration intervalleMin;
   final Duration delaiApresConsommation;
@@ -53,7 +65,24 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   /// affichées, datées de [miseAJour]).
   ErreurApi? erreur;
   bool chargement = false;
+
+  /// Dernière lecture réussie au serveur (y compris celle de la copie
+  /// locale affichée).
   DateTime? miseAJour;
+
+  /// [donnees] viennent de la copie locale, pas encore confirmées par le
+  /// serveur depuis l'ouverture de JARVIS.
+  bool depuisCache = false;
+
+  /// [donnees] appartiennent à une journée terminée (remise à zéro passée,
+  /// serveur pas encore relu) : la consommation du jour est inconnue.
+  bool get journeeTerminee {
+    final fin = donnees?.finJour;
+    return fin != null && !_horloge().isBefore(fin);
+  }
+
+  /// Compte connecté (identifiant), pour la copie locale ; null : aucune.
+  String? _compteId;
 
   int _suivis = 0;
   int _compte = 0;
@@ -74,7 +103,9 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
       if (!force) return;
     }
     final derniere = miseAJour;
-    if (!force && derniere != null && _horloge().difference(derniere) < intervalleMin) {
+    if (!force &&
+        derniere != null &&
+        _horloge().difference(derniere) < intervalleMin) {
       return;
     }
     final lecture = _lire();
@@ -92,17 +123,21 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
     // Valeurs déjà affichées : rien à annoncer (pas de chargement visible).
     if (donnees == null) notifyListeners();
     final r = await _api.utilisation();
-    if (_ferme || compte != _compte) return;     // compte changé entre-temps
+    if (_ferme || compte != _compte) return; // compte changé entre-temps
     chargement = false;
     switch (r) {
       case SuccesApi(:final valeur):
         donnees = valeur;
         erreur = null;
-        miseAJour = _horloge();
+        depuisCache = false;
+        final lu = miseAJour = _horloge();
+        final id = _compteId;
+        if (id != null) unawaited(_cache.ecrire(id, valeur, lu));
       case EchecApi(:final type):
         erreur = type;
         if (type == ErreurApi.nonConnecte || type == ErreurApi.sessionExpiree) {
           donnees = null;
+          depuisCache = false;
         }
     }
     notifyListeners();
@@ -126,7 +161,10 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
 
   void _demarrerPeriodique() {
     _periodique?.cancel();
-    _periodique = Timer.periodic(intervalleSuivi, (_) => actualiser(force: true));
+    _periodique = Timer.periodic(
+      intervalleSuivi,
+      (_) => actualiser(force: true),
+    );
   }
 
   void _arreterPeriodique() {
@@ -142,15 +180,35 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Autre compte (ou déconnexion) : rien de l'ancien compte n'est gardé.
-  void changerCompte() {
+  /// [compte] (identifiant du compte connecté) : sa copie locale est
+  /// rechargée aussitôt ; null (déconnexion) : la copie est effacée.
+  void changerCompte([String? compte]) {
     _compte++;
     _lecture = null;
     donnees = null;
     erreur = null;
     miseAJour = null;
+    depuisCache = false;
     chargement = false;
+    final ancien = _compteId;
+    _compteId = compte;
+    if (compte != null) {
+      _chargerCopie(compte, _compte);
+    } else if (ancien != null) {
+      unawaited(_cache.effacer());
+    }
     notifyListeners();
     if (suivie) actualiser(force: true);
+  }
+
+  Future<void> _chargerCopie(String compte, int jeton) async {
+    final copie = await _cache.lire(compte);
+    // Compte changé entre-temps, ou serveur déjà lu (plus récent) : ignorée.
+    if (copie == null || _ferme || jeton != _compte || donnees != null) return;
+    donnees = copie.utilisation;
+    miseAJour = copie.luLe;
+    depuisCache = true;
+    notifyListeners();
   }
 
   @override
@@ -160,7 +218,7 @@ class ServiceUtilisation extends ChangeNotifier with WidgetsBindingObserver {
         if (suivie) _demarrerPeriodique();
         if (suivie || donnees != null) actualiser();
       case AppLifecycleState.hidden || AppLifecycleState.paused:
-        _arreterPeriodique();      // écran invisible : aucune relecture
+        _arreterPeriodique(); // écran invisible : aucune relecture
       case AppLifecycleState.inactive || AppLifecycleState.detached:
         break;
     }

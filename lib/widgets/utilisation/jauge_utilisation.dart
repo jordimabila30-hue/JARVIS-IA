@@ -6,7 +6,8 @@ import '../../utils/format_utilisation.dart';
 
 /// Couleur d'une jauge : bleu (signal JARVIS) en utilisation normale,
 /// orange dès le seuil critique donné par le serveur.
-Color couleurJauge(Jauge j) => j.critique ? CouleursJarvis.critique : CouleursJarvis.signal;
+Color couleurJauge(Jauge j) =>
+    j.critique ? CouleursJarvis.critique : CouleursJarvis.signal;
 
 /// « 42 / 100 messages », « 1 200 messages · illimité ».
 String valeurJauge(Jauge j, String unite) => j.illimitee
@@ -15,6 +16,7 @@ String valeurJauge(Jauge j, String unite) => j.illimitee
 
 /// Jauge d'utilisation en LECTURE SEULE (aucune interaction possible) :
 /// titre, valeur, barre animée, pourcentage ou « Limite atteinte ».
+/// Sans [jauge] (valeur inconnue) : « — », barre vide, jamais un faux zéro.
 class JaugeUtilisation extends StatelessWidget {
   const JaugeUtilisation({
     super.key,
@@ -26,7 +28,9 @@ class JaugeUtilisation extends StatelessWidget {
   });
 
   final String titre;
-  final Jauge jauge;
+
+  /// null : consommation inconnue (pas encore lue, ou journée terminée).
+  final Jauge? jauge;
 
   /// « messages », « tokens ».
   final String unite;
@@ -39,16 +43,19 @@ class JaugeUtilisation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final couleur = couleurJauge(jauge);
-    final valeur = valeurJauge(jauge, unite);
-    final etat = jauge.illimitee
+    final jauge = this.jauge;
+    final couleur = jauge == null ? CouleursJarvis.signal : couleurJauge(jauge);
+    final valeur = jauge == null ? '— $unite' : valeurJauge(jauge, unite);
+    final etat = jauge == null || jauge.illimitee
         ? null
         : jauge.atteinte
         ? 'Limite atteinte'
         : '${jauge.pourcentage} %';
     return Semantics(
       label: titre,
-      value: '$valeur${etat == null ? '' : ', $etat'}',
+      value: jauge == null
+          ? 'indisponible'
+          : '$valeur${etat == null ? '' : ', $etat'}',
       readOnly: true,
       child: ExcludeSemantics(
         child: Padding(
@@ -80,7 +87,11 @@ class JaugeUtilisation extends StatelessWidget {
                 ],
               ),
               SizedBox(height: compacte ? 6 : 9),
-              _Barre(fraction: jauge.fraction, couleur: couleur, epaisseur: compacte ? 6 : 8),
+              _Barre(
+                fraction: jauge?.fraction ?? 0,
+                couleur: couleur,
+                epaisseur: compacte ? 6 : 8,
+              ),
               if (sousTitre != null || etat != null) ...[
                 const SizedBox(height: 7),
                 Row(
@@ -102,8 +113,12 @@ class JaugeUtilisation extends StatelessWidget {
                         etat,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: jauge.critique ? FontWeight.w600 : FontWeight.w500,
-                          color: jauge.critique ? CouleursJarvis.critique : CouleursJarvis.texteSecondaire,
+                          fontWeight: jauge!.critique
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: jauge.critique
+                              ? CouleursJarvis.critique
+                              : CouleursJarvis.texteSecondaire,
                         ),
                       ),
                     ],
@@ -121,7 +136,11 @@ class JaugeUtilisation extends StatelessWidget {
 /// Barre arrondie : longueur et couleur animées brièvement à chaque
 /// nouvelle valeur (aucune animation continue).
 class _Barre extends StatelessWidget {
-  const _Barre({required this.fraction, required this.couleur, required this.epaisseur});
+  const _Barre({
+    required this.fraction,
+    required this.couleur,
+    required this.epaisseur,
+  });
 
   final double fraction;
   final Color couleur;

@@ -1,12 +1,15 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/conversations/apercu_conversation.dart';
+import '../services/authentification/auth_service.dart';
 import '../services/conversations/conversations_multicanal.dart';
 import '../theme/theme_jarvis.dart';
 import 'conversation/signature_jarvis.dart';
+import 'menu/avatar_compte.dart';
 import 'menu/section_conversations.dart';
 
 /// Bouton du menu : le symbole lumineux de JARVIS ([PerleJarvis], celui
@@ -53,9 +56,22 @@ class MenuLateral extends StatefulWidget {
     required this.surOuvrirConversation,
     this.surSupprimerConversation,
     this.conversationEnCours,
+    this.surOuvrir,
+    this.compte,
+    this.surCompte,
   });
 
   final bool ouvert;
+
+  /// Ouverture par le glissement depuis le bord gauche (null : geste
+  /// désactivé, seul le bouton ouvre le menu).
+  final VoidCallback? surOuvrir;
+
+  /// Compte connecté, pour l'avatar en bas du panneau (null : sans compte).
+  final AuthService? compte;
+
+  /// Appui sur l'avatar : section « Compte » des Paramètres.
+  final VoidCallback? surCompte;
   final VoidCallback surFermer;
   final VoidCallback surNouvelle;
   final VoidCallback surChatVocal;
@@ -77,6 +93,16 @@ class MenuLateral extends StatefulWidget {
   static const dureeOuverture = Duration(milliseconds: 260);
   static const dureeFermeture = Duration(milliseconds: 230);
 
+  /// Geste : largeur de la zone de départ le long du bord gauche (en plus
+  /// de la zone du geste Retour d'Android), part de la largeur du panneau
+  /// à parcourir pour ouvrir (ou fermer), vitesse d'un lancer (px/s) et
+  /// durée de la fin d'animation après le relâchement.
+  static const zoneBord = 24.0;
+  static const seuilGeste = 0.35;
+  static const vitesseLancer = 700.0;
+  static const dureeGesteMin = Duration(milliseconds: 180);
+  static const dureeGesteMax = Duration(milliseconds: 280);
+
   /// Opacité maximale du voile (noir lavande) : l'accueil reste lisible.
   static const opaciteVoile = 0.11;
 
@@ -89,37 +115,127 @@ class MenuLateral extends StatefulWidget {
 
 class _MenuLateralState extends State<MenuLateral>
     with SingleTickerProviderStateMixin {
+  // Position du panneau : 0 fermé, 1 ouvert. Linéaire : pendant un geste,
+  // le panneau suit exactement le doigt ; la courbe ne sert qu'aux
+  // animations ([_animer]).
   late final _anim = AnimationController(
     vsync: this,
-    duration: MenuLateral.dureeOuverture,
-    reverseDuration: MenuLateral.dureeFermeture,
     value: widget.ouvert ? 1 : 0,
   );
-  // Fermeture : exactement le mouvement inverse de l'ouverture.
-  late final _courbe = CurvedAnimation(
-    parent: _anim,
-    curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeOutCubic.flipped,
-  );
+
+  /// Position visée par la dernière animation (une confirmation de la page
+  /// ne relance pas une animation déjà partie vers le même état).
+  double _cible = 0;
+
+  /// Un geste déplace le panneau (la page ne pilote plus l'animation).
+  bool _glisse = false;
+
+  /// Le geste en cours a commencé menu fermé (depuis le bord).
+  bool _depuisFerme = false;
+
+  double _largeur = 320;
+
+  @override
+  void initState() {
+    super.initState();
+    _cible = _anim.value;
+  }
 
   @override
   void didUpdateWidget(MenuLateral ancien) {
     super.didUpdateWidget(ancien);
-    if (widget.ouvert != ancien.ouvert) {
-      widget.ouvert ? _anim.forward() : _anim.reverse();
+    if (_glisse) return;
+    final cible = widget.ouvert ? 1.0 : 0.0;
+    if (cible != _cible) {
+      _animer(
+        cible,
+        widget.ouvert ? MenuLateral.dureeOuverture : MenuLateral.dureeFermeture,
+      );
     }
   }
 
   @override
   void dispose() {
-    _courbe.dispose();
     _anim.dispose();
     super.dispose();
   }
 
+  void _animer(double cible, Duration duree) {
+    _cible = cible;
+    _anim.animateTo(
+      cible,
+      // Réduction des animations (réglage du système) : état final aussitôt.
+      duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : duree,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  // --- Geste : ouverture depuis le bord, fermeture vers la gauche ------------
+
+  void _debutGeste(DragStartDetails _) {
+    _anim.stop();
+    _glisse = true;
+    _depuisFerme = _anim.value < 0.5;
+  }
+
+  void _geste(DragUpdateDetails d) {
+    if (!_glisse) return;
+    final t = (_anim.value + d.primaryDelta! / _largeur).clamp(0.0, 1.0);
+    _anim.value = t;
+    // Pour la page, le menu est ouvert dès que le panneau apparaît : clavier
+    // refermé, liste actualisée, Retour d'Android le referme.
+    if (t > 0 && !widget.ouvert) widget.surOuvrir?.call();
+  }
+
+  void _finGeste(DragEndDetails d) {
+    if (!_glisse) return;
+    _glisse = false;
+    final v = d.primaryVelocity ?? 0;
+    final lancer = v.abs() >= MenuLateral.vitesseLancer;
+    final t = _anim.value;
+    final bool ouvrir;
+    if (lancer) {
+      ouvrir = v > 0; // lancer : le sens du geste décide
+    } else if (_depuisFerme) {
+      ouvrir = t >= MenuLateral.seuilGeste;
+    } else {
+      ouvrir = t > 1 - MenuLateral.seuilGeste;
+    }
+    final cible = ouvrir ? 1.0 : 0.0;
+    final reste = (cible - t).abs() * _largeur;
+    // Durée selon la distance restante et la vitesse : easeOutCubic démarre
+    // trois fois plus vite que sa moyenne, donc à la vitesse du doigt.
+    final mini = MenuLateral.dureeGesteMin.inMilliseconds;
+    final maxi = MenuLateral.dureeGesteMax.inMilliseconds;
+    final ms = lancer ? 3000 * reste / v.abs() : maxi * reste / _largeur;
+    _animer(cible, Duration(milliseconds: ms.clamp(mini, maxi).round()));
+    if (ouvrir && !widget.ouvert) widget.surOuvrir?.call();
+    if (!ouvrir && widget.ouvert) widget.surFermer();
+  }
+
+  void _gesteAnnule() => _finGeste(DragEndDetails(primaryVelocity: 0));
+
+  /// Glissement horizontal au doigt ou au stylet seulement : à la souris,
+  /// le bouton, le voile, × et Échap suffisent.
+  Widget _detecteur(HitTestBehavior comportement, Widget enfant) =>
+      GestureDetector(
+        behavior: comportement,
+        supportedDevices: const {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+        },
+        onHorizontalDragStart: _debutGeste,
+        onHorizontalDragUpdate: _geste,
+        onHorizontalDragEnd: _finGeste,
+        onHorizontalDragCancel: _gesteAnnule,
+        child: enfant,
+      );
+
   @override
   Widget build(BuildContext context) {
-    final largeur = MenuLateral.largeurPour(MediaQuery.sizeOf(context).width);
+    final media = MediaQuery.of(context);
+    final largeur = MenuLateral.largeurPour(media.size.width);
+    _largeur = largeur;
     // Construit une fois : l'animation ne fait que le déplacer.
     final panneau = RepaintBoundary(
       child: _Panneau(
@@ -132,46 +248,84 @@ class _MenuLateralState extends State<MenuLateral>
         multicanal: widget.multicanal,
         surOuvrirConversation: widget.surOuvrirConversation,
         surSupprimerConversation: widget.surSupprimerConversation,
+        compte: widget.compte,
+        surCompte: widget.surCompte,
+      ),
+    );
+    // Bande invisible le long du bord gauche, menu fermé : translucide (les
+    // touches passent à l'accueil), elle ne prend que le glissement
+    // horizontal. Plus large que la zone du geste Retour d'Android
+    // (navigation par gestes), que le système garde pour lui. Même clé
+    // pendant tout le geste qui ouvre : il n'est jamais interrompu.
+    final avecBande = widget.surOuvrir != null;
+    final bande = KeyedSubtree(
+      key: const ValueKey('bord'),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SizedBox(
+          width: MenuLateral.zoneBord + media.systemGestureInsets.left,
+          height: double.infinity,
+          child: _detecteur(
+            HitTestBehavior.translucent,
+            const SizedBox.expand(),
+          ),
+        ),
       ),
     );
     return RepaintBoundary(
       child: AnimatedBuilder(
-        animation: _courbe,
+        animation: _anim,
         child: panneau,
         builder: (context, panneau) {
-          final t = _courbe.value;
-          // Fermé : ni dessin ni interception des touches.
-          if (t == 0 && _anim.status == AnimationStatus.dismissed) {
-            return const SizedBox.shrink();
+          final t = _anim.value;
+          // Fermé : rien n'est dessiné ; seule la bande du bord écoute.
+          if (t == 0 && !_anim.isAnimating && !_glisse) {
+            return avecBande
+                ? Stack(children: [bande])
+                : const SizedBox.shrink();
           }
           return Stack(
             children: [
-              // Voile : bloque l'accueil, ferme le menu au toucher.
-              Positioned.fill(
-                child: Semantics(
-                  label: 'Fermer le menu',
-                  button: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.surFermer,
-                    child: ColoredBox(
-                      color: const Color(
-                        0xFF1E1830,
-                      ).withValues(alpha: MenuLateral.opaciteVoile * t),
-                    ),
+              KeyedSubtree(
+                key: const ValueKey('menu'),
+                // Glisser vers la gauche sur le voile ou le panneau le
+                // referme (une ligne de conversation garde son propre
+                // balayage : le détecteur le plus proche du doigt gagne).
+                child: _detecteur(
+                  HitTestBehavior.opaque,
+                  Stack(
+                    children: [
+                      // Voile : bloque l'accueil, ferme le menu au toucher.
+                      Positioned.fill(
+                        child: Semantics(
+                          label: 'Fermer le menu',
+                          button: true,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget.surFermer,
+                            child: ColoredBox(
+                              color: const Color(
+                                0xFF1E1830,
+                              ).withValues(alpha: MenuLateral.opaciteVoile * t),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: largeur,
+                        child: FractionalTranslation(
+                          translation: Offset(t - 1, 0),
+                          child: panneau,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: largeur,
-                child: FractionalTranslation(
-                  translation: Offset(t - 1, 0),
-                  child: panneau,
-                ),
-              ),
+              if (avecBande && _glisse && _depuisFerme) bande,
             ],
           );
         },
@@ -192,8 +346,12 @@ class _Panneau extends StatelessWidget {
     required this.surOuvrirConversation,
     this.surSupprimerConversation,
     this.conversationEnCours,
+    this.compte,
+    this.surCompte,
   });
 
+  final AuthService? compte;
+  final VoidCallback? surCompte;
   final VoidCallback surFermer;
   final VoidCallback surNouvelle;
   final VoidCallback surChatVocal;
@@ -358,25 +516,9 @@ class _Panneau extends StatelessWidget {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            // Symbole lumineux de JARVIS (celui des réponses,
-                            // agrandi) : retour à l'accueil.
-                            Tooltip(
-                              message: 'Accueil JARVIS',
-                              child: Semantics(
-                                button: true,
-                                label: 'Accueil JARVIS',
-                                child: InkResponse(
-                                  onTap: surAccueil,
-                                  radius: 26,
-                                  child: const SizedBox.square(
-                                    dimension: 48,
-                                    child: Center(
-                                      child: PerleJarvis(taille: 28),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                            // Avatar du compte connecté (initiale) : section
+                            // « Compte » des Paramètres.
+                            AvatarCompte(compte: compte, surAppui: surCompte),
                             const Spacer(),
                             IconButton(
                               tooltip: 'Paramètres',

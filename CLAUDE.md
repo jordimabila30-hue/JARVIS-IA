@@ -184,8 +184,8 @@ lib/
 │   ├── ligne_de_commande.dart        # barre de saisie intelligente : repos (1 ligne) / focus-saisie (dépliée vers le haut)
 │   ├── feuille_ajout.dart            # « + » sur téléphone : feuille « Ajouter à JARVIS »
 │   ├── defilement_sans_barre.dart    # défilement actif, aucune barre visible (accueil, fil, saisie)
-│   ├── menu_lateral.dart             # bouton menu (perle JARVIS) + panneau latéral (voile léger, EN COURS, MES CONVERSATIONS, Paramètres)
-│   ├── menu/                         # MES CONVERSATIONS : sélecteur de messageries (vrais logos), recherche, listes qui glissent, ligne (balayage : épingler / supprimer), confirmation
+│   ├── menu_lateral.dart             # bouton menu (perle JARVIS) + panneau latéral (voile léger, EN COURS, MES CONVERSATIONS, avatar du compte, Paramètres) ; glissement depuis le bord gauche / vers la gauche (doigt seulement)
+│   ├── menu/                         # MES CONVERSATIONS : sélecteur de messageries (vrais logos), recherche, listes qui glissent, ligne (balayage court : bouton ; complet ≥ 60 % : épingler / supprimer confirmé), confirmation ; avatar_compte (initiale → Paramètres › Compte)
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
@@ -196,7 +196,7 @@ lib/
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
 │   ├── integrations/                 # ServiceGmail : état Gmail partagé en mémoire (lecture partagée, ≥ 30 s, silencieuse), ouverture de Google (navigateur du système), attente du retour
-│   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s visible, compte)
+│   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s visible, compte) ; CacheUtilisation : copie locale par compte (affichage immédiat)
 │   ├── microphone_service.dart       # permission micro (Android / iOS)
 │   ├── niveau_micro*.dart            # volume du micro sur le Web (Web Audio)
 │   ├── reconnaissance_navigateur*.dart  # voix → texte sur le Web (API Web Speech directe)
@@ -349,7 +349,16 @@ source : une valeur de `SourceConversation`, son logo dans `assets/logos/`
 démonstration : `test/fixtures/` uniquement, jamais dans l'application.
 « Nouvelle conversation » met la conversation JARVIS de côté (en mémoire,
 avec son contexte) au lieu de l'effacer.
-Suppression (balayage à gauche ou menu, toujours confirmée) :
+Balayage d'une ligne (doigt) : court = bouton révélé (à toucher) ;
+complet (≥ `LigneConversation.seuilComplet` = 60 % de la ligne, au moins
+1,6 bouton) = action au relâchement, une seule fois. Panneau : bande de
+24 px (+ zone Retour d'Android) le long du bord gauche, seuil 35 %, lancer
+≥ 700 px/s, fin en 180-280 ms ; le balayage d'une ligne ou le défilement
+du sélecteur l'emportent sur la fermeture (détecteur le plus proche).
+Avatar en bas du panneau : initiale du nom (sinon de l'e-mail, jamais
+affiché) → Paramètres › Compte.
+Suppression (balayage à gauche — bouton ou complet — ou menu, toujours
+confirmée) :
 `ConversationsMulticanal.supprimer` → `FournisseurConversations.supprimer`
 (données locales de JARVIS seulement, jamais d'API externe) + retrait de
 l'épingle ; la conversation affichée supprimée ramène l'accueil vide.
@@ -628,8 +637,14 @@ remise à zéro ; rien de codé en dur. Aucun bouton d'actualisation :
 (panneau, page), toutes les 30 s tant qu'un écran est visible (suspendu
 appli masquée), 2 s après chaque appel IA ou refus
 (`ApiJarvis.surConsommation`), au retour au premier plan, au changement de
-compte ; lecture partagée, jamais l'IA ; seule la 1re lecture montre un
-chargement ; erreur → dernières valeurs + note discrète. Supabase :
+compte ; lecture partagée, jamais l'IA ; aucun chargement visible : la
+dernière lecture réussie est gardée sur l'appareil (`CacheUtilisation`,
+clé `jarvis.utilisation`, rattachée au compte, effacée à la déconnexion,
+format versionné) et affichée dès que le compte est connu, puis remplacée
+en silence ; sans copie : structure avec « — » (jamais 0) ; copie d'une
+journée terminée (`journeeTerminee`, d'après `resets_at`) : consommation
+« — » + « Nouvelle journée » ; erreur → dernières valeurs + note discrète
+datée. Copie d'affichage seulement : le serveur seul décide des quotas. Supabase :
 `users.daily_*` = limites effectives (déclencheurs `users_suivre_offre`,
 `plan_config_propager`, sauf exception). 429 typés
 (`ApiJarvis.messageLimite`, heure réelle de `resets_at`) ; limite du

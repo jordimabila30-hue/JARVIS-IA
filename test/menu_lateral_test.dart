@@ -1,12 +1,19 @@
-// Menu latéral : ouverture depuis la gauche, voile léger, fermetures
-// (voile, ×, Échap, Retour), entrées réelles, particules PIM intactes.
+// Menu latéral : ouverture depuis la gauche (bouton ou glissement depuis le
+// bord), voile léger, fermetures (voile, ×, Échap, Retour, glissement),
+// avatar du compte, entrées réelles, particules PIM intactes.
 
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/widgets/ligne_de_commande.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
+import 'package:ia_jarvis/models/authentification/utilisateur_auth.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
+import 'package:ia_jarvis/services/authentification/auth_repository.dart';
+import 'package:ia_jarvis/services/authentification/auth_service.dart';
 import 'package:ia_jarvis/services/conversation/conversation_session.dart';
 import 'package:ia_jarvis/services/microphone_service.dart';
 import 'package:ia_jarvis/services/niveau_micro.dart';
@@ -17,8 +24,10 @@ import 'package:ia_jarvis/services/voice_session.dart';
 import 'package:ia_jarvis/services/voice_settings_service.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
 import 'package:ia_jarvis/widgets/conversation/signature_jarvis.dart';
+import 'package:ia_jarvis/widgets/menu/avatar_compte.dart';
 import 'package:ia_jarvis/widgets/menu_lateral.dart';
 import 'package:ia_jarvis/widgets/parametres/fenetre_parametres.dart';
+import 'package:ia_jarvis/widgets/parametres/panneau_compte.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
 class _Tts implements TtsService {
@@ -84,10 +93,27 @@ class _Niveau implements NiveauMicro {
   Future<void> arreter() async {}
 }
 
+/// Dépôt de comptes de test : aucun serveur, la session change quand le
+/// test l’annonce ([annoncer]).
+class _Comptes extends AuthRepositoryNonConfigure {
+  _Comptes();
+
+  final _flux = StreamController<UtilisateurAuth?>.broadcast();
+
+  void annoncer(UtilisateurAuth? u) => _flux.add(u);
+
+  @override
+  Stream<UtilisateurAuth?> get changements => _flux.stream;
+}
+
 late PimController _pim;
 late ConversationSession _conversation;
 
-Future<void> _accueil(WidgetTester tester, Size taille) async {
+Future<void> _accueil(
+  WidgetTester tester,
+  Size taille, {
+  AuthService? auth,
+}) async {
   tester.view.physicalSize = taille;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -114,10 +140,28 @@ Future<void> _accueil(WidgetTester tester, Size taille) async {
         ),
         pim: _pim,
         conversation: _conversation,
+        auth: auth,
       ),
     ),
   );
   await _images(tester, 30);
+}
+
+final _avatar = find.byKey(const ValueKey('avatar-compte'));
+
+/// Glissement au doigt, pas à pas, depuis [depart].
+Future<TestGesture> _glisser(
+  WidgetTester tester,
+  Offset depart,
+  List<double> pas, {
+  PointerDeviceKind type = PointerDeviceKind.touch,
+}) async {
+  final geste = await tester.startGesture(depart, kind: type);
+  for (final dx in pas) {
+    await geste.moveBy(Offset(dx, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  return geste;
 }
 
 Future<void> _images(WidgetTester tester, int n) async {
@@ -215,7 +259,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('fermeture : voile, ×, Échap, Retour Android, symbole JARVIS', (
+  testWidgets('fermeture : voile, ×, Échap, Retour Android, glissement', (
     tester,
   ) async {
     await _accueil(tester, const Size(1366, 768));
@@ -246,9 +290,12 @@ void main() {
         },
       ),
       (
-        'symbole JARVIS',
+        'glissement vers la gauche',
         () async {
-          await tester.tap(find.byTooltip('Accueil JARVIS'));
+          final geste = await _glisser(tester, const Offset(1000, 400), [
+            for (var i = 0; i < 12; i++) -20,
+          ]);
+          await geste.up();
           await _images(tester, 25);
         },
       ),
@@ -414,32 +461,328 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('symbole lumineux : la perle des réponses, agrandie', (
-    tester,
-  ) async {
-    await _accueil(tester, const Size(1366, 768));
-    await _ouvrir(tester);
-    // La perle du bas (le sélecteur des messageries a son propre logo).
-    final perle = find.descendant(
-      of: find.byTooltip('Accueil JARVIS'),
-      matching: find.byType(PerleJarvis),
-    );
-    expect(perle, findsOneWidget);
-    expect(tester.widget<PerleJarvis>(perle).taille, greaterThan(13));
-    // En bas à gauche, Paramètres en bas à droite, alignés.
-    final rPerle = tester.getRect(perle);
-    final rParam = tester.getRect(find.byTooltip('Paramètres'));
-    // Paramètres : roue dentée à contour fin.
-    expect(
-      find.descendant(
-        of: find.byTooltip('Paramètres'),
-        matching: find.byIcon(Icons.settings_outlined),
-      ),
-      findsOneWidget,
-    );
-    expect(rPerle.center.dx, lessThan(rParam.center.dx));
-    expect(rPerle.center.dy, closeTo(rParam.center.dy, 1));
-    expect(rPerle.bottom, greaterThan(768 - 80));
+  group('Glissement (téléphone)', () {
+    const ecran = Size(390, 844);
+    final largeur = MenuLateral.largeurPour(ecran.width);
+
+    testWidgets('depuis le bord gauche : le panneau suit le doigt, le voile '
+        'aussi ; relâché au-delà du seuil, il finit de s’ouvrir', (
+      tester,
+    ) async {
+      await _accueil(tester, ecran);
+      final geste = await _glisser(tester, const Offset(6, 500), [30, 30, 30]);
+      // Suit le doigt (moins la tolérance de départ du geste).
+      final bord1 = _bordPanneau(tester);
+      final voile1 = _voile(tester);
+      expect(_ouvert(tester), isTrue);
+      await geste.moveBy(const Offset(40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(_bordPanneau(tester) - bord1, closeTo(40, 0.5));
+      expect(_voile(tester), greaterThan(voile1));
+      // Voile proportionnel à la position.
+      final t =
+          tester
+              .widget<FractionalTranslation>(
+                find
+                    .ancestor(
+                      of: _panneau,
+                      matching: find.byType(FractionalTranslation),
+                    )
+                    .first,
+              )
+              .translation
+              .dx +
+          1;
+      expect(t, inExclusiveRange(0.2, 0.6));
+      expect(_voile(tester), closeTo(MenuLateral.opaciteVoile * t, 0.01));
+      // Lent, au-delà de 35 % : ouvert.
+      await geste.moveBy(const Offset(30, 0));
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.up();
+      final images = <double>[];
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        images.add(_bordPanneau(tester));
+      }
+      final ouvert = images.indexWhere((b) => b == images.last);
+      expect(
+        ouvert * 16,
+        lessThanOrEqualTo(MenuLateral.dureeGesteMax.inMilliseconds + 16),
+      );
+      expect(_voile(tester), closeTo(MenuLateral.opaciteVoile, 0.005));
+      // Retour Android : le menu est bien ouvert pour la page.
+      await tester.binding.handlePopRoute();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('court et lent : revient fermé ; lancer rapide : ouvert', (
+      tester,
+    ) async {
+      await _accueil(tester, ecran);
+      var geste = await _glisser(tester, const Offset(6, 500), [20, 20, 20]);
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+      expect(_voile(tester), 0);
+
+      // Même petite distance, mais lancée : s'ouvre.
+      await tester.flingFrom(const Offset(6, 500), const Offset(80, 0), 1500);
+      await _images(tester, 25);
+      expect(_ouvert(tester), isTrue);
+      expect(_voile(tester), closeTo(MenuLateral.opaciteVoile, 0.005));
+      // Lancer vers la gauche sur le panneau (en-tête) : fermé.
+      await tester.flingFrom(
+        Offset(120, tester.getCenter(_panneau).dy),
+        const Offset(-60, 0),
+        1500,
+      );
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('geste inversé ou interrompu : l’état suit la position', (
+      tester,
+    ) async {
+      await _accueil(tester, ecran);
+      // Ouvre à moitié puis revient : fermé.
+      var geste = await _glisser(tester, const Offset(6, 500), [
+        for (var i = 0; i < 8; i++) 25,
+        for (var i = 0; i < 7; i++) -25,
+      ]);
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+      // Annulé en cours (appel, système) : position la plus proche.
+      geste = await _glisser(tester, const Offset(6, 500), [
+        for (var i = 0; i < 10; i++) 25,
+      ]);
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.cancel();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isTrue);
+      expect(_voile(tester), closeTo(MenuLateral.opaciteVoile, 0.005));
+      // Fermeture à moitié puis retour vers la droite : reste ouvert.
+      geste = await _glisser(tester, const Offset(300, 400), [
+        for (var i = 0; i < 4; i++) -20,
+        for (var i = 0; i < 4; i++) 20,
+      ]);
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('loin du bord, vertical, ou à la souris : rien ne s’ouvre ; '
+        'un toucher près du bord atteint l’accueil', (tester) async {
+      await _accueil(tester, ecran);
+      var geste = await _glisser(tester, const Offset(150, 500), [
+        for (var i = 0; i < 8; i++) 30,
+      ]);
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+
+      geste = await tester.startGesture(const Offset(6, 400));
+      for (var i = 0; i < 8; i++) {
+        await geste.moveBy(const Offset(2, 30));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+
+      geste = await _glisser(tester, const Offset(6, 500), [
+        for (var i = 0; i < 8; i++) 30,
+      ], type: PointerDeviceKind.mouse);
+      await geste.up();
+      await _images(tester, 25);
+      expect(_ouvert(tester), isFalse);
+
+      // La bande du bord laisse passer les touchers : le bouton menu (en
+      // haut à gauche) répond toujours.
+      expect(
+        tester.getRect(find.byTooltip('Menu')).left,
+        lessThan(MenuLateral.zoneBord),
+      );
+      await tester.tapAt(
+        Offset(
+          MenuLateral.zoneBord - 4,
+          tester.getCenter(find.byTooltip('Menu')).dy,
+        ),
+      );
+      await _images(tester, 25);
+      expect(_ouvert(tester), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('réduction des animations : état final aussitôt', (
+      tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await _accueil(tester, ecran);
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(_voile(tester), closeTo(MenuLateral.opaciteVoile, 0.005));
+      final geste = await _glisser(tester, const Offset(300, 400), [
+        -40,
+        -40,
+        -40,
+        -40,
+      ]);
+      await tester.pump(const Duration(milliseconds: 300));
+      await geste.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(_ouvert(tester), isFalse);
+    });
+  });
+
+  group('Avatar du compte', () {
+    testWidgets('téléphone : l’avatar ouvre directement la page Compte, '
+        'Retour mène à la liste', (tester) async {
+      final comptes = _Comptes();
+      final auth = AuthService(comptes);
+      addTearDown(auth.dispose);
+      await _accueil(tester, const Size(390, 844), auth: auth);
+      comptes.annoncer(
+        const UtilisateurAuth(
+          identifiant: 'u1',
+          email: 'j@exemple.fr',
+          nom: 'Jordi',
+        ),
+      );
+      await _images(tester, 3);
+      await _ouvrir(tester);
+      await tester.tap(_avatar);
+      await _images(tester, 30);
+      expect(find.byType(PanneauCompte), findsOneWidget);
+      expect(find.text('Particules PIM'), findsNothing); // pas la liste
+      await tester.binding.handlePopRoute();
+      await _images(tester, 30);
+      expect(find.byType(PanneauCompte), findsNothing);
+      expect(find.text('Particules PIM'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    test('initiale : nom affiché, sinon e-mail, jamais un symbole', () {
+      expect(initialeCompte(nom: 'Jordi', email: 'x@y.fr'), 'J');
+      expect(initialeCompte(nom: 'ben', email: 'x@y.fr'), 'B');
+      expect(initialeCompte(nom: ' Marie ', email: null), 'M');
+      expect(initialeCompte(nom: 'Élodie'), 'É');
+      expect(initialeCompte(nom: null, email: 'alex@exemple.fr'), 'A');
+      expect(initialeCompte(nom: '  ', email: '_zoe@exemple.fr'), 'Z');
+      expect(initialeCompte(nom: null, email: null), isNull);
+    });
+
+    testWidgets('en bas à gauche, Paramètres à droite ; l’initiale suit le '
+        'compte ; appui : section Compte', (tester) async {
+      final comptes = _Comptes();
+      final auth = AuthService(comptes);
+      addTearDown(auth.dispose);
+      await _accueil(tester, const Size(1366, 768), auth: auth);
+      await _ouvrir(tester);
+      // Sans compte : silhouette neutre, aucune lettre.
+      expect(_avatar, findsOneWidget);
+      expect(
+        find.descendant(
+          of: _avatar,
+          matching: find.byIcon(Icons.person_outline_rounded),
+        ),
+        findsOneWidget,
+      );
+      // Plus de symbole JARVIS en bas du panneau.
+      expect(find.byTooltip('Accueil JARVIS'), findsNothing);
+
+      comptes.annoncer(
+        const UtilisateurAuth(
+          identifiant: 'u1',
+          email: 'jordi@exemple.fr',
+          nom: 'Jordi',
+        ),
+      );
+      await _images(tester, 3);
+      expect(
+        find.descendant(of: _avatar, matching: find.text('J')),
+        findsOneWidget,
+      );
+      // L'adresse n'est jamais affichée ni annoncée.
+      expect(find.textContaining('@'), findsNothing);
+      expect(find.byTooltip('Compte de Jordi'), findsOneWidget);
+
+      comptes.annoncer(
+        const UtilisateurAuth(
+          identifiant: 'u2',
+          email: 'ben@exemple.fr',
+          nom: 'Ben',
+        ),
+      );
+      await _images(tester, 3);
+      expect(
+        find.descendant(of: _avatar, matching: find.text('B')),
+        findsOneWidget,
+      );
+      comptes.annoncer(
+        const UtilisateurAuth(identifiant: 'u3', email: 'marie@exemple.fr'),
+      );
+      await _images(tester, 3);
+      expect(
+        find.descendant(of: _avatar, matching: find.text('M')),
+        findsOneWidget,
+      );
+
+      // Alignés en bas, avatar à gauche, Paramètres (roue fine) à droite.
+      final rAvatar = tester.getRect(_avatar);
+      final rParam = tester.getRect(find.byTooltip('Paramètres'));
+      expect(
+        find.descendant(
+          of: find.byTooltip('Paramètres'),
+          matching: find.byIcon(Icons.settings_outlined),
+        ),
+        findsOneWidget,
+      );
+      expect(rAvatar.center.dx, lessThan(rParam.center.dx));
+      expect(rAvatar.center.dy, closeTo(rParam.center.dy, 1));
+      expect(rAvatar.bottom, greaterThan(768 - 80));
+      expect(rAvatar.width, AvatarCompte.taille);
+      // Zone tactile de 48 px.
+      expect(
+        tester
+            .getSize(
+              find.ancestor(of: _avatar, matching: find.byType(SizedBox)).first,
+            )
+            .width,
+        greaterThanOrEqualTo(48),
+      );
+
+      await tester.tap(_avatar);
+      await _images(tester, 30);
+      expect(_ouvert(tester), isFalse);
+      expect(find.byType(FenetreParametres), findsOneWidget);
+      expect(
+        tester
+            .widget<FenetreParametres>(find.byType(FenetreParametres))
+            .sectionInitiale,
+        SectionParametres.compte,
+      );
+      expect(
+        tester
+            .widget<FenetreParametres>(find.byType(FenetreParametres))
+            .ouvrirSection,
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 
   for (final s in const [

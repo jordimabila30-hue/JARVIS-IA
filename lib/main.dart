@@ -95,11 +95,12 @@ class _JarvisAppState extends State<JarvisApp> {
   /// Session perdue pendant que JARVIS est ouvert (déconnexion, session
   /// révoquée) ; ou lien de récupération ouvert.
   void _surAuth() {
-    // Autre compte (ou déconnexion) : rien de l'ancienne utilisation.
+    // Autre compte (ou déconnexion) : rien de l'ancienne utilisation ; la
+    // copie locale du nouveau compte s'affiche aussitôt.
     final compte = _auth.utilisateur?.identifiant;
     if (compte != _compteUtilisation) {
       _compteUtilisation = compte;
-      _utilisation.changerCompte();
+      _utilisation.changerCompte(compte);
       _gmail.changerCompte();
       // État Gmail connu avant l'ouverture d'Outils, sans gêner l'accueil.
       if (compte != null) _gmail.lireBientot();

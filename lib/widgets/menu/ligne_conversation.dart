@@ -18,8 +18,11 @@ enum _Action { epingler, supprimer }
 /// Toucher : ouvre la conversation. Deux actions, « Épingler /
 /// Désépingler » et « Supprimer » (toujours confirmée) :
 /// - téléphone : balayage (vers la droite : épingler ; vers la gauche :
-///   supprimer). Le geste révèle seulement le bouton, il n'agit jamais
-///   seul ; ou appui prolongé (menu) ;
+///   supprimer). Un balayage court révèle le bouton (à toucher) ; un
+///   balayage complet (au-delà de [seuilComplet] de la largeur de la
+///   ligne : le bouton s'étire, légère vibration) agit au relâchement,
+///   une seule fois — la suppression reste confirmée ; ou appui prolongé
+///   (menu) ;
 /// - ordinateur : clic droit ou bouton ⋯ au survol ;
 /// - clavier : touche Menu ou Maj+F10.
 class LigneConversation extends StatefulWidget {
@@ -63,6 +66,12 @@ class LigneConversation extends StatefulWidget {
   static const boutonDesepingler = 'Désépingler';
   static const boutonSupprimer = 'Supprimer';
 
+  /// Part de la largeur de la ligne à dépasser pour agir au relâchement
+  /// (jamais moins de [facteurCompletMin] fois la largeur du bouton : la
+  /// différence avec un simple dévoilement reste nette sur petit écran).
+  static const seuilComplet = 0.6;
+  static const facteurCompletMin = 1.6;
+
   /// Violet de l'épinglage (bouton révélé).
   static const violetEpingle = Color(0xFF7463BE);
 
@@ -87,7 +96,22 @@ class _LigneConversationState extends State<LigneConversation>
   double _largeurAction = 88;
   bool _seuilFranchi = false;
 
+  /// Balayage complet en cours : l'action partira au relâchement.
+  bool _arme = false;
+
+  /// Action complète lancée (animation, confirmation) : aucun autre geste
+  /// sur cette ligne tant qu'elle n'est pas terminée.
+  bool _actionEnCours = false;
+
   bool get _ouverte => _decalage.value.abs() > 0.5;
+
+  double get _largeurLigne => context.size?.width ?? 300;
+
+  /// Décalage à dépasser pour le balayage complet.
+  double get _seuilComplet => math.max(
+    _largeurLigne * LigneConversation.seuilComplet,
+    _largeurAction * LigneConversation.facteurCompletMin,
+  );
 
   @override
   void initState() {
@@ -112,27 +136,44 @@ class _LigneConversationState extends State<LigneConversation>
   // --- Balayage --------------------------------------------------------------
 
   void _debutGlisse(DragStartDetails _) {
+    if (_actionEnCours) return;
     _decalage.stop();
     _seuilFranchi = _ouverte;
+    _arme = false;
     LigneConversation._ouverte.value = this;
   }
 
   void _glisse(DragUpdateDetails d) {
+    if (_actionEnCours) return;
     final max = _largeurAction;
+    // La ligne suit le doigt jusqu'au balayage complet, puis résiste un peu.
+    final limite = _largeurLigne * 0.85;
     var x = _decalage.value + d.primaryDelta!;
-    // Au-delà du bouton : résistance (la ligne ralentit, sans bloquer).
-    if (x.abs() > max) {
-      final exces = x.abs() - max;
-      x = x.sign * (max + exces * 0.25);
+    if (x.abs() > limite) {
+      x = x.sign * (limite + (x.abs() - limite) * 0.3);
     }
-    _decalage.value = x.clamp(-max * 1.4, max * 1.4);
+    _decalage.value = x.clamp(-_largeurLigne, _largeurLigne);
     // Léger retour haptique quand le bouton est entièrement révélé.
     final franchi = _decalage.value.abs() >= max * 0.6;
     if (franchi && !_seuilFranchi) HapticFeedback.selectionClick();
     _seuilFranchi = franchi;
+    // Balayage complet : vibration plus nette à l'armement (en deçà, il
+    // est annulé).
+    final arme = _decalage.value.abs() >= _seuilComplet;
+    if (arme != _arme) {
+      arme ? HapticFeedback.mediumImpact() : HapticFeedback.selectionClick();
+      setState(() => _arme = arme);
+    }
   }
 
   void _finGlisse(DragEndDetails d) {
+    if (_actionEnCours) return;
+    if (_arme) {
+      final x = _decalage.value;
+      setState(() => _arme = false);
+      x > 0 ? _epinglerComplet() : _supprimerComplet();
+      return;
+    }
     final v = d.primaryVelocity ?? 0;
     final x = _decalage.value;
     final max = _largeurAction;
@@ -158,6 +199,33 @@ class _LigneConversationState extends State<LigneConversation>
   }
 
   Future<void> _fermer() => _aller(0);
+
+  /// Balayage complet vers la droite : la ligne revient en place, puis
+  /// l'épingle change (même chemin que le bouton).
+  Future<void> _epinglerComplet() async {
+    _actionEnCours = true;
+    try {
+      await _epinglerDepuisBalayage();
+    } finally {
+      _actionEnCours = false;
+    }
+  }
+
+  /// Balayage complet vers la gauche : la ligne glisse hors de la vue
+  /// (validation), puis la confirmation habituelle ; annuler la ramène.
+  Future<void> _supprimerComplet() async {
+    setState(() => _actionEnCours = true);
+    try {
+      await _decalage.animateTo(
+        -_largeurLigne,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+      if (mounted) await _supprimer();
+    } finally {
+      if (mounted) setState(() => _actionEnCours = false);
+    }
+  }
 
   /// « Épingler » (bouton révélé) : la ligne se referme, puis l'épingle
   /// change (la ligne rejoint sa place dans la liste).
@@ -331,6 +399,7 @@ class _LigneConversationState extends State<LigneConversation>
                               ? LigneConversation.boutonDesepingler
                               : LigneConversation.boutonEpingler,
                           surAppui: _epinglerDepuisBalayage,
+                          arme: _arme,
                         ),
                       if (x < -0.5)
                         _BoutonRevele(
@@ -341,6 +410,7 @@ class _LigneConversationState extends State<LigneConversation>
                           icone: Icons.delete_outline_rounded,
                           libelle: LigneConversation.boutonSupprimer,
                           surAppui: _supprimer,
+                          arme: _arme || _actionEnCours,
                         ),
                       Transform.translate(offset: Offset(x, 0), child: ligne),
                     ],
@@ -479,7 +549,12 @@ class _BoutonRevele extends StatelessWidget {
     required this.icone,
     required this.libelle,
     required this.surAppui,
+    this.arme = false,
   });
+
+  /// Balayage complet : le contenu rejoint le bord de la ligne, un peu
+  /// plus grand (l'action partira au relâchement).
+  final bool arme;
 
   final _Cote cote;
   final double largeur;
@@ -508,33 +583,48 @@ class _BoutonRevele extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: Opacity(
               opacity: Curves.easeOut.transform(t),
-              child: Transform.scale(
-                scale: 0.85 + 0.15 * t,
-                child: OverflowBox(
-                  // Contenu à sa taille finale, centré : rien ne se
-                  // tasse pendant l'apparition.
-                  maxWidth: largeurPleine,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icone, size: 19, color: Colors.white),
-                      const SizedBox(height: 4),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            libelle,
-                            maxLines: 1,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+              // Au repos, contenu côté extérieur ; armé, il rejoint le bord
+              // de la ligne (il suit le doigt).
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                alignment: (cote == _Cote.gauche) == arme
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: SizedBox(
+                  width: largeurPleine,
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 160),
+                    scale: (0.85 + 0.15 * t) * (arme ? 1.12 : 1),
+                    child: OverflowBox(
+                      // Contenu à sa taille finale, centré : rien ne se
+                      // tasse pendant l'apparition.
+                      maxWidth: largeurPleine,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(icone, size: 19, color: Colors.white),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: Text(
+                                libelle,
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),

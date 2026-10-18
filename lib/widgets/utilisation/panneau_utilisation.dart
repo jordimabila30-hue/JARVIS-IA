@@ -12,7 +12,9 @@ import 'jauge_utilisation.dart';
 /// « Remise à zéro demain à 02:00 ».
 String texteJour(Utilisation u, DateTime maintenant) {
   final fin = u.finJour;
-  return fin == null ? 'Remise à zéro chaque jour.' : 'Remise à zéro ${momentLocal(fin, maintenant)}';
+  return fin == null
+      ? 'Remise à zéro chaque jour.'
+      : 'Remise à zéro ${momentLocal(fin, maintenant)}';
 }
 
 /// « Claude · Anthropic — claude-opus-5-5 ».
@@ -31,23 +33,39 @@ String? texteFournisseurActif(Utilisation u) {
 }
 
 /// Dernière lecture échouée alors que des valeurs sont affichées : elles
-/// restent, signalées discrètement (null : à jour).
-String? texteDonneesAnciennes(ServiceUtilisation service) =>
-    service.erreur != null && service.donnees != null
-    ? 'Dernières valeurs connues : elles peuvent ne plus être à jour.'
-    : null;
+/// restent, signalées discrètement avec l'heure de leur lecture (null : à
+/// jour, ou relecture silencieuse en cours).
+String? texteDonneesAnciennes(
+  ServiceUtilisation service, [
+  DateTime? maintenant,
+]) {
+  if (service.erreur == null || service.donnees == null) return null;
+  final lu = service.miseAJour;
+  final quand = lu == null
+      ? ''
+      : ' (lues ${momentLocal(lu, maintenant ?? DateTime.now())})';
+  return 'Dernières valeurs connues$quand : elles peuvent ne plus être à jour.';
+}
+
+/// Copie locale d'une journée terminée : la consommation du jour n'est pas
+/// encore connue (jamais celle de la veille présentée comme celle du jour).
+const texteNouvelleJournee =
+    'Nouvelle journée : la consommation d’aujourd’hui s’affichera à la prochaine synchronisation.';
 
 /// Message d'une lecture impossible.
 String texteIndisponible(ErreurApi? e) => switch (e) {
   ErreurApi.nonConnecte || ErreurApi.sessionExpiree =>
     'Connectez-vous pour consulter votre utilisation.',
-  ErreurApi.injoignable => 'Le serveur JARVIS est injoignable : utilisation indisponible pour le moment.',
+  ErreurApi.injoignable =>
+    'Le serveur JARVIS est injoignable : utilisation indisponible pour le moment.',
   _ => 'Utilisation indisponible pour le moment.',
 };
 
 /// Section « Utilisation » des Paramètres : offre, deux jauges
-/// quotidiennes (messages, tokens) et accès aux détails. Actualisation
-/// automatique et invisible (aucun bouton, aucun chargement répété). Ne montre que ce que le serveur envoie.
+/// quotidiennes (messages, tokens) et accès aux détails. Affichée aussitôt
+/// (dernières valeurs gardées sur l'appareil, sinon structure avec « — »),
+/// actualisée automatiquement et en silence : aucun bouton, aucun
+/// chargement. Ne montre que ce que le serveur a envoyé.
 class PanneauUtilisation extends StatefulWidget {
   const PanneauUtilisation({super.key, required this.service, this.horloge});
 
@@ -81,21 +99,31 @@ class _PanneauUtilisationState extends State<PanneauUtilisation> {
   Widget build(BuildContext context) {
     final service = widget.service;
     if (service == null) {
-      return const CarteReglages(enfants: [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          child: NoteReglage('Connectez-vous pour consulter votre utilisation de JARVIS.'),
-        ),
-      ]);
+      return const CarteReglages(
+        enfants: [
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: NoteReglage(
+              'Connectez-vous pour consulter votre utilisation de JARVIS.',
+            ),
+          ),
+        ],
+      );
     }
     return ListenableBuilder(
       listenable: service,
       builder: (context, _) {
         final u = service.donnees;
-        if (u == null) return _Attente(service: service);
         final maintenant = _maintenant;
-        final actif = texteFournisseurActif(u);
-        final ancien = texteDonneesAnciennes(service);
+        // Copie d'une journée terminée : consommation du jour inconnue.
+        final terminee = service.journeeTerminee;
+        final jour = terminee ? null : u;
+        final actif = u == null ? null : texteFournisseurActif(u);
+        // Première lecture impossible : explication discrète, la structure
+        // reste affichée.
+        final note = u == null && service.erreur != null
+            ? texteIndisponible(service.erreur)
+            : texteDonneesAnciennes(service, maintenant);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -105,22 +133,32 @@ class _PanneauUtilisationState extends State<PanneauUtilisation> {
                 JaugeUtilisation(
                   key: const ValueKey('jauge-messages-jour'),
                   titre: 'Messages aujourd’hui',
-                  jauge: u.messagesJour,
+                  jauge: jour?.messagesJour,
                   unite: 'messages',
-                  sousTitre: texteJour(u, maintenant),
+                  sousTitre: terminee
+                      ? texteNouvelleJournee
+                      : jour == null
+                      ? null
+                      : texteJour(jour, maintenant),
                 ),
                 JaugeUtilisation(
                   key: const ValueKey('jauge-tokens-jour'),
                   titre: 'Tokens aujourd’hui',
-                  jauge: u.tokensJour,
+                  jauge: jour?.tokensJour,
                   unite: 'tokens',
-                  sousTitre: u.exception ? 'Limites personnelles de votre compte.' : null,
+                  sousTitre: u?.exception == true
+                      ? 'Limites personnelles de votre compte.'
+                      : null,
                 ),
               ],
             ),
-            if (ancien != null) ...[
+            if (note != null) ...[
               const SizedBox(height: 10),
-              _NoteDiscrete(ancien, key: const ValueKey('donnees-anciennes')),
+              _NoteDiscrete(
+                note,
+                horsLigne: service.erreur == ErreurApi.injoignable,
+                key: const ValueKey('donnees-anciennes'),
+              ),
             ],
             if (actif != null) ...[
               const SizedBox(height: 12),
@@ -141,7 +179,8 @@ class _PanneauUtilisationState extends State<PanneauUtilisation> {
 class _EnTete extends StatelessWidget {
   const _EnTete({required this.utilisation});
 
-  final Utilisation utilisation;
+  /// null : offre pas encore connue.
+  final Utilisation? utilisation;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +195,11 @@ class _EnTete extends StatelessWidget {
               color: CouleursJarvis.violetPoudre,
               borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(Icons.data_usage_rounded, color: CouleursJarvis.signal, size: 22),
+            child: const Icon(
+              Icons.data_usage_rounded,
+              color: CouleursJarvis.signal,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -170,15 +213,24 @@ class _EnTete extends StatelessWidget {
                   children: [
                     const Text(
                       'Utilisation',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: CouleursJarvis.texte),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: CouleursJarvis.texte,
+                      ),
                     ),
-                    _Pastille(utilisation.nomOffre),
+                    if (utilisation != null) _Pastille(utilisation!.nomOffre),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  texteFournisseur(utilisation.offre),
-                  style: const TextStyle(fontSize: 12.5, color: CouleursJarvis.texteSecondaire),
+                  utilisation == null
+                      ? '—'
+                      : texteFournisseur(utilisation!.offre),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: CouleursJarvis.texteSecondaire,
+                  ),
                 ),
               ],
             ),
@@ -200,13 +252,19 @@ class _Pastille extends StatelessWidget {
       decoration: BoxDecoration(
         color: CouleursJarvis.signal.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: CouleursJarvis.signal.withValues(alpha: 0.25)),
+        border: Border.all(
+          color: CouleursJarvis.signal.withValues(alpha: 0.25),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         child: Text(
           texte,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: CouleursJarvis.signal),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: CouleursJarvis.signal,
+          ),
         ),
       ),
     );
@@ -234,56 +292,38 @@ class _VoirDetails extends StatelessWidget {
   }
 }
 
-/// Petite ligne grise avec une icône (données peut-être anciennes).
+/// Petite ligne grise avec une icône (données peut-être anciennes,
+/// utilisation indisponible).
 class _NoteDiscrete extends StatelessWidget {
-  const _NoteDiscrete(this.texte, {super.key});
+  const _NoteDiscrete(this.texte, {this.horsLigne = false, super.key});
 
   final String texte;
+
+  /// Serveur injoignable : nuage barré ; sinon simple information.
+  final bool horsLigne;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 1),
-          child: Icon(Icons.cloud_off_rounded, size: 15, color: CouleursJarvis.texteSecondaire),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(
+            horsLigne ? Icons.cloud_off_rounded : Icons.info_outline_rounded,
+            size: 15,
+            color: CouleursJarvis.texteSecondaire,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(texte, style: const TextStyle(fontSize: 12, color: CouleursJarvis.texteSecondaire)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Première lecture en cours, ou impossible (nouvel essai automatique).
-class _Attente extends StatelessWidget {
-  const _Attente({required this.service});
-
-  final ServiceUtilisation service;
-
-  @override
-  Widget build(BuildContext context) {
-    final erreur = service.erreur;
-    return CarteReglages(
-      enfants: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: erreur == null
-              ? const Row(
-                  children: [
-                    SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: CouleursJarvis.signal),
-                    ),
-                    SizedBox(width: 14),
-                    Text('Lecture de votre utilisation…', style: TextStyle(color: CouleursJarvis.texteSecondaire)),
-                  ],
-                )
-              : NoteReglage(texteIndisponible(erreur)),
+          child: Text(
+            texte,
+            style: const TextStyle(
+              fontSize: 12,
+              color: CouleursJarvis.texteSecondaire,
+            ),
+          ),
         ),
       ],
     );

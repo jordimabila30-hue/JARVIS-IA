@@ -64,6 +64,7 @@ Future<void> ouvrirParametres(
   required VoiceSession session,
   PreferencesPimService? formes,
   SectionParametres section = SectionParametres.chatVocal,
+  bool ouvrirSection = false,
   AuthService? compte,
   ApiJarvis? api,
   VoidCallback? surConnexion,
@@ -81,6 +82,7 @@ Future<void> ouvrirParametres(
       session: session,
       formes: formes,
       sectionInitiale: section,
+      ouvrirSection: ouvrirSection,
       compte: compte,
       api: api,
       surConnexion: surConnexion,
@@ -134,6 +136,7 @@ class FenetreParametres extends StatefulWidget {
     required this.session,
     this.formes,
     this.sectionInitiale = SectionParametres.chatVocal,
+    this.ouvrirSection = false,
     this.compte,
     this.api,
     this.surConnexion,
@@ -156,6 +159,10 @@ class FenetreParametres extends StatefulWidget {
   /// si absentes.
   final PreferencesPimService? formes;
   final SectionParametres sectionInitiale;
+
+  /// Téléphone : ouvre directement [sectionInitiale] (avatar du menu →
+  /// Compte) au lieu de la liste des sections ; Retour mène à la liste.
+  final bool ouvrirSection;
 
   /// Compte connecté (null : aucun serveur de comptes).
   final AuthService? compte;
@@ -182,7 +189,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
   }
 
   /// Téléphone : vrai quand une section est ouverte (sinon la liste).
-  bool _dansSection = false;
+  late bool _dansSection = widget.ouvrirSection;
 
   /// Outils : outil ouvert (null : la liste des outils).
   OutilJarvis? _outil;
@@ -208,7 +215,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
     _dansSection = true;
   });
 
-  void _ouvrirPageGenerale(PageGenerale? p) => setState(() => _pageGenerale = p);
+  void _ouvrirPageGenerale(PageGenerale? p) =>
+      setState(() => _pageGenerale = p);
 
   void _ouvrirOutil(OutilJarvis? o) => setState(() => _outil = o);
 

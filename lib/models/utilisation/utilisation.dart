@@ -23,7 +23,8 @@ class Jauge {
   bool get illimitee => limite == null;
 
   /// Restant (null : illimité).
-  int? get reste => limite == null ? null : (limite! - utilise).clamp(0, limite!);
+  int? get reste =>
+      limite == null ? null : (limite! - utilise).clamp(0, limite!);
 
   /// 0 → 1 (bornée ; limite 0 = pleine).
   double get fraction {
@@ -63,7 +64,8 @@ class FournisseurIA {
     final autre => autre,
   };
 
-  bool memeQue(FournisseurIA autre) => nom == autre.nom && modele == autre.modele;
+  bool memeQue(FournisseurIA autre) =>
+      nom == autre.nom && modele == autre.modele;
 }
 
 class Utilisation {
@@ -104,16 +106,39 @@ class Utilisation {
   String get nomOffre => switch (plan) {
     'free' => 'JARVIS Free',
     'pro' => 'JARVIS Pro',
-    final autre => 'JARVIS ${autre.isEmpty ? '?' : autre[0].toUpperCase() + autre.substring(1)}',
+    final autre =>
+      'JARVIS ${autre.isEmpty ? '?' : autre[0].toUpperCase() + autre.substring(1)}',
   };
 
   /// L'offre prévoit un autre fournisseur que celui qui sert vraiment.
   bool get fournisseurDifferent => actif != null && !actif!.memeQue(offre);
 
-  static int? _entier(Object? v) => v is int ? v : (v is num ? v.toInt() : null);
+  static int? _entier(Object? v) =>
+      v is int ? v : (v is num ? v.toInt() : null);
 
   static DateTime? _date(Object? v) =>
       v is String ? DateTime.tryParse(v) : null;
+
+  /// Mêmes clés que `GET /me/quota` (relu par [Utilisation.depuisJson]) :
+  /// copie conservée sur l'appareil, pour l'affichage seulement.
+  Map<String, dynamic> versJson() => {
+    'plan': plan,
+    'messages_used': messagesJour.utilise,
+    'messages_limit': messagesJour.limite,
+    'tokens_used': tokensJour.utilise,
+    'tokens_limit': tokensJour.limite,
+    'resets_at': finJour?.toUtc().toIso8601String(),
+    'llm_provider': offre.nom,
+    'llm_model': offre.modele,
+    'critical_threshold_percent': seuilCritique,
+    'exception': exception,
+    if (actif != null)
+      'fournisseur_actif': {
+        'llm_provider': actif!.nom,
+        'llm_model': actif!.modele,
+        'routage_abonnement': routageAbonnement,
+      },
+  };
 
   /// Lit la réponse de `GET /me/quota`. Lève [FormatException] si le
   /// plan ou les compteurs du jour manquent.
@@ -141,8 +166,16 @@ class Utilisation {
               modele: actif['llm_model'] as String?,
             ),
       routageAbonnement: actif?['routage_abonnement'] as bool?,
-      messagesJour: Jauge(utilise: utilises, limite: _entier(j['messages_limit']), seuilCritique: seuil),
-      tokensJour: Jauge(utilise: tokens, limite: _entier(j['tokens_limit']), seuilCritique: seuil),
+      messagesJour: Jauge(
+        utilise: utilises,
+        limite: _entier(j['messages_limit']),
+        seuilCritique: seuil,
+      ),
+      tokensJour: Jauge(
+        utilise: tokens,
+        limite: _entier(j['tokens_limit']),
+        seuilCritique: seuil,
+      ),
       finJour: _date(j['resets_at']),
       seuilCritique: seuil,
       exception: j['exception'] == true,

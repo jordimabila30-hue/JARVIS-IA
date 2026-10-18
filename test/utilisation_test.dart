@@ -3,6 +3,7 @@
 // limite. Faux serveur (MockClient) : aucun appel réel ; les actualisations
 // n'appellent jamais la route d'IA.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,7 +13,9 @@ import 'package:http/testing.dart';
 import 'package:ia_jarvis/models/utilisation/utilisation.dart';
 import 'package:ia_jarvis/services/api_jarvis.dart';
 import 'package:ia_jarvis/services/conversation/moteur_conversation_ia.dart';
+import 'package:ia_jarvis/services/utilisation/cache_utilisation.dart';
 import 'package:ia_jarvis/services/utilisation/service_utilisation.dart';
+import 'package:ia_jarvis/services/voice_settings_service.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
 import 'package:ia_jarvis/utils/format_utilisation.dart';
 import 'package:ia_jarvis/widgets/utilisation/jauge_utilisation.dart';
@@ -107,11 +110,14 @@ ServiceUtilisation service(
   Serveur s, {
   ApiJarvis? api,
   Duration intervalle = const Duration(seconds: 30),
+  StockageMemoire? stockage,
+  DateTime? horloge,
 }) => ServiceUtilisation(
   api ?? s.api(),
-  horloge: () => maintenant,
+  horloge: () => horloge ?? maintenant,
   intervalleSuivi: intervalle,
   delaiApresConsommation: Duration.zero,
+  cache: CacheUtilisation(stockage: stockage ?? StockageMemoire()),
 );
 
 Future<void> attendre([int ms = 20]) => Future<void>.delayed(Duration(milliseconds: ms));
@@ -347,6 +353,203 @@ void main() {
       u.changerCompte();
       expect(u.donnees, isNull);
       expect(u.miseAJour, isNull);
+      u.dispose();
+    });
+  });
+
+  group('Copie locale (affichage immédiat, actualisation silencieuse)', () {
+    /// Copie enregistrée par une première session du compte [compte].
+    Future<StockageMemoire> copieDe(String compte, {Map<String, dynamic>? reponse}) async {
+      final stockage = StockageMemoire();
+      final s = Serveur();
+      if (reponse != null) s.reponse = reponse;
+      final u = service(s, stockage: stockage)..changerCompte(compte);
+      await u.actualiser(force: true);
+      await attendre();
+      u.dispose();
+      return stockage;
+    }
+
+    test('aller-retour : la copie relit exactement la réponse du serveur', () {
+      final u = Utilisation.depuisJson(quota(plan: 'pro', fournisseur: 'anthropic', modele: 'claude-opus-5-5',
+          fournisseurActif: 'groq', modeleActif: 'm', exception: true, tokensLimite: null));
+      final v = Utilisation.depuisJson(u.versJson());
+      expect(v.plan, 'pro');
+      expect(v.offre.memeQue(u.offre), isTrue);
+      expect(v.actif!.memeQue(u.actif!), isTrue);
+      expect(v.routageAbonnement, u.routageAbonnement);
+      expect(v.messagesJour.utilise, 42);
+      expect(v.messagesJour.limite, 100);
+      expect(v.tokensJour.illimitee, isTrue);
+      expect(v.finJour, u.finJour);
+      expect(v.seuilCritique, 80);
+      expect(v.exception, isTrue);
+    });
+
+    test('après un redémarrage, hors ligne : dernières valeurs aussitôt, jamais zéro', () async {
+      final stockage = await copieDe('u1');
+      final s = Serveur()..reseauCoupe = true;
+      final u = service(s, stockage: stockage)..changerCompte('u1');
+      await attendre();
+      // Affichée avant toute réponse du serveur.
+      expect(u.donnees!.messagesJour.utilise, 42);
+      expect(u.depuisCache, isTrue);
+      expect(u.journeeTerminee, isFalse);
+      expect(texteDonneesAnciennes(u), isNull);          // relecture silencieuse
+      await u.actualiser(force: true);
+      expect(u.erreur, ErreurApi.injoignable);
+      expect(u.donnees!.messagesJour.utilise, 42);        // gardée, jamais remplacée par 0
+      expect(texteDonneesAnciennes(u, maintenant), allOf(contains('lues'), contains('peuvent ne plus être à jour')));
+      // Serveur revenu : valeurs remplacées en silence, copie mise à jour.
+      s
+        ..reseauCoupe = false
+        ..reponse = quota(messages: 57);
+      await u.actualiser(force: true);
+      await attendre();
+      expect(u.donnees!.messagesJour.utilise, 57);
+      expect(u.depuisCache, isFalse);
+      expect(u.erreur, isNull);
+      expect(jsonDecode(stockage.valeur!)['quota']['messages_used'], 57);
+      u.dispose();
+    });
+
+    test('la réponse du serveur prime sur une copie plus lente à lire', () async {
+      final stockage = await copieDe('u1');
+      final s = Serveur()..reponse = quota(messages: 60);
+      final u = service(s, stockage: stockage);
+      u.suivre();
+      u.changerCompte('u1');
+      await attendre(50);
+      expect(u.donnees!.messagesJour.utilise, 60);
+      expect(u.depuisCache, isFalse);
+      u.cesserDeSuivre();
+      u.dispose();
+    });
+
+    test('autre compte : la copie du précédent n’est jamais montrée ; déconnexion : effacée', () async {
+      final stockage = await copieDe('u1');
+      final s = Serveur()..reseauCoupe = true;
+      final u = service(s, stockage: stockage)..changerCompte('u2');
+      await attendre();
+      expect(u.donnees, isNull);
+      u.changerCompte('u1');
+      await attendre();
+      expect(u.donnees!.messagesJour.utilise, 42);
+      u.changerCompte(null);
+      await attendre();
+      expect(u.donnees, isNull);
+      expect(stockage.valeur, isEmpty);
+      u.changerCompte('u1');
+      await attendre();
+      expect(u.donnees, isNull);
+      u.dispose();
+    });
+
+    test('ancien format ou copie illisible : ignorée', () async {
+      for (final brut in ['{"v":0,"compte":"u1"}', 'pas du json', '{"v":1,"compte":"u1","lu_le":"x","quota":{}}']) {
+        final u = service(Serveur()..reseauCoupe = true, stockage: StockageMemoire(brut))..changerCompte('u1');
+        await attendre();
+        expect(u.donnees, isNull, reason: brut);
+        u.dispose();
+      }
+    });
+
+    test('nouvelle journée : la copie de la veille n’est pas la consommation du jour', () async {
+      final stockage = await copieDe('u1');
+      final u = service(Serveur()..reseauCoupe = true, stockage: stockage,
+          horloge: DateTime.utc(2026, 10, 18, 0, 30))..changerCompte('u1');
+      await attendre();
+      expect(u.donnees, isNotNull);
+      expect(u.journeeTerminee, isTrue);
+      u.dispose();
+    });
+  });
+
+  group('Panneau Utilisation (affichage immédiat)', () {
+    testWidgets('ouverture : aucune attente ni chargement, structure avec « — »', (t) async {
+      // Serveur lent : la première lecture n'est pas encore revenue.
+      final s = Serveur();
+      final reponse = Completer<http.Response>();
+      final u = service(
+        s,
+        api: ApiJarvis(
+          adresse: Uri.parse('http://test'),
+          jeton: () async => 'jeton',
+          client: MockClient((r) => reponse.future),
+        ),
+      );
+      await t.pumpWidget(cadre(PanneauUtilisation(service: u, horloge: () => maintenant)));
+      await t.pump();
+      expect(find.textContaining('Lecture de votre utilisation'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Messages aujourd’hui'), findsOneWidget);
+      expect(find.text('Tokens aujourd’hui'), findsOneWidget);
+      expect(find.text('— messages'), findsOneWidget);    // inconnu, pas 0
+      expect(find.text('— tokens'), findsOneWidget);
+      expect(find.textContaining('0 /'), findsNothing);
+      reponse.complete(http.Response(jsonEncode(quota()), 200,
+          headers: {'content-type': 'application/json; charset=utf-8'}));
+      await t.runAsync(attendre);
+      await t.pumpAndSettle();
+      expect(find.text('42 / 100 messages'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      u.dispose();
+    });
+
+    testWidgets('copie locale : valeurs dès la première image, puis remplacées en silence', (t) async {
+      final stockage = StockageMemoire();
+      await t.runAsync(() async {
+        final u0 = service(Serveur(), stockage: stockage)..changerCompte('u1');
+        await u0.actualiser(force: true);
+        await attendre();
+        u0.dispose();
+      });
+      final s = Serveur()..reponse = quota(messages: 61);
+      final u = service(s, stockage: stockage);
+      await t.runAsync(() async {
+        u.changerCompte('u1');
+        await attendre();
+      });
+      await t.pumpWidget(cadre(PanneauUtilisation(service: u, horloge: () => maintenant)));
+      expect(find.text('42 / 100 messages'), findsOneWidget);
+      expect(find.text('JARVIS Free'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await relire(t, u);
+      expect(find.text('61 / 100 messages'), findsOneWidget);
+      expect(find.byKey(const ValueKey('donnees-anciennes')), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      u.dispose();
+    });
+
+    testWidgets('nouvelle journée : consommation « — » et explication, page détaillée aussi', (t) async {
+      t.view.physicalSize = const Size(1200, 2400);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final stockage = StockageMemoire();
+      final apres = DateTime.utc(2026, 10, 18, 0, 30);
+      await t.runAsync(() async {
+        final u0 = service(Serveur(), stockage: stockage)..changerCompte('u1');
+        await u0.actualiser(force: true);
+        await attendre();
+        u0.dispose();
+      });
+      final u = service(Serveur()..reseauCoupe = true, stockage: stockage, horloge: apres);
+      await t.runAsync(() async {
+        u.changerCompte('u1');
+        await attendre();
+      });
+      await t.pumpWidget(cadre(PanneauUtilisation(service: u, horloge: () => apres)));
+      await t.pump();
+      expect(find.text('— messages'), findsOneWidget);
+      expect(find.text('42 / 100 messages'), findsNothing);
+      expect(find.text(texteNouvelleJournee), findsOneWidget);
+      expect(find.text('JARVIS Free'), findsOneWidget);   // l'offre reste connue
+      await t.tap(find.text('Voir les détails'));
+      await t.pumpAndSettle();
+      expect(find.text(texteNouvelleJournee), findsOneWidget);
+      expect(find.text('Restants : —'), findsOneWidget);
+      expect(find.text('Restants : 58 messages'), findsNothing);
+      await t.pumpWidget(const SizedBox());
       u.dispose();
     });
   });

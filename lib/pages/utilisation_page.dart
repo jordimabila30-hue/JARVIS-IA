@@ -16,8 +16,9 @@ Future<void> ouvrirPageUtilisation(BuildContext context, ServiceUtilisation serv
 
 /// Détail de l'utilisation : offre et fournisseur, consommation du jour,
 /// restants et prochaine remise à zéro (quotas quotidiens seulement).
-/// Actualisée automatiquement, sans bouton. Toutes les valeurs
-/// viennent du serveur (`/me/quota`).
+/// Affichée aussitôt (dernières valeurs gardées sur l'appareil, sinon
+/// « — »), actualisée automatiquement et en silence, sans bouton. Toutes
+/// les valeurs viennent du serveur (`/me/quota`).
 class UtilisationPage extends StatefulWidget {
   const UtilisationPage({super.key, required this.service, this.horloge});
 
@@ -66,13 +67,7 @@ class _UtilisationPageState extends State<UtilisationPage> {
                           child: Center(
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 720),
-                              child: u == null
-                                  ? NoteReglage(
-                                      widget.service.erreur == null
-                                          ? 'Lecture de votre utilisation…'
-                                          : texteIndisponible(widget.service.erreur),
-                                    )
-                                  : _Contenu(utilisation: u, maintenant: maintenant, service: widget.service),
+                              child: _Contenu(utilisation: u, maintenant: maintenant, service: widget.service),
                             ),
                           ),
                         ),
@@ -125,38 +120,45 @@ class _Barre extends StatelessWidget {
 class _Contenu extends StatelessWidget {
   const _Contenu({required this.utilisation, required this.maintenant, required this.service});
 
-  final Utilisation utilisation;
+  /// null : pas encore lue (structure affichée avec « — »).
+  final Utilisation? utilisation;
   final DateTime maintenant;
   final ServiceUtilisation service;
 
   String _instant(DateTime? t) => t == null ? '—' : momentLocal(t, maintenant);
 
-  String _reste(Jauge j, String unite) =>
-      j.illimitee ? 'illimité' : '${nombreGroupe(j.reste!)} $unite';
+  String _reste(Jauge? j, String unite) => j == null
+      ? '—'
+      : j.illimitee
+      ? 'illimité'
+      : '${nombreGroupe(j.reste!)} $unite';
 
   @override
   Widget build(BuildContext context) {
     final u = utilisation;
-    final actif = u.actif;
+    final actif = u?.actif;
+    // Copie d'une journée terminée : consommation du jour inconnue.
+    final terminee = service.journeeTerminee;
+    final jour = terminee ? null : u;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         CarteReglages(
           titre: 'Offre',
           enfants: [
-            _Ligne('Abonnement', u.nomOffre),
-            _Ligne('Fournisseur de l’offre', u.offre.libelle ?? '—'),
-            _Ligne('Modèle associé', u.offre.modele ?? '—'),
-            if (actif != null)
+            _Ligne('Abonnement', u?.nomOffre ?? '—'),
+            _Ligne('Fournisseur de l’offre', u?.offre.libelle ?? '—'),
+            _Ligne('Modèle associé', u?.offre.modele ?? '—'),
+            if (u != null && actif != null)
               _Ligne(
                 'Fournisseur utilisé',
                 texteFournisseur(actif),
                 note: u.fournisseurDifferent ? texteFournisseurActif(u) : null,
               ),
-            if (u.exception)
+            if (u?.exception == true)
               const _Ligne('Limites quotidiennes', 'personnelles (exception de votre compte)'),
-            if (u.seuilCritique != null)
-              _Ligne('Seuil d’alerte des jauges', '${u.seuilCritique} %'),
+            if (u?.seuilCritique != null)
+              _Ligne('Seuil d’alerte des jauges', '${u!.seuilCritique} %'),
           ],
         ),
         const SizedBox(height: 22),
@@ -166,23 +168,26 @@ class _Contenu extends StatelessWidget {
             JaugeUtilisation(
               key: const ValueKey('detail-jour-messages'),
               titre: 'Messages',
-              jauge: u.messagesJour,
+              jauge: jour?.messagesJour,
               unite: 'messages',
-              sousTitre: 'Restants : ${_reste(u.messagesJour, 'messages')}',
+              sousTitre: terminee
+                  ? texteNouvelleJournee
+                  : 'Restants : ${_reste(jour?.messagesJour, 'messages')}',
             ),
             JaugeUtilisation(
               key: const ValueKey('detail-jour-tokens'),
               titre: 'Tokens',
-              jauge: u.tokensJour,
+              jauge: jour?.tokensJour,
               unite: 'tokens',
-              sousTitre: 'Restants : ${_reste(u.tokensJour, 'tokens')}',
+              sousTitre: 'Restants : ${_reste(jour?.tokensJour, 'tokens')}',
             ),
-            _Ligne('Prochaine remise à zéro', _instant(u.finJour)),
+            _Ligne('Prochaine remise à zéro', _instant(jour?.finJour)),
           ],
         ),
         const SizedBox(height: 18),
         NoteReglage(
-          texteDonneesAnciennes(service) ??
+          (u == null && service.erreur != null ? texteIndisponible(service.erreur) : null) ??
+              texteDonneesAnciennes(service, maintenant) ??
               'Valeurs calculées par le serveur JARVIS d’après votre abonnement, actualisées automatiquement.',
         ),
       ],

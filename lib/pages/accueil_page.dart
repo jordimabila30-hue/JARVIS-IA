@@ -488,7 +488,16 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
         },
         child: MenuLateral(
           ouvert: ouvert,
+          surOuvrir: _ouvrirMenu,
           surFermer: _fermerMenu,
+          compte: widget.auth,
+          surCompte: () {
+            _fermerMenu();
+            _ouvrirParametres(
+              section: SectionParametres.compte,
+              ouvrirSection: true,
+            );
+          },
           conversationEnCours: ouvert ? _titreConversation : null,
           surAccueil: _fermerMenu,
           surNouvelle: () {
@@ -550,7 +559,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _ouvrirParametres() async {
+  Future<void> _ouvrirParametres({
+    SectionParametres section = SectionParametres.chatVocal,
+    bool ouvrirSection = false,
+  }) async {
     _focus.unfocus();
     // Quitter l'accueil interrompt une démonstration en cours.
     _pim.annulerApercu();
@@ -558,6 +570,8 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       context,
       session: _session,
       formes: _formesPim,
+      section: section,
+      ouvrirSection: ouvrirSection,
       compte: widget.auth,
       api: widget.api,
       surConnexion: widget.surConnexion,
