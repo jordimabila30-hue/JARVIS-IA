@@ -155,7 +155,7 @@ confirmation ou le routage fait échouer respectivement 1, 4 et 8 tests.
 - `ServiceODO.contexte_compte` lit l'état réel de la connexion du compte
   (active / à renouveler). Les outils ne sont proposés que si la connexion
   est active. Sinon, `ServiceODO.note` ajoute au message système une phrase
-  (« connectez / reconnectez Gmail dans Paramètres › Gmail »), sans outil ni
+  (« connectez / reconnectez Gmail dans Paramètres › Outils › Gmail »), sans outil ni
   appel supplémentaire.
 - `Outil.consigne` : consigne partagée par une famille d'outils
   (`CONSIGNE_GMAIL` : faits / interprétations, rien d'inventé, lecture seule),

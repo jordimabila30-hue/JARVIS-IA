@@ -1,5 +1,5 @@
-// Gmail (ODO phase 2) côté application : état de la connexion, page
-// Paramètres › Gmail, ouverture de Google dans le navigateur, et demandes
+// Gmail (ODO phase 2) côté application : état de la connexion (partagé,
+// sans rechargement visible), Paramètres › Outils › Gmail, ouverture de Google dans le navigateur, et demandes
 // « mes mails » envoyées au serveur au lieu d'être interceptées localement.
 // Faux serveur (MockClient) : aucun appel réel, aucun jeton.
 
@@ -15,6 +15,7 @@ import 'package:ia_jarvis/services/conversation/detecteur_intention.dart';
 import 'package:ia_jarvis/services/conversation/moteur_conversation.dart';
 import 'package:ia_jarvis/services/integrations/service_gmail.dart';
 import 'package:ia_jarvis/widgets/integrations/panneau_gmail.dart';
+import 'package:ia_jarvis/widgets/integrations/panneau_outils.dart';
 
 Map<String, dynamic> etat(String statut, {bool configure = true, String? email, String? le}) => {
   'statut': statut,
@@ -128,33 +129,111 @@ void main() {
     });
   });
 
-  group('Page Paramètres › Gmail', () {
-    Future<ServiceGmail> afficher(WidgetTester t, Map<String, dynamic> reponse) async {
+  group('État partagé, sans rechargement visible', () {
+    test('lectures partagées, pas de relecture récente, aucune notification inutile', () async {
+      final s = Serveur()..reponse = etat('connecte', email: 'pepper@gmail.com');
+      var maintenant = DateTime(2026, 10, 18, 12);
+      final g = ServiceGmail(s.api(), ouvrir: (_) async => true, horloge: () => maintenant);
+      var notes = 0;
+      g.addListener(() => notes++);
+      await Future.wait([g.actualiser(), g.actualiser(), g.actualiser()]);
+      int lectures() => s.requetes.where((r) => r.method == 'GET').length;
+      expect(lectures(), 1);                                   // une seule lecture partagée
+      expect((g.fiable, notes), (true, 2));                    // 1re lecture : chargement puis état
+      await g.actualiser();
+      expect(lectures(), 1);                                   // < 30 s : rien
+      maintenant = maintenant.add(const Duration(seconds: 31));
+      await g.actualiser();
+      expect((lectures(), notes), (2, 2));                     // relu, identique : aucun redessin
+      g.dispose();
+    });
+
+    test('échec : dernier état gardé, signalé non fiable', () async {
+      final s = Serveur()..reponse = etat('connecte', email: 'pepper@gmail.com');
+      var panne = false;
+      final api = ApiJarvis(
+        adresse: Uri.parse('http://test'),
+        jeton: () async => 'jeton-jarvis',
+        client: MockClient((r) async => panne
+            ? throw http.ClientException('hors ligne')
+            : http.Response(jsonEncode(s.reponse), 200, headers: {'content-type': 'application/json'})),
+      );
+      final g = ServiceGmail(api, ouvrir: (_) async => true);
+      await g.actualiser();
+      panne = true;
+      await g.actualiser(force: true);
+      expect((g.etat!.statut, g.etat!.email, g.fiable), (StatutGmail.connecte, 'pepper@gmail.com', false));
+      g.dispose();
+    });
+
+    test('changement de compte JARVIS : rien de l’ancien compte, même une lecture en vol', () async {
+      final s = Serveur()..reponse = etat('connecte', email: 'pepper@gmail.com');
+      final g = ServiceGmail(s.api(), ouvrir: (_) async => true);
+      final enVol = g.actualiser();
+      g.changerCompte();
+      await enVol;
+      expect((g.etat, g.miseAJour, g.chargement), (null, null, false));
+      g.dispose();
+    });
+
+    test('lecture discrète après la connexion au compte', () async {
+      final s = Serveur()..reponse = etat('connecte', email: 'pepper@gmail.com');
+      final g = ServiceGmail(s.api(), ouvrir: (_) async => true);
+      g.lireBientot(const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(g.etat!.email, 'pepper@gmail.com');
+      g.dispose();
+    });
+  });
+
+  group('Paramètres › Outils › Gmail', () {
+    Future<ServiceGmail> afficher(WidgetTester t, Map<String, dynamic> reponse, {Widget Function(ServiceGmail)? page}) async {
       final s = Serveur()..reponse = reponse;
       final g = ServiceGmail(s.api(), ouvrir: (_) async => true);
-      await t.pumpWidget(cadre(PanneauGmail(service: g)));
+      await t.pumpWidget(cadre(page?.call(g) ?? PanneauGmail(service: g)));
       await t.runAsync(() => g.actualiser());
       await t.pumpAndSettle();
       return g;
     }
 
-    testWidgets('aucun compte : connecter, autorisations expliquées', (t) async {
-      final g = await afficher(t, etat('non_connecte'));
-      expect(find.text('Connecter Gmail'), findsOneWidget);
-      expect(find.textContaining('Connectez le compte Google que vous souhaitez utiliser avec JARVIS'), findsOneWidget);
-      expect(find.text('Choisir un compte Google'), findsOneWidget);
-      expect(find.textContaining('Lecture seule'), findsOneWidget);
-      expect(find.textContaining('mot de passe Google n’est jamais demandé'), findsOneWidget);
-      expect(find.byType(TextField), findsNothing);              // aucun champ de mot de passe
+    testWidgets('Outils : Gmail, son statut, ouverture', (t) async {
+      OutilJarvis? ouvert;
+      final g = await afficher(t, etat('connecte', email: 'pepper@gmail.com'),
+          page: (g) => PanneauOutils(gmail: g, surChoix: (o) => ouvert = o));
+      expect(find.text('Gmail'), findsOneWidget);
+      expect(find.text('Connecté'), findsOneWidget);
+      expect(find.text('Agenda'), findsNothing);                 // aucun outil fictif
+      await t.tap(find.text('Gmail'));
+      expect(ouvert, OutilJarvis.gmail);
+      g.etat = const EtatGmail(statut: StatutGmail.nonConnecte);
+      g.notifyListeners();
+      await t.pump();
+      expect(find.text('Déconnecté'), findsOneWidget);           // même état que la page Gmail
       await t.pumpWidget(const SizedBox());
       g.dispose();
     });
 
-    testWidgets('connecté : adresse, lecture seule, changer, déconnecter', (t) async {
+    testWidgets('déconnecté : invitation courte, aucun champ de mot de passe', (t) async {
+      final g = await afficher(t, etat('non_connecte'));
+      expect(find.text('Déconnecté'), findsOneWidget);
+      expect(find.text('Connectez le compte Google que vous souhaitez utiliser avec JARVIS.'), findsOneWidget);
+      expect(find.text('Choisir un compte Google'), findsOneWidget);
+      expect(find.text('Connexion sécurisée via Google.'), findsOneWidget);
+      expect(find.text('AUTORISATIONS'), findsNothing);           // plus de long encadré
+      expect(find.byType(TextField), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      g.dispose();
+    });
+
+    testWidgets('connecté : compte, lecture seule, « Gérer la connexion » regroupe les actions', (t) async {
       final g = await afficher(t, etat('connecte', email: 'pepper@gmail.com'));
-      expect(find.text('Gmail connecté'), findsOneWidget);
+      expect(find.text('Connecté'), findsOneWidget);
       expect(find.text('pepper@gmail.com'), findsOneWidget);
       expect(find.text('Lecture seule'), findsOneWidget);
+      expect(find.text('Changer de compte'), findsNothing);       // pas affiché en permanence
+      expect(find.text('Déconnecter Gmail'), findsNothing);
+      await t.tap(find.text('Gérer la connexion'));
+      await t.pumpAndSettle();
       expect(find.text('Changer de compte'), findsOneWidget);
       await t.tap(find.text('Déconnecter Gmail'));
       await t.pumpAndSettle();
@@ -166,17 +245,51 @@ void main() {
       g.dispose();
     });
 
+    testWidgets('réouverture : état connu affiché aussitôt, sans chargement', (t) async {
+      final g = await afficher(t, etat('connecte', email: 'pepper@gmail.com'));
+      await t.pumpWidget(const SizedBox());
+      await t.pumpWidget(cadre(PanneauGmail(service: g)));       // première image, sans attendre
+      expect(find.text('pepper@gmail.com'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      g.dispose();
+    });
+
+    testWidgets('premier affichage sans état : neutre et discret, jamais « Connecté »', (t) async {
+      final g = ServiceGmail(Serveur().api(), ouvrir: (_) async => true);
+      await t.pumpWidget(cadre(PanneauGmail(service: g)));
+      expect(find.text('Vérification…'), findsOneWidget);
+      expect(find.text('Connecté'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      g.dispose();
+    });
+
     testWidgets('à renouveler : message et reconnexion', (t) async {
       final g = await afficher(t, etat('a_renouveler', email: 'pepper@gmail.com'));
-      expect(find.text('La connexion Gmail doit être renouvelée.'), findsOneWidget);
+      expect(find.text('À reconnecter'), findsOneWidget);
+      expect(find.text('L’autorisation a expiré ou a été retirée chez Google.'), findsOneWidget);
       expect(find.text('Reconnecter Gmail'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      g.dispose();
+    });
+
+    testWidgets('connexion en cours chez Google', (t) async {
+      final g = await afficher(t, etat('non_connecte'));
+      await t.runAsync(() => g.connecter());
+      await t.pump();
+      expect(find.text('Connexion en cours'), findsOneWidget);
+      expect(find.textContaining('Terminez la connexion chez Google'), findsOneWidget);
+      await t.tap(find.text('Annuler'));
+      await t.pump();
+      expect(g.enAttente, isFalse);
       await t.pumpWidget(const SizedBox());
       g.dispose();
     });
 
     testWidgets('serveur non configuré et sans compte JARVIS', (t) async {
       final g = await afficher(t, etat('non_connecte', configure: false));
-      expect(find.textContaining('pas encore configuré sur ce serveur'), findsOneWidget);
+      expect(find.textContaining('pas encore disponible sur ce serveur'), findsOneWidget);
       expect(find.text('Choisir un compte Google'), findsNothing);
       await t.pumpWidget(cadre(const PanneauGmail(service: null)));
       expect(find.textContaining('Connectez-vous à JARVIS'), findsOneWidget);

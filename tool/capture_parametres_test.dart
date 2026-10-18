@@ -1,9 +1,10 @@
 // Captures des Paramètres (vraies polices) : Chat vocal (langue, voix aux
-// noms simples, diction) et Particules PIM (formes en tuiles), avec des
-// voix comme celles d'Edge.
+// noms simples, diction), Particules PIM (formes en tuiles), avec des
+// voix comme celles d'Edge, et Outils › Gmail (états simulés, faux serveur).
 //
 //   CAPTURE_DIR=chemin flutter test tool/capture_parametres_test.dart
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -11,6 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:ia_jarvis/services/api_jarvis.dart';
+import 'package:ia_jarvis/services/integrations/service_gmail.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/services/microphone_service.dart';
 import 'package:ia_jarvis/services/niveau_micro.dart';
@@ -200,4 +205,103 @@ void main() {
       }
     });
   }
+
+  // Outils › Gmail : états simulés (aucun appel réel). Parcours tapé comme
+  // un utilisateur : Outils, puis Gmail, puis « Gérer la connexion ».
+  for (final (taille, nom, reponse, parcours) in [
+    (const Size(412, 869), 'outils_telephone', _connecte, const ['Outils']),
+    (const Size(412, 869), 'gmail_connecte_telephone', _connecte, const ['Outils', 'Gmail']),
+    (const Size(412, 869), 'gmail_gerer_telephone', _connecte, const ['Outils', 'Gmail', 'Gérer la connexion']),
+    (const Size(412, 869), 'gmail_deconnecte_telephone', _deconnecte, const ['Outils', 'Gmail']),
+    (const Size(360, 640), 'gmail_connecte_petit', _connecte, const ['Outils', 'Gmail']),
+    (const Size(1280, 800), 'outils_ordinateur', _connecte, const <String>[]),
+    (const Size(1280, 800), 'gmail_connecte_ordinateur', _connecte, const ['Gmail']),
+    (const Size(1280, 800), 'gmail_deconnecte_ordinateur', _deconnecte, const ['Gmail']),
+    (const Size(1280, 800), 'gmail_gerer_ordinateur', _connecte, const ['Gmail', 'Gérer la connexion']),
+  ]) {
+    testWidgets(nom, (tester) async {
+      tester.view.physicalSize = taille * 2;
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      final tts = _Tts();
+      final reglages = VoiceSettingsService(
+        tts: tts,
+        stockage: StockageMemoire(),
+        peripheriques: _Micros(),
+        delaiSauvegarde: Duration.zero,
+      );
+      final session = VoiceSession(
+        micro: _Micro(),
+        reconnaissance: _Reco(),
+        voix: tts,
+        niveau: _Niveau(),
+        reglages: reglages,
+      );
+      await reglages.chargerCapacites();
+      final api = ApiJarvis(
+        adresse: Uri.parse('http://test'),
+        jeton: () async => 'jeton',
+        client: MockClient((_) async => http.Response(jsonEncode(reponse), 200,
+            headers: {'content-type': 'application/json; charset=utf-8'})),
+      );
+      final gmail = ServiceGmail(api, ouvrir: (_) async => true);
+      await tester.runAsync(() => gmail.actualiser());
+      final cle = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: cle,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: themeJarvis().copyWith(
+              textTheme: themeJarvis().textTheme.apply(fontFamily: 'Roboto'),
+            ),
+            home: Scaffold(
+              body: FenetreParametres(
+                session: session,
+                formes: PreferencesPimService(stockage: StockageMemoire()),
+                sectionInitiale: SectionParametres.outils,
+                gmail: gmail,
+              ),
+            ),
+          ),
+        ),
+      );
+      Future<void> attendre() async {
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump();
+      }
+      await attendre();
+      for (final etape in parcours) {
+        await tester.tap(find.text(etape).last);
+        await attendre();
+      }
+      if (dossier != null) {
+        final objet =
+            cle.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final image = await objet.toImage(pixelRatio: 1);
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          File(
+            '$dossier/parametres_$nom.png',
+          ).writeAsBytesSync(png!.buffer.asUint8List());
+        });
+      }
+      expect(tester.takeException(), isNull);
+      for (var i = 0; i < 150; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      gmail.dispose();
+    });
+  }
 }
+
+const _connecte = {
+  'statut': 'connecte',
+  'configure': true,
+  'email': 'pepper.potts@gmail.com',
+  'portee': 'lecture_seule',
+};
+const _deconnecte = {'statut': 'non_connecte', 'configure': true};

@@ -42,8 +42,8 @@ CONSIGNE_GMAIL = (
 )
 
 MESSAGES_ERREUR = {
-    "non_connecte": "Gmail n'est pas connecté : l'utilisateur doit le connecter dans Paramètres › Gmail.",
-    "a_renouveler": "La connexion Gmail doit être renouvelée dans Paramètres › Gmail.",
+    "non_connecte": "Gmail n'est pas connecté : l'utilisateur doit le connecter dans Paramètres › Outils › Gmail.",
+    "a_renouveler": "La connexion Gmail doit être renouvelée dans Paramètres › Outils › Gmail.",
     "portee": "L'autorisation de lecture Gmail manque : l'utilisateur doit reconnecter Gmail.",
     "introuvable": "E-mail introuvable (identifiant inconnu ou supprimé).",
     "limite_google": "Gmail limite temporairement les requêtes : réessayer un peu plus tard.",

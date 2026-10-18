@@ -235,7 +235,7 @@ async def test_texte_long_tronque(env):
 
 async def test_non_connecte_ou_permission_retiree(env):
     r = await GmailRechercher(ClientGmail(env.google)).executer({}, ctx())
-    assert r.erreur == "gmail_non_connecte" and "Paramètres › Gmail" in r.contenu
+    assert r.erreur == "gmail_non_connecte" and "Paramètres › Outils › Gmail" in r.contenu
     await connecter(env)
     env.faux.statut_gmail = 403
     r = await GmailRechercher(ClientGmail(env.google)).executer({}, ctx())
@@ -284,7 +284,7 @@ async def test_resume_de_mes_mails_dans_le_chat(env, nom):
 
 
 async def test_gmail_non_connecte_aucun_outil_mais_explication(env):
-    serveur = SERVEURS["groq"](Scenario(textes=["Connecte Gmail dans Paramètres › Gmail."]))
+    serveur = SERVEURS["groq"](Scenario(textes=["Connecte Gmail dans Paramètres › Outils › Gmail."]))
     env.llm = serveur.fournisseur()
     await env.client.post("/api/v1/chat/stream", json={"message": "Résume mes mails"}, headers=jeton(USER))
     await chat.wait_background_tasks()

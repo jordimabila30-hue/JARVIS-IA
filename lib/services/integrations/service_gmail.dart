@@ -33,27 +33,52 @@ String plateformeCourante() {
 /// seulement l'état : après l'ouverture de Google, elle relit l'état toutes
 /// les [intervalleAttente] (au plus [attenteMax]) et au retour au premier
 /// plan, jusqu'à constater le changement.
+///
+/// Un seul état en mémoire, partagé par Outils et la page Gmail : ouvrir
+/// une page affiche aussitôt le dernier état connu, puis le relit en
+/// silence. Lecture en cours partagée ; aucune relecture à moins de
+/// [intervalleMin] (sauf `force`) ; aucune notification si rien ne change ;
+/// un échec garde le dernier état ([fiable] faux). Aucune relecture
+/// périodique hors de l'attente de Google. Lu discrètement après la
+/// connexion au compte JARVIS ([lireBientot]), jamais enregistré sur
+/// l'appareil : « Connecté » ne s'affiche que d'après le serveur.
 class ServiceGmail extends ChangeNotifier with WidgetsBindingObserver {
   ServiceGmail(
     this._api, {
     OuvrirUrl? ouvrir,
     String? plateforme,
+    DateTime Function()? horloge,
     this.intervalleAttente = const Duration(seconds: 3),
     this.attenteMax = const Duration(minutes: 3),
+    this.intervalleMin = const Duration(seconds: 30),
   }) : _ouvrir = ouvrir ?? ouvrirDansLeNavigateur,
-       _plateforme = plateforme ?? plateformeCourante() {
+       _plateforme = plateforme ?? plateformeCourante(),
+       _horloge = horloge ?? DateTime.now {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final ApiJarvis _api;
   final OuvrirUrl _ouvrir;
   final String _plateforme;
+  final DateTime Function() _horloge;
   final Duration intervalleAttente;
   final Duration attenteMax;
+  final Duration intervalleMin;
 
+  /// Dernier état lu au serveur pour ce compte JARVIS (null : jamais lu).
   EtatGmail? etat;
+
+  /// Échec de la dernière lecture ([etat] garde la précédente).
   ErreurApi? erreur;
+
+  /// Première lecture en cours (aucun état connu).
   bool chargement = false;
+
+  /// Dernière lecture réussie.
+  DateTime? miseAJour;
+
+  /// L'état affiché vient de la dernière lecture, réussie.
+  bool get fiable => etat != null && erreur == null;
 
   /// Google est ouvert dans le navigateur : l'application attend le retour.
   bool enAttente = false;
@@ -66,25 +91,64 @@ class ServiceGmail extends ChangeNotifier with WidgetsBindingObserver {
   EtatGmail? _avant;
   bool _ferme = false;
   int _compte = 0;
+  Future<void>? _lecture;
+  Timer? _differe;
 
-  Future<void> actualiser() async {
+  /// Relit l'état (rien si une lecture est en cours ou a réussi il y a
+  /// moins de [intervalleMin], sauf [force]).
+  Future<void> actualiser({bool force = false}) async {
     if (_ferme) return;
+    final enCours = _lecture;
+    if (enCours != null) {
+      await enCours;
+      if (!force) return;
+    }
+    final derniere = miseAJour;
+    if (!force && erreur == null && derniere != null &&
+        _horloge().difference(derniere) < intervalleMin) {
+      return;
+    }
+    final lecture = _lire();
+    _lecture = lecture;
+    try {
+      await lecture;
+    } finally {
+      if (identical(_lecture, lecture)) _lecture = null;
+    }
+  }
+
+  /// Lecture discrète peu après l'ouverture du compte JARVIS : l'état est
+  /// connu avant qu'Outils ou Gmail ne s'ouvre, sans gêner le démarrage.
+  void lireBientot([Duration delai = const Duration(seconds: 3)]) {
+    _differe?.cancel();
+    _differe = Timer(delai, actualiser);
+  }
+
+  Future<void> _lire() async {
     final compte = _compte;
-    final premiere = etat == null;
-    chargement = true;
-    if (premiere) notifyListeners();
+    if (etat == null && !chargement) {
+      chargement = true;
+      notifyListeners();
+    }
     final r = await _api.etatGmail();
     if (_ferme || compte != _compte) return;
+    var change = chargement;
     chargement = false;
     switch (r) {
       case SuccesApi(:final valeur):
+        miseAJour = _horloge();
+        change = change || valeur != etat || erreur != null;
         etat = valeur;
         erreur = null;
-        if (enAttente && _change(valeur)) _terminerAttente();
+        if (enAttente && _change(valeur)) {
+          _terminerAttente();
+          change = true;
+        }
       case EchecApi(:final type):
+        change = change || erreur != type;
         erreur = type;
     }
-    notifyListeners();
+    if (change) notifyListeners();
   }
 
   bool _change(EtatGmail neuf) {
@@ -129,7 +193,7 @@ class ServiceGmail extends ChangeNotifier with WidgetsBindingObserver {
             notifyListeners();
             return;
           }
-          actualiser();
+          actualiser(force: true);
         });
         notifyListeners();
     }
@@ -167,21 +231,32 @@ class ServiceGmail extends ChangeNotifier with WidgetsBindingObserver {
   void changerCompte() {
     _compte++;
     _terminerAttente();
+    _differe?.cancel();
+    _lecture = null;
     etat = null;
     erreur = null;
     information = null;
+    chargement = false;
+    miseAJour = null;
     notifyListeners();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Retour depuis le navigateur (Windows, Web) : état relu aussitôt.
-    if (state == AppLifecycleState.resumed && (enAttente || etat != null)) actualiser();
+    if (state != AppLifecycleState.resumed) return;
+    // Retour depuis le navigateur (Windows, Web) : état relu aussitôt ;
+    // sinon relecture discrète, au plus toutes les [intervalleMin].
+    if (enAttente) {
+      actualiser(force: true);
+    } else if (etat != null) {
+      actualiser();
+    }
   }
 
   @override
   void dispose() {
     _ferme = true;
+    _differe?.cancel();
     _terminerAttente();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

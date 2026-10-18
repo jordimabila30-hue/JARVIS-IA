@@ -123,7 +123,7 @@ class AccueilPage extends StatefulWidget {
   /// Paramètres ; null : sans compte).
   final ServiceUtilisation? utilisation;
 
-  /// Connexion Gmail du compte (Paramètres › Gmail) ; null sans compte.
+  /// Connexion Gmail du compte (Paramètres › Outils › Gmail) ; null sans compte.
   final ServiceGmail? gmail;
 
   /// Après un échec d'enregistrement d'une pièce jointe.

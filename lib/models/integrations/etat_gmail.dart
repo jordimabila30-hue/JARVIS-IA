@@ -41,4 +41,16 @@ class EtatGmail {
       connecteLe: le is String ? DateTime.tryParse(le) : null,
     );
   }
+
+  /// Égalité de valeur : une relecture identique ne redessine rien.
+  @override
+  bool operator ==(Object other) =>
+      other is EtatGmail &&
+      other.statut == statut &&
+      other.email == email &&
+      other.lectureSeule == lectureSeule &&
+      other.connecteLe == connecteLe;
+
+  @override
+  int get hashCode => Object.hash(statut, email, lectureSeule, connecteLe);
 }

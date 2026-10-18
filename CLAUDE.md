@@ -189,13 +189,13 @@ lib/
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
-│   ├── integrations/                 # Paramètres › Gmail (PanneauGmail : connecter, changer de compte, déconnecter, à renouveler)
+│   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
 │   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
-│   ├── integrations/                 # ServiceGmail : état de la connexion Gmail, ouverture de Google (navigateur du système), attente du retour
+│   ├── integrations/                 # ServiceGmail : état Gmail partagé en mémoire (lecture partagée, ≥ 30 s, silencieuse), ouverture de Google (navigateur du système), attente du retour
 │   ├── utilisation/                  # ServiceUtilisation : lit /me/quota, quand relire (ouverture, après IA, premier plan, 30 s visible, compte)
 │   ├── microphone_service.dart       # permission micro (Android / iOS)
 │   ├── niveau_micro*.dart            # volume du micro sur le Web (Web Audio)
@@ -650,7 +650,7 @@ entre les tours ; actions sensibles confirmées par `POST
 vérification : `python -m scripts.verifier_routage`).
 
 Gmail (ODO phase 2, doc `docs/backend/GMAIL.md`) : lecture seule. Paramètres ›
-Gmail → navigateur du système → Google (choix du compte, gmail.readonly) →
+Outils › Gmail → navigateur du système → Google (choix du compte, gmail.readonly) →
 retour sur le serveur (`/api/v1/integrations/gmail/retour`, state + PKCE).
 Jeton de rafraîchissement dans Supabase Vault (`external_connections`,
 fonctions backend seulement) ; jamais dans Flutter. Compétences ODO

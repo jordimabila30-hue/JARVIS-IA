@@ -12,7 +12,7 @@ automatiquement.
 ## Parcours
 
 ```text
-Paramètres › Gmail › « Choisir un compte Google »
+Paramètres › Outils › Gmail › « Choisir un compte Google »
   Flutter  POST /api/v1/integrations/gmail/connexion (JWT) → URL Google
   Navigateur du système : choix du compte Google (peut différer du compte JARVIS), consentement gmail.readonly
   Google   → GET /api/v1/integrations/gmail/retour?code&state  (serveur JARVIS)
@@ -36,7 +36,8 @@ Chat / vocal / JARVIS Touch : « Résume mes derniers mails »
 | `backend/app/api/v1/integrations.py` | routes `/api/v1/integrations/gmail` (état, connexion, retour, déconnexion) |
 | `backend/app/odo/service.py` | connexions réelles du compte dans le contexte ; note « connectez Gmail » si non connecté |
 | `lib/services/integrations/service_gmail.dart`, `lib/models/integrations/etat_gmail.dart` | état, connexion (navigateur du système, `url_launcher`), attente du retour, déconnexion |
-| `lib/widgets/integrations/panneau_gmail.dart` | Paramètres › Gmail (4 états + non configuré) |
+| `lib/widgets/integrations/panneau_outils.dart` | Paramètres › Outils : `OutilJarvis` (un outil = une valeur), ligne logo / nom / statut / chevron |
+| `lib/widgets/integrations/panneau_gmail.dart` | Paramètres › Outils › Gmail : statut, compte, lecture seule, « Gérer la connexion » (changer de compte, déconnecter confirmé) ; `statutGmail` partagé avec Outils |
 | `lib/services/conversation/detecteur_intention.dart` (`concerneMesEmails`), `moteur_conversation.dart` | « mes mails » va au serveur au lieu de « colle la conversation » |
 | `android/app/src/main/AndroidManifest.xml` | lien `jarvis://gmail` (retour au premier plan), navigation Flutter par lien désactivée |
 
@@ -90,7 +91,7 @@ Chat / vocal / JARVIS Touch : « Résume mes derniers mails »
 | `GOOGLE_REDIRECT_URI` | adresse de retour exacte, identique à celle déclarée chez Google |
 | `GMAIL_MAX_RESULTATS`, `GMAIL_CORPS_MAX_CARACTERES`, `GMAIL_FIL_MAX_MESSAGES`, `GMAIL_DELAI` | bornes (10, 4 000, 8, 10 s) |
 
-Sans ces identifiants, Gmail est « non configuré » : la page le dit et aucun outil n'est proposé. Les compétences Gmail ne sont proposées que si `ODO_ACTIF=true`, qui reste à `false` en production.
+Sans ces identifiants, Gmail est « non configuré » : la page le dit et aucun outil n'est proposé. Les compétences Gmail ne sont proposées que si `ODO_ACTIF=true`, activé en production (8000) depuis le 2026-10-18 (`DEPLOIEMENT_ODO_GMAIL.md`).
 
 ## Guide Google Cloud Console (à faire par le propriétaire du projet)
 
@@ -131,6 +132,14 @@ Aucune ressource payante n'est nécessaire : l'API Gmail est gratuite dans ses q
   - **évaluation de sécurité annuelle** par un tiers agréé (CASA), éventuellement payante ;
   - respect de la *Google API Services User Data Policy* (utilisation limitée).
   - Délais : de plusieurs semaines à plusieurs mois.
+
+## Interface (2026-10-18 : Paramètres › Outils › Gmail)
+
+- **Outils** : liste des outils réellement disponibles (Gmail seul ; aucun outil fictif). Statut lu sur le même `ServiceGmail` que la page Gmail : Connecté, Déconnecté, À reconnecter, Indisponible, Connexion en cours, Vérification…, Non vérifié.
+- **Gmail** : bloc court, centré (largeur max 560, centré aussi verticalement) : logo + statut ; compte Google + « Lecture seule » ; « Gérer la connexion » (feuille sur téléphone, petite fenêtre ailleurs) avec Changer de compte / Déconnecter Gmail (confirmation conservée). Les explications détaillées sont dans cette feuille.
+- **Sans chargement visible** : `ServiceGmail` garde l'état en mémoire (jamais sur l'appareil), lecture partagée, pas de relecture à moins de 30 s, aucune notification si rien ne change, dernier état gardé en cas d'échec (« Dernier état connu : vérification impossible »), lecture discrète 3 s après la connexion au compte JARVIS (`lireBientot`), tout effacé au changement de compte. Aucune relecture périodique hors de l'attente de Google.
+- ODO renvoie l'utilisateur vers « Paramètres › Outils › Gmail ».
+- Déploiement sur le backend principal : `DEPLOIEMENT_ODO_GMAIL.md`.
 
 ## Tests
 

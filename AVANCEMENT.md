@@ -1536,3 +1536,37 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - Phase 3B : envoi explicite de la capture validée (`CaptureTouch.fichierValide`) à l'analyse IA.
 
+
+## 2026-10-18 — Paramètres › Outils › Gmail (interface) et préparation du déploiement ODO/Gmail
+
+### Fait
+- **Navigation** : l'entrée « Gmail » des Paramètres devient « Outils » (« Gérer les services connectés à JARVIS ») → page Outils → Gmail. Retour Android / Échap : Gmail → Outils → Paramètres.
+- **Outils** (`panneau_outils.dart`, `OutilJarvis`) : Gmail seul (aucun Agenda / Documents fictif), logo, nom, statut, chevron ; statut du même `ServiceGmail` que la page Gmail.
+- **Gmail** (`panneau_gmail.dart` réécrit) : en-tête logo + statut ; compte Google, « Lecture seule » ; « Gérer la connexion » regroupe Changer de compte / Déconnecter Gmail (confirmation conservée) ; déconnecté : invitation courte + « Choisir un compte Google » (OAuth existant) ; états À reconnecter, Indisponible, Connexion en cours, Vérification…, Non vérifié. Encadré « Autorisations » retiré de la page.
+- **Centrage** : colonne de 560 au plus, centrée horizontalement ; la page Gmail est aussi centrée verticalement (défilement si l'écran est trop petit). Correction demandée après une photo du S10+.
+- **Sans chargement visible** : `ServiceGmail` partage les lectures, ne relit pas avant 30 s, ne notifie que si l'état change, garde le dernier état en cas d'échec (note discrète), lit l'état 3 s après la connexion au compte (`lireBientot`), efface tout au changement de compte ; rien sur l'appareil, jamais « Connecté » sans réponse du serveur.
+- **ODO** : messages « connectez Gmail dans Paramètres › Outils › Gmail » (2 phrases, liées à la nouvelle navigation).
+- **Déploiement préparé, non exécuté** : `docs/backend/DEPLOIEMENT_ODO_GMAIL.md` (état, plan, sauvegardes, retour arrière, Google Cloud). Image candidate `backend-api:odo-gmail-prod` construite (nouveau tag ; `latest` et la production intacts).
+- Point de restauration : branche locale `sauvegarde/avant-outils-gmail` (`e495ef4`).
+
+### Tests
+- Flutter : 801 réussis (suite complète) ; `gmail_test` : 19 (dont lectures partagées, échec réseau, changement de compte, réouverture sans chargement, Outils).
+- Captures (`tool/capture_parametres_test.dart`, états simulés) : Outils, Gmail connecté / déconnecté / « Gérer la connexion », téléphone 412 et 360, ordinateur 1280.
+- Backend (image candidate) : 506 réussis, 1 ignoré (un test de durée sensible à la charge, réussi seul).
+- **Réel, S10+ (instance de test 8001, vrai compte)** : Paramètres → Outils (« Connecté » affiché aussitôt) → Gmail (centré, adresse réelle, données affichées 0,2 s après l'appui à la réouverture), feuille « Gérer la connexion » ouverte puis refermée (rien changé), retour Android.
+- Non vérifié en réel : Windows et Chrome Web (captures ordinateur seulement), changement de compte JARVIS (test simulé), redémarrage (lecture 3 s après connexion, test simulé). Aucun appel LLM.
+
+### État
+- Production `jarvis-api` (8000) **inchangée** : image `954d097068c5`, sans ODO ni Gmail ; l'appli y affichera « Non vérifié » pour Gmail tant que le déploiement n'est pas fait.
+- Instance de test `jarvis-api-gmail` (8001) inchangée, toujours en marche.
+
+### Prochaine étape
+- Accord de l'utilisateur pour exécuter `DEPLOIEMENT_ODO_GMAIL.md`.
+
+## 2026-10-18 — ODO et Gmail déployés sur la production (8000)
+
+- Fait avec l'accord de l'utilisateur, selon `docs/backend/DEPLOIEMENT_ODO_GMAIL.md` (section 9) : image `odo-gmail-prod` (`88cb8709a1e9`), `ODO_ACTIF=true`, `GOOGLE_REDIRECT_URI` sur 8000 ; seul `jarvis-api` recréé (Redis et 8001 intacts).
+- Vérifié : santé ok, routes Gmail présentes, S10+ sur 8000 : Gmail « Connecté » sans reconnexion (connexion Vault conservée), une seule lecture d'état.
+- Retour arrière prêt : `docker tag backend-api:avant-odo-gmail backend-api:latest` + `.env.sauvegarde-20261018` + `docker compose up -d --no-deps --no-build api`.
+- Instance de test `jarvis-api-gmail` (8001) toujours en marche (à arrêter seulement sur demande).
+- Prochaine étape : essai réel « Résume mes mails » sur 8000 (facturable, sur accord) ; qualité des résumés (chantier séparé).

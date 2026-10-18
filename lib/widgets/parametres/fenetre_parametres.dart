@@ -13,6 +13,7 @@ import '../../services/preferences_pim_service.dart';
 import '../../services/integrations/service_gmail.dart';
 import '../../services/utilisation/service_utilisation.dart';
 import '../integrations/panneau_gmail.dart';
+import '../integrations/panneau_outils.dart';
 import '../utilisation/panneau_utilisation.dart';
 import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
@@ -25,7 +26,11 @@ import 'panneau_general.dart';
 enum SectionParametres {
   general('Général', Icons.tune_rounded),
   utilisation('Utilisation', Icons.data_usage_rounded),
-  gmail('Gmail', Icons.mail_outline_rounded),
+  outils(
+    'Outils',
+    Icons.build_outlined,
+    'Gérer les services connectés à JARVIS',
+  ),
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
   apparence('Apparence', Icons.palette_outlined),
@@ -34,10 +39,13 @@ enum SectionParametres {
   /// Ouverte par la carte du compte, en bas de la navigation.
   compte('Compte', Icons.person_outline_rounded);
 
-  const SectionParametres(this.libelle, this.icone);
+  const SectionParametres(this.libelle, this.icone, [this.description]);
 
   final String libelle;
   final IconData icone;
+
+  /// Sous-titre de l'entrée sur téléphone (Outils seulement).
+  final String? description;
 }
 
 /// Compte affiché en bas de la navigation. Aucune connexion n'existe
@@ -175,6 +183,9 @@ class _FenetreParametresState extends State<FenetreParametres> {
   /// Téléphone : vrai quand une section est ouverte (sinon la liste).
   bool _dansSection = false;
 
+  /// Outils : outil ouvert (null : la liste des outils).
+  OutilJarvis? _outil;
+
   @override
   void initState() {
     super.initState();
@@ -185,7 +196,19 @@ class _FenetreParametresState extends State<FenetreParametres> {
 
   void _choisir(SectionParametres s) => setState(() {
     _section = s;
+    _outil = null;
     _dansSection = true;
+  });
+
+  void _ouvrirOutil(OutilJarvis? o) => setState(() => _outil = o);
+
+  /// Retour d'un niveau : outil → Outils → liste (téléphone).
+  void _retour() => setState(() {
+    if (_outil != null) {
+      _outil = null;
+    } else {
+      _dansSection = false;
+    }
   });
 
   @override
@@ -195,8 +218,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (compact && _dansSection) {
-            setState(() => _dansSection = false);
+          if (_outil != null || (compact && _dansSection)) {
+            _retour();
           } else {
             _fermer();
           }
@@ -251,7 +274,10 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           width: largeurNav,
                           child: _Navigation(
                             section: _section,
-                            surChoix: (s) => setState(() => _section = s),
+                            surChoix: (s) => setState(() {
+                              _section = s;
+                              _outil = null;
+                            }),
                             compte: widget.compte,
                           ),
                         ),
@@ -266,6 +292,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             consentement: widget.consentement,
                             utilisation: widget.utilisation,
                             gmail: widget.gmail,
+                            outil: _outil,
+                            surOutil: _ouvrirOutil,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -293,7 +321,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
       // Retour (Android, Échap) : d'abord revenir à la liste.
       canPop: !_dansSection,
       onPopInvokedWithResult: (aFerme, _) {
-        if (!aFerme && _dansSection) setState(() => _dansSection = false);
+        if (!aFerme && _dansSection) _retour();
       },
       child: Material(
         color: CouleursJarvis.ivoire,
@@ -302,12 +330,13 @@ class _FenetreParametresState extends State<FenetreParametres> {
             duration: const Duration(milliseconds: 220),
             child: _dansSection
                 ? Column(
-                    key: ValueKey(_section),
+                    key: ValueKey((_section, _outil)),
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _EnteteMobile(
-                        titre: _section.libelle,
-                        surRetour: () => setState(() => _dansSection = false),
+                        titre: _outil?.nom ?? _section.libelle,
+                        surRetour: _retour,
+                        infoRetour: _outil != null ? 'Retour aux outils' : null,
                         surFermer: _fermer,
                       ),
                       Expanded(
@@ -321,6 +350,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           consentement: widget.consentement,
                           utilisation: widget.utilisation,
                           gmail: widget.gmail,
+                          outil: _outil,
+                          surOutil: _ouvrirOutil,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -373,11 +404,13 @@ class _EnteteMobile extends StatelessWidget {
     required this.titre,
     required this.surFermer,
     this.surRetour,
+    this.infoRetour,
   });
 
   final String titre;
   final VoidCallback surFermer;
   final VoidCallback? surRetour;
+  final String? infoRetour;
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +420,7 @@ class _EnteteMobile extends StatelessWidget {
         children: [
           if (surRetour != null)
             IconButton(
-              tooltip: 'Retour aux paramètres',
+              tooltip: infoRetour ?? 'Retour aux paramètres',
               onPressed: surRetour,
               icon: const Icon(Icons.arrow_back_rounded),
               style: IconButton.styleFrom(
@@ -543,14 +576,31 @@ class _EntreeNavigation extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      section.libelle,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: grand ? 15.5 : 14,
-                        fontWeight: choisie ? FontWeight.w600 : FontWeight.w400,
-                        color: couleur,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          section.libelle,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: grand ? 15.5 : 14,
+                            fontWeight: choisie
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: couleur,
+                          ),
+                        ),
+                        if (grand && section.description != null)
+                          Text(
+                            section.description!,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: CouleursJarvis.texteSecondaire,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   if (grand)
@@ -695,10 +745,16 @@ class _Contenu extends StatelessWidget {
     this.consentement,
     this.utilisation,
     this.gmail,
+    this.outil,
+    this.surOutil,
     this.avecTitre = true,
   });
 
   final SectionParametres section;
+
+  /// Outils : outil ouvert (null : la liste) et navigation entre les deux.
+  final OutilJarvis? outil;
+  final ValueChanged<OutilJarvis?>? surOutil;
   final ServiceUtilisation? utilisation;
   final ServiceGmail? gmail;
   final ConsentementAnalyse? consentement;
@@ -712,72 +768,141 @@ class _Contenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      key: PageStorageKey(section),
-      padding: EdgeInsets.fromLTRB(marge, avecTitre ? 34 : 8, marge, marge + 8),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (avecTitre) ...[
-                const Text(
-                  'Paramètres',
-                  style: TextStyle(
-                    fontFamily: policeAffichage,
-                    fontSize: 27,
-                    fontWeight: FontWeight.w300,
-                    color: CouleursJarvis.texte,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      section.libelle,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: CouleursJarvis.texteSecondaire,
+    // Outils : colonne plus étroite, centrée dans la place disponible.
+    final outils = section == SectionParametres.outils;
+    // Page d'un outil : bloc centré aussi verticalement quand il tient
+    // dans l'écran (défilement sinon).
+    final centre = outils && outil != null;
+    final marges = EdgeInsets.fromLTRB(
+      marge,
+      avecTitre ? 34 : 8,
+      marge,
+      marge + 8,
+    );
+    return LayoutBuilder(
+      builder: (context, c) => SingleChildScrollView(
+        key: PageStorageKey((section, outil)),
+        padding: marges,
+        child: Align(
+          alignment: outils ? Alignment.topCenter : Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: outils ? 560 : 680,
+              minHeight: centre
+                  ? (c.maxHeight - marges.vertical).clamp(0, double.infinity)
+                  : 0,
+            ),
+            child: _Hauteur(
+              active: centre,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (avecTitre) ...[
+                    const Text(
+                      'Paramètres',
+                      style: TextStyle(
+                        fontFamily: policeAffichage,
+                        fontSize: 27,
+                        fontWeight: FontWeight.w300,
+                        color: CouleursJarvis.texte,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    if (section == SectionParametres.chatVocal)
-                      _Enregistre(session: session),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (outils && outil != null) ...[
+                          _RetourOutils(surRetour: () => surOutil?.call(null)),
+                          const SizedBox(width: 6),
+                        ],
+                        Text(
+                          outil?.nom ?? section.libelle,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: CouleursJarvis.texteSecondaire,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        if (section == SectionParametres.chatVocal)
+                          _Enregistre(session: session),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                  ] else if (section == SectionParametres.chatVocal) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _Enregistre(session: session),
+                    ),
+                    const SizedBox(height: 6),
                   ],
-                ),
-                const SizedBox(height: 28),
-              ] else if (section == SectionParametres.chatVocal) ...[
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _Enregistre(session: session),
-                ),
-                const SizedBox(height: 6),
-              ],
-              switch (section) {
-                SectionParametres.general => const PanneauGeneral(),
-                SectionParametres.utilisation => PanneauUtilisation(service: utilisation),
-                SectionParametres.gmail => PanneauGmail(service: gmail),
-                SectionParametres.chatVocal => PanneauChatVocal(
-                  session: session,
-                ),
-                SectionParametres.particules => _FormePrincipale(
-                  formes: formes,
-                ),
-                SectionParametres.confidentialite => PanneauConfidentialite(
-                  consentement: consentement,
-                ),
-                SectionParametres.compte => PanneauCompte(
-                  compte: compte,
-                  api: api,
-                  surConnexion: surConnexion,
-                ),
-                _ => _SectionAVenir(section: section),
-              },
-            ],
+                  switch (section) {
+                    SectionParametres.general => const PanneauGeneral(),
+                    SectionParametres.utilisation => PanneauUtilisation(
+                      service: utilisation,
+                    ),
+                    SectionParametres.outils => switch (outil) {
+                      null => PanneauOutils(
+                        gmail: gmail,
+                        surChoix: (o) => surOutil?.call(o),
+                      ),
+                      OutilJarvis.gmail => Expanded(
+                        child: Center(child: PanneauGmail(service: gmail)),
+                      ),
+                    },
+                    SectionParametres.chatVocal => PanneauChatVocal(
+                      session: session,
+                    ),
+                    SectionParametres.particules => _FormePrincipale(
+                      formes: formes,
+                    ),
+                    SectionParametres.confidentialite => PanneauConfidentialite(
+                      consentement: consentement,
+                    ),
+                    SectionParametres.compte => PanneauCompte(
+                      compte: compte,
+                      api: api,
+                      surConnexion: surConnexion,
+                    ),
+                    _ => _SectionAVenir(section: section),
+                  },
+                ],
+              ),
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hauteur au moins égale à l'espace visible ([active]) : l'enfant
+/// `Expanded` de la colonne peut alors centrer son contenu.
+class _Hauteur extends StatelessWidget {
+  const _Hauteur({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      active ? IntrinsicHeight(child: child) : child;
+}
+
+/// Ordinateur : « ‹ Outils » devant le nom de l'outil ouvert.
+class _RetourOutils extends StatelessWidget {
+  const _RetourOutils({required this.surRetour});
+
+  final VoidCallback surRetour;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: surRetour,
+      icon: const Icon(Icons.arrow_back_rounded, size: 17),
+      label: const Text('Outils', style: TextStyle(fontSize: 15)),
+      style: TextButton.styleFrom(
+        foregroundColor: CouleursJarvis.signal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(0, 34),
       ),
     );
   }
@@ -864,7 +989,7 @@ class _SectionAVenir extends StatelessWidget {
       ),
       SectionParametres.confidentialite ||
       SectionParametres.utilisation ||
-      SectionParametres.gmail ||
+      SectionParametres.outils ||
       SectionParametres.chatVocal ||
       SectionParametres.particules ||
       SectionParametres.compte => ('', const []),

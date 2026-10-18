@@ -94,11 +94,11 @@ class ServiceODO:
             nom = NOMS_CONNEXIONS.get(c, c)
             if c in contexte.a_renouveler:
                 notes.append(f"La connexion {nom} de l'utilisateur doit être renouvelée : s'il demande ses "
-                             f"e-mails, dis-lui simplement de reconnecter {nom} dans Paramètres › {nom}. "
+                             f"e-mails, dis-lui simplement de reconnecter {nom} dans Paramètres › Outils › {nom}. "
                              "N'invente aucun e-mail.")
             else:
                 notes.append(f"{nom} n'est pas connecté pour ce compte : si l'utilisateur demande ses e-mails, "
-                             f"dis-lui simplement de connecter {nom} dans Paramètres › {nom}. N'invente aucun e-mail.")
+                             f"dis-lui simplement de connecter {nom} dans Paramètres › Outils › {nom}. N'invente aucun e-mail.")
         return "\n".join(notes) or None
 
     def execution(self, llm: FournisseurLLM, contexte: ContexteOutil,

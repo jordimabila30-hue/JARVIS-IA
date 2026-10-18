@@ -101,6 +101,8 @@ class _JarvisAppState extends State<JarvisApp> {
       _compteUtilisation = compte;
       _utilisation.changerCompte();
       _gmail.changerCompte();
+      // État Gmail connu avant l'ouverture d'Outils, sans gêner l'accueil.
+      if (compte != null) _gmail.lireBientot();
     }
     final d = _destination;
     if (d == null) return;

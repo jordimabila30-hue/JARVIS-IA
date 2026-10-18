@@ -209,7 +209,7 @@ class MoteurConversationLocal implements MoteurConversation {
   /// Demande sur les e-mails sans serveur (JARVIS ouvert sans compte).
   static const emailsSansServeur =
       'Pour consulter vos e-mails, connectez-vous à JARVIS puis reliez votre '
-      'compte dans Paramètres › Gmail.';
+      'compte dans Paramètres › Outils › Gmail.';
 
   /// Pièce jointe enregistrée, mais aucune IA branchée : rien d'analysé.
   static const analyseIndisponible =
