@@ -1,8 +1,11 @@
 package com.example.ia_jarvis.touch
 
 import android.animation.ValueAnimator
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
@@ -19,13 +22,18 @@ import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.widget.Toast
 import com.example.ia_jarvis.MainActivity
+import com.example.ia_jarvis.touch.capture.ApercuCaptureTouch
+import com.example.ia_jarvis.touch.capture.CaptureEcran
+import com.example.ia_jarvis.touch.capture.CaptureTouch
+import com.example.ia_jarvis.touch.capture.ServiceAccessibiliteJarvis
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * Fenêtres superposées de JARVIS Touch : la bulle (toujours une seule) et
- * son menu rapide. Glisser déplace la bulle puis la range contre le bord
+ * Fenêtres superposées de JARVIS Touch : la bulle (toujours une seule),
+ * son menu rapide, le mini-chat et l'aperçu des captures d'écran. Glisser déplace la bulle puis la range contre le bord
  * le plus proche ; toucher ouvre ou ferme le menu. La position (côté +
  * hauteur relative) est mémorisée sur l'appareil.
  */
@@ -60,12 +68,18 @@ class FenetresJarvisTouch(private val service: Context) {
     private var chat: ChatJarvisTouch? = null
     private var fermeParExterieur = 0L
 
+    // Capture d'écran (phase 3A) : au plus une, gardée tant qu'elle n'est
+    // pas supprimée (Réduire la garde ; « Analyser l'écran » la rouvre).
+    private var capture: CaptureTouch? = null
+    private var apercu: ApercuCaptureTouch? = null
+    private var ecranEteint: BroadcastReceiver? = null
+
     private var aDroite = memoire.getBoolean("droite", true)
     private var hauteur = memoire.getFloat("hauteur", 0.4f)
     private var rangement: ValueAnimator? = null
 
     private val estomper = Runnable {
-        if (menu == null && chat == null) {
+        if (menu == null && chat == null && apercu == null) {
             bulle.animate().alpha(0.5f).setDuration(400).start()
             rendu.reposer()
         }
@@ -85,6 +99,10 @@ class FenetresJarvisTouch(private val service: Context) {
         fermerMenu()
         chat?.retirer()
         chat = null
+        // JARVIS Touch arrêté : capture effacée, capture en cours ignorée.
+        CaptureEcran.ecouteur = null
+        fermerApercu(rendre = false)
+        supprimerCapture()
         rendu.liberer()
         if (ajoutee) {
             try {
@@ -103,6 +121,11 @@ class FenetresJarvisTouch(private val service: Context) {
         if (chat != null) {
             fermerChat()
             principal.postDelayed({ if (ajoutee) ouvrirChat() }, 200)
+        }
+        // Aperçu : refait aux nouvelles dimensions (même capture).
+        if (apercu != null) {
+            fermerApercu(rendre = false)
+            principal.postDelayed({ if (ajoutee && capture != null) montrerApercu() }, 200)
         }
         // Les mesures de l'écran sont mises à jour juste après.
         principal.postDelayed({
@@ -208,7 +231,7 @@ class FenetresJarvisTouch(private val service: Context) {
         val m = MenuJarvisTouch(contexte, surFermer = {
             fermeParExterieur = SystemClock.uptimeMillis()
             fermerMenu()
-        }, surDiscuter = { ouvrirChat() })
+        }, surDiscuter = { ouvrirChat() }, surAnalyserEcran = { analyserEcran() })
         val (largeur, haut) = m.mesurer()
         val z = zone()
         val ecart = (8 * densite).roundToInt()
@@ -273,6 +296,139 @@ class FenetresJarvisTouch(private val service: Context) {
         bulle.visibility = View.VISIBLE
         eveiller()
         planifierRepos()
+    }
+
+    // ── Capture d'écran ─────────────────────────────────────────────────
+
+    /** « Analyser l'écran » : capture en attente → son aperçu ; sinon une
+     *  nouvelle capture (consentement Android à chaque fois). */
+    private fun analyserEcran() {
+        fermerMenu()
+        if (verrouille()) {
+            informer("Déverrouillez le téléphone pour capturer l’écran.")
+            return
+        }
+        if (capture != null) montrerApercu() else lancerCapture()
+    }
+
+    private fun lancerCapture() {
+        if (CaptureEcran.enCours) return
+        // La bulle ne doit pas figurer sur l'image : masquée jusqu'à l'issue.
+        principal.removeCallbacks(estomper)
+        bulle.visibility = View.INVISIBLE
+        CaptureEcran.ecouteur = { surIssueCapture(it) }
+        if (!CaptureEcran.demarrer(service)) {
+            rendreBulle()
+            informer("La capture d’écran n’a pas pu démarrer.")
+        }
+    }
+
+    private fun surIssueCapture(issue: CaptureEcran.Issue) {
+        when (issue) {
+            is CaptureEcran.Issue.Reussie -> {
+                supprimerCapture()
+                capture = CaptureTouch(service, issue.image)
+                montrerApercu()
+            }
+            is CaptureEcran.Issue.Echec -> {
+                rendreBulle()
+                informer(issue.message)
+            }
+            CaptureEcran.Issue.Annulee -> rendreBulle()
+        }
+    }
+
+    private fun montrerApercu() {
+        val c = capture ?: return rendreBulle()
+        if (apercu != null) return
+        val a = ApercuCaptureTouch(
+            contexte, wm, zoneEcran(), c,
+            surReduire = { fermerApercu() },
+            // L'aperçu lâche l'image AVANT qu'elle soit libérée.
+            surSupprimer = {
+                fermerApercu()
+                supprimerCapture()
+            },
+            surNouvelle = {
+                fermerApercu(rendre = false)
+                supprimerCapture()
+                lancerCapture()
+            },
+            surActiverSansAutorisation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                !ServiceAccessibiliteJarvis.disponible
+            ) {
+                {
+                    fermerApercu()
+                    CaptureEcran.ouvrirReglagesAccessibilite(service)
+                }
+            } else {
+                null
+            },
+        )
+        try {
+            a.afficher()
+            apercu = a
+            bulle.visibility = View.GONE
+            rendu.reposer()
+            surveillerEcranEteint(true)
+        } catch (_: Exception) {
+            a.retirer()
+            rendreBulle()
+            informer("L’aperçu de la capture n’a pas pu s’afficher.")
+        }
+    }
+
+    private fun fermerApercu(rendre: Boolean = true) {
+        val a = apercu
+        apercu = null
+        a?.retirer()
+        surveillerEcranEteint(false)
+        if (rendre) rendreBulle()
+    }
+
+    private fun supprimerCapture() {
+        capture?.supprimer()
+        capture = null
+    }
+
+    private fun rendreBulle() {
+        if (!ajoutee || chat != null || apercu != null) return
+        bulle.visibility = View.VISIBLE
+        eveiller()
+        planifierRepos()
+    }
+
+    /** Écran éteint (verrouillage) : l'aperçu se referme, jamais visible
+     *  sur l'écran verrouillé. La capture reste jusqu'à « Supprimer ». */
+    private fun surveillerEcranEteint(actif: Boolean) {
+        if (actif && ecranEteint == null) {
+            val r = object : BroadcastReceiver() {
+                override fun onReceive(c: Context?, i: Intent?) {
+                    if (apercu != null) fermerApercu()
+                }
+            }
+            val filtre = IntentFilter(Intent.ACTION_SCREEN_OFF)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                service.registerReceiver(r, filtre, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                service.registerReceiver(r, filtre)
+            }
+            ecranEteint = r
+        } else if (!actif) {
+            val r = ecranEteint ?: return
+            ecranEteint = null
+            try {
+                service.unregisterReceiver(r)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun verrouille(): Boolean =
+        service.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+
+    private fun informer(message: String) {
+        Toast.makeText(service, message, Toast.LENGTH_LONG).show()
     }
 
     /** JARVIS au premier plan, sur la même conversation (même moteur). */

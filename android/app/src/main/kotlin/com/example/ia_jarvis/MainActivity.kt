@@ -6,6 +6,7 @@ import android.os.Bundle
 import com.example.ia_jarvis.touch.MoteurJarvis
 import com.example.ia_jarvis.touch.PontJarvisTouch
 import com.example.ia_jarvis.touch.ServiceJarvisTouch
+import com.example.ia_jarvis.touch.capture.DepotCaptures
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -39,6 +40,8 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         vivantes++
         super.onCreate(savedInstanceState)
+        // Captures de JARVIS Touch abandonnées (arrêt inattendu) : effacées.
+        if (!ServiceJarvisTouch.actif) DepotCaptures.nettoyerTout(this)
         // Lancement à froid par un partage. Activité recréée (état
         // restauré) : ce partage a déjà été traité.
         if (savedInstanceState == null) importation?.recevoir(intent)

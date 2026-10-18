@@ -215,6 +215,7 @@ lib/
 │   ├── preferences_pim_service.dart  # forme principale PIM (enregistrée sur l'appareil)
 │   ├── jarvis_touch_service.dart     # JARVIS Touch (Android) : bulle flottante, autorisation, état réel ; natif : android/.../touch/
 │   ├── jarvis_touch_chat.dart        # mini-chat de JARVIS Touch : autre vue de LA conversation (canal jarvis/touch_chat ; moteur Flutter du processus : touch/MoteurJarvis.kt)
+│   │                                 # « Analyser l'écran » (phase 3A) : 100 % natif, android/.../touch/capture/ (voir plus bas)
 │   └── connaissances_techniques.dart # notions techniques (réponse courte + développement)
 ├── models/
 │   ├── voice_state.dart              # idle / listening / thinking / speaking
@@ -657,6 +658,23 @@ fonctions backend seulement) ; jamais dans Flutter. Compétences ODO
 « connectez Gmail ». « Résume mes mails » n'est plus intercepté par le
 moteur local (`DetecteurIntention.concerneMesEmails`). Android : retour par
 `jarvis://gmail`.
+
+JARVIS Touch › « Analyser l'écran » (phase 3A, natif seulement,
+`android/.../touch/capture/`) : capture d'une image, aperçu, recadrage,
+suppression ; aucune IA, aucun envoi. Voie principale :
+`ServiceAccessibiliteJarvis` (activé une fois dans Paramètres ›
+Accessibilité, Android 11+, `takeScreenshot`, aucun contenu de fenêtre
+lu). Secours : MediaProjection (`ActiviteCaptureEcran` transparente dans sa
+propre tâche → `ServiceCaptureEcran` premier plan `mediaProjection`, une
+image puis tout est libéré ; consentement à chaque fois). `CaptureEcran` :
+une capture à la fois, issue (`Reussie` / `Echec` / `Annulee`).
+`CaptureTouch` : origine + un recadrage au plus (pleine résolution) ;
+phase 3B : `fichierValide`. `DepotCaptures` : PNG dans
+`cache/captures_touch/` (un seul fil : écriture, suppression, libération),
+tout effacé au démarrage de la bulle / de JARVIS sans bulle. Aperçu
+(`ApercuCaptureTouch`) : FLAG_SECURE, refermé à l'extinction de l'écran,
+refusé écran verrouillé. Bulle masquée pendant la capture, rendue dans
+tous les cas.
 
 ---
 

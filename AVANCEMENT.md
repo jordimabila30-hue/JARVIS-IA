@@ -1506,3 +1506,33 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - **Défaut de sécurité vu en réel** : le modèle a recopié des codes de vérification reçus par e-mail. La consigne Gmail l'interdit désormais (codes, mots de passe, liens de connexion, numéros de carte ou de compte), avec un test.
 - **Lecture vocale** : la consigne demande des phrases simples, sans titres ni séparateurs.
 - **Tests après corrections** : backend 506 réussis, 1 ignoré.
+
+## 2026-10-18 — JARVIS Touch, phase 3A : « Analyser l'écran » (capture, aperçu, recadrage, suppression)
+
+### Fait
+- **Menu** : « Analyser l'écran » n'affiche plus « Disponible prochainement » ; capture en attente → son aperçu.
+- **Capture sans autorisation répétée** (demande de l'utilisateur en cours de phase) : `ServiceAccessibiliteJarvis` (Android 11+, `takeScreenshot`), activé une fois dans Paramètres › Accessibilité ; ne lit aucun contenu, ne traite aucun événement.
+- **Secours MediaProjection** (service non activé) : activité transparente dans sa propre tâche (Chrome reste dessous, JARVIS jamais ramené), service premier plan `mediaProjection` le temps d'UNE image, projection / écran virtuel / lecteur / fil libérés aussitôt ; refus → bulle rendue.
+- **Aperçu natif** (aucun moteur Flutter de plus) : image, Recadrer, Supprimer, Nouvelle, Réduire (capture gardée) ; « locale et temporaire » ; lien « Ne plus demander l'autorisation » si l'accessibilité n'est pas active ; FLAG_SECURE ; refermé à l'extinction de l'écran.
+- **Recadrage** : sélection rectangulaire (coins, bords, déplacement), bornée à l'image, toujours tirée de l'original en pleine résolution ; Annuler / Tout / Valider ; « Annuler le recadrage ».
+- **Confidentialité** : PNG dans `cache/captures_touch/` seulement ; suppression = fichiers effacés + images libérées ; captures abandonnées effacées au redémarrage ; aucun journal de contenu (tailles et durées seulement) ; aucun envoi, aucune IA.
+
+### Mesuré sur le S10+ (Android 12, 1440 × 3040, voie MediaProjection)
+- Consentement → image : 545-594 ms (dont 450 ms d'attente volontaire de la fermeture du dialogue) ; conversion 21-26 ms ; PNG plein écran 217-249 Ko en 331-359 ms (fil d'arrière-plan) ; recadrage 788 × 1091 : 73 Ko en 81 ms.
+- 9 captures + suppressions de suite : PSS stable (~439 Mo), « Graphics » plafonné (cache de textures, redescend ensuite), 0 fichier restant.
+
+### Mesuré sur le S10+ (voie accessibilité, activée par l'utilisateur)
+- Aucune fenêtre d'autorisation, aucune icône de diffusion sur l'image ; image en 22-36 ms + copie 55-71 ms ; 6 captures enchaînées : PSS stable (~457 Mo), 0 fichier restant.
+
+### Testé sur le S10+
+- Chrome capturé, sans bulle, menu ni dialogue sur l'image ; aperçu, recadrage (image nette), annuler puis recommencer, suppression (fichiers effacés), refus d'autorisation (bulle rendue), captures répétées, mini-chat de la phase 2 qui s'ouvre toujours.
+- Correction vue en réel : aperçu rogné en bas (fenêtre placée sous la barre d'état) → fenêtre de la taille de la carte, placée dans la zone utilisable, voile système.
+
+### Limites
+- Voie MediaProjection : l'icône système de diffusion apparaît dans la barre d'état de l'image ; Android 14+ (config écran entier, service `mediaProjection`) vérifié dans le code seulement.
+- Accessibilité : à activer une fois par l'utilisateur (fait et validé sur le S10+) ; Google Play contrôle ce type de service en cas de publication.
+- Captures gardées en mémoire tant qu'elles ne sont pas supprimées (perdues si la bulle s'arrête : effacées).
+
+### Prochaine étape
+- Phase 3B : envoi explicite de la capture validée (`CaptureTouch.fichierValide`) à l'analyse IA.
+

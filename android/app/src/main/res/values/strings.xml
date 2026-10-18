@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- JARVIS Touch : service d'accessibilité de capture d'écran. -->
+    <string name="accessibilite_nom">JARVIS Touch · capture d’écran</string>
+    <string name="accessibilite_description">Permet à « Analyser l’écran » de JARVIS Touch de prendre une capture sans demander l’autorisation à chaque fois. JARVIS ne prend une image que lorsque vous touchez « Analyser l’écran » ; il ne lit pas le contenu de vos applications et n’agit pas à votre place. La capture reste sur ce téléphone et n’est jamais envoyée sans votre demande.</string>
+</resources>

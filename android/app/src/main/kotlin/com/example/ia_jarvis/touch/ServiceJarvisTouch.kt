@@ -14,11 +14,13 @@ import android.provider.Settings
 import android.util.Log
 import com.example.ia_jarvis.MainActivity
 import com.example.ia_jarvis.R
+import com.example.ia_jarvis.touch.capture.DepotCaptures
 
 /**
  * JARVIS Touch : service au premier plan qui garde la bulle flottante
  * affichée quand JARVIS passe en arrière-plan. Il ne fait rien d'autre
- * (ni micro, ni capture d'écran). Démarré et arrêté par [PontJarvisTouch].
+ * (ni micro, ni capture : la capture ponctuelle a son propre service,
+ * `capture.ServiceCaptureEcran`). Démarré et arrêté par [PontJarvisTouch].
  */
 class ServiceJarvisTouch : Service() {
 
@@ -46,6 +48,12 @@ class ServiceJarvisTouch : Service() {
     private var fenetres: FenetresJarvisTouch? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        // Captures temporaires laissées par un arrêt inattendu.
+        DepotCaptures.nettoyerTout(this)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Une seule bulle, quel que soit le nombre de démarrages.

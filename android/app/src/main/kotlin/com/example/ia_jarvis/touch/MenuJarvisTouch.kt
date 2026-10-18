@@ -22,13 +22,15 @@ import kotlin.math.roundToInt
 
 /**
  * Menu rapide de JARVIS Touch : quatre entrées en grille 2 × 2.
- * « Discuter » ouvre le mini-chat (phase 2) ; les autres annoncent
- * « Disponible prochainement » (aucun micro, aucune capture, aucun import).
+ * « Discuter » ouvre le mini-chat (phase 2), « Analyser l'écran » la
+ * capture (phase 3A) ; les autres annoncent « Disponible prochainement »
+ * (aucun micro, aucun import).
  */
 class MenuJarvisTouch(
     private val contexte: Context,
     private val surFermer: () -> Unit,
     private val surDiscuter: () -> Unit,
+    private val surAnalyserEcran: () -> Unit,
 ) {
     /** Entrées du menu (les actions réelles arriveront aux phases suivantes). */
     enum class Entree(val libelle: String, val icone: Int) {
@@ -144,7 +146,11 @@ class MenuJarvisTouch(
             background = ondulation(dp(16).toFloat())
             contentDescription = entree.libelle
             setOnClickListener {
-                if (entree == Entree.DISCUTER) surDiscuter() else annoncer(entree)
+                when (entree) {
+                    Entree.DISCUTER -> surDiscuter()
+                    Entree.ANALYSER_ECRAN -> surAnalyserEcran()
+                    else -> annoncer(entree)
+                }
             }
         }
         val pastille = FrameLayout(contexte).apply {

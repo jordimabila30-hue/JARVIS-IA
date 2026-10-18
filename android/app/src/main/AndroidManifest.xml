@@ -4,10 +4,13 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- JARVIS Touch : bulle au-dessus des autres applications, gardée par
-         un service au premier plan (aucun micro, aucune capture). -->
+         un service au premier plan (aucun micro). -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <!-- « Analyser l'écran » : capture ponctuelle (MediaProjection, une
+         image, consentement Android à chaque fois). Aucun accès au stockage. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <application
         android:label="ia_jarvis"
         android:name="${applicationName}"
@@ -79,6 +82,39 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Bulle d’accès rapide à l'assistant, affichée au-dessus des autres applications à la demande de l'utilisateur."/>
+        </service>
+        <!-- « Analyser l'écran » : consentement Android à la capture.
+             Transparente, sans animation, dans sa propre tâche et hors des
+             récents : l'application consultée reste dessous (c'est elle
+             qui est capturée), JARVIS n'est jamais ramené au premier plan. -->
+        <activity
+            android:name=".touch.capture.ActiviteCaptureEcran"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.example.ia_jarvis.capture"
+            android:excludeFromRecents="true"
+            android:theme="@style/CaptureTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"/>
+        <!-- Capture ponctuelle : vit le temps d'une image, puis s'arrête. -->
+        <service
+            android:name=".touch.capture.ServiceCaptureEcran"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection"/>
+        <!-- « Analyser l'écran » sans autorisation à chaque capture : service
+             d'accessibilité activé UNE fois par l'utilisateur (Android 11+,
+             takeScreenshot). Il ne lit aucun contenu de fenêtre et ne traite
+             aucun événement ; il ne prend une image que sur demande. -->
+        <service
+            android:name=".touch.capture.ServiceAccessibiliteJarvis"
+            android:exported="false"
+            android:label="@string/accessibilite_nom"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibilite_jarvis"/>
         </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
