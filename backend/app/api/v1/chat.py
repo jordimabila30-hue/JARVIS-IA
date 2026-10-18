@@ -73,6 +73,7 @@ from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from ... import vision
 from ...auth import AuthUser, get_current_user
 from ...llm import (
     ErreurFournisseur,
@@ -163,6 +164,9 @@ class ChatRequest(BaseModel):
     # Réponse de JARVIS qui porte les propositions affichées : référence
     # EXPLICITE (vérifiée : ce compte, ce chat) pour « pourquoi la deuxième ? ».
     propositions_message_id: UUID | None = None
+    # Capture d'écran jointe (JARVIS Touch), chat ordinaire seulement :
+    # contrôlée, jamais enregistrée en base (voir app/vision.py).
+    image: vision.ImageJointe | None = None
 
 
 # --- Utilitaires --------------------------------------------------------------------
@@ -299,11 +303,7 @@ async def load_context(
         return [json.loads(item) for item in cached]
 
     rows = await supabase.get_recent_messages(conversation_id, settings.chat_history_messages)
-    history = [
-        {"role": row["role"], "content": row["content"]}
-        for row in rows
-        if row["role"] in ("user", "assistant")
-    ]
+    history = [_entree_contexte(row) for row in rows if row["role"] in ("user", "assistant")]
     if history:
         try:
             async with redis.pipeline(transaction=True) as pipe:
@@ -313,6 +313,16 @@ async def load_context(
         except RedisError:
             logger.warning("Impossible de mettre en cache le contexte", exc_info=True)
     return history
+
+
+def _entree_contexte(row: dict) -> dict:
+    """Message du contexte court : rôle, texte et, s'il y en a une, la
+    référence de la capture jointe (jamais ses octets)."""
+    entree = {"role": row["role"], "content": row["content"]}
+    image_id = vision.image_id_de(row.get("attachments"))
+    if image_id:
+        entree["image_id"] = image_id
+    return entree
 
 
 async def append_context(
@@ -398,7 +408,7 @@ async def finalize_exchange(
             redis,
             conversation_id,
             new_conversation,
-            [{"role": r["role"], "content": r["content"]} for r in rows],
+            [_entree_contexte(r) for r in rows],
             settings,
         )
     except RedisError:
@@ -521,6 +531,7 @@ async def chat_stream(
     cibles = []          # pièces jointes visées (messages chargés)
     envoyees = None      # réponses déclarées envoyées à ces contacts
     reduire = None   # préparation plus petite, si le fournisseur refuse (413)
+    taille_image = 0     # capture jointe : taille décodée, contrôlée
 
     # Préparation : tout échec ici rend la requête au quota.
     try:
@@ -643,6 +654,19 @@ async def chat_stream(
         elif consigne is not None:
             # Pièce jointe supprimée depuis : rien à analyser, rien à inventer.
             systeme += "\n\n" + NOTE_PIECE_SUPPRIMEE
+        if body.image is not None:
+            # Chat ordinaire seulement ; fournisseur qui lit vraiment les
+            # images (jamais d'analyse simulée) ; contrôle avant tout appel.
+            if preparation is not None or consigne is not None:
+                raise HTTPException(422, detail={
+                    "code": "image_contexte",
+                    "message": "Une image ne peut pas être jointe à une conversation WhatsApp."})
+            if not llm.vision:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail=vision.VISION_OFFRE)
+            try:
+                taille_image = vision.verifier(body.image)
+            except vision.ImageInvalide as exc:
+                raise HTTPException(422, detail=exc.detail()) from None
     except HTTPException:
         await quota_service.release(reservation)
         raise
@@ -660,23 +684,34 @@ async def chat_stream(
         "content": body.message,
         "created_at": now.isoformat(),
     }
+    image_id = None
+    if body.image is not None and user_row is not None:
+        image_id = str(uuid4())
+        user_row["attachments"] = [vision.piece(image_id, body.image, taille_image)]
+        # Taille et type seulement : jamais le contenu.
+        logger.info("Image jointe : %s, %d Ko", body.image.media_type, taille_image // 1024)
     assistant_id = str(uuid4())
     if preparation is not None:
         prompt = preparation.messages
         # La réponse principale n'écrit plus les propositions (lots) : sortie normale.
         max_sortie = plafond(llm, settings.comprehension_max_output_tokens, settings)
     else:
+        derniere = {"role": "user", "content": question}
+        if image_id is not None:
+            derniere["images"] = [{"media_type": body.image.media_type, "data": body.image.data}]
+            await vision.garder(redis, conversation["id"], image_id, body.image, settings.chat_context_ttl)
         prompt = [
             {"role": "system", "content": systeme},
-            *history,
-            {"role": "user", "content": question},
+            *(await vision.joindre(redis, conversation["id"], history)),
+            derniere,
         ]
         max_sortie = plafond(llm, settings.chat_max_output_tokens, settings)
 
     # Contrôle avant l'appel facturable : une demande dont l'entrée estimée
     # dépasse déjà les tokens restants (jour ou session) n'est pas envoyée.
     depassement = quota_service.budget_depasse(
-        reservation, estimate_tokens("".join(m["content"] for m in prompt)))
+        reservation, estimate_tokens("".join(m["content"] for m in prompt))
+        + vision.TOKENS_PAR_IMAGE * sum(len(m.get("images") or ()) for m in prompt))
     if depassement:
         await quota_service.release(reservation)
         logger.info("Demande refusée avant l'appel : %s", depassement)

@@ -683,6 +683,37 @@ Réglages réels : Paramètres › Général › JARVIS Touch · Capture d'écra
 (`JarvisTouchService.capture`, canal `jarvis/touch` : `etatCapture`,
 `ouvrirReglagesCapture` ; aucun faux interrupteur).
 
+JARVIS Touch, intégration (2026-10-18) :
+- Paramètres › Général : une entrée « JARVIS Touch » → `PageGenerale`
+  (`widgets/parametres/pages_jarvis_touch.dart`) : JARVIS Touch
+  (interrupteur), Capture d'écran (« Autorisé » seulement si le service
+  d'accessibilité est actif ; l'accord MediaProjection ponctuel n'est
+  jamais « autorisé »), Personnalisation (structure seulement). Navigation
+  dans `FenetreParametres` (`_pageGenerale`, comme `_outil`).
+- Capture validée → mini-chat ouvert avec la vignette
+  (`ChatJarvisTouch.PieceCapture`, gardée si le chat est réduit, croix =
+  fichier effacé) ; Envoyer → `PasserelleMiniChat` lit le PNG UNE fois →
+  `ConversationSession.envoyerAvecCapture` (message `capture:
+  CaptureJointe`, demande `image: ImageAEnvoyer`, jamais le moteur local)
+  → `ApiJarvis.discuter(image:)` → `POST /chat/stream` champ `image`
+  (base64). Backend `app/vision.py` : signature, ≤ 5 Mo, ≤ 8000 px ;
+  `FournisseurLLM.vision` (Claude seulement) sinon 403 `vision_offre`
+  (« L'analyse d'image demande l'offre Pro », avant le quota) ; jamais en
+  base (référence `capture_ecran` dans `messages.attachments`), octets
+  gardés 1 h dans Redis (`chat:image:{conversation}`, dernière image) pour
+  les questions suivantes, puis note « plus disponible ».
+- Vocal flottant : `VocalJarvisTouch` (cercle + symbole audio bleu, une
+  seule animation, aucune particule PIM) pilote LA `VoiceSession` de
+  l'accueil via `PasserelleVocalTouch` (canal `jarvis/touch_chat`,
+  `vocalOuvrir` / `vocalMicro` / `vocalQuitter` / `vocalFermer` ; Dart →
+  `vocal`, `niveau`) ; service au premier plan type `microphone` le temps
+  du vocal seulement ; Réduire = bulle marquée ; JARVIS au premier plan =
+  vocal fermé (reprenable dans l'accueil).
+- Menu : « Importer » → « Actions » (M'expliquer, Traduire, Aider à
+  répondre, Mes raccourcis : « Bientôt disponible », aucun appel IA).
+- Téléphone USB : lancer avec `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`
+  (+ `adb reverse tcp:8000 tcp:8000`), sinon l'appli vise 10.0.2.2.
+
 ---
 
 ## 8. État actuel du projet

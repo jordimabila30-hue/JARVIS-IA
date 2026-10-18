@@ -11,6 +11,9 @@
     <!-- « Analyser l'écran » : capture ponctuelle (MediaProjection, une
          image, consentement Android à chaque fois). Aucun accès au stockage. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+    <!-- Vocal flottant : écoute hors de l'application, seulement pendant la
+         session vocale ouverte par l'utilisateur (type déclaré à ce moment). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <application
         android:label="ia_jarvis"
         android:name="${applicationName}"
@@ -78,7 +81,7 @@
         <service
             android:name=".touch.ServiceJarvisTouch"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|microphone">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Bulle d’accès rapide à l'assistant, affichée au-dessus des autres applications à la demande de l'utilisateur."/>

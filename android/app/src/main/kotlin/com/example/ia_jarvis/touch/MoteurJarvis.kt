@@ -47,10 +47,17 @@ object CanalMiniChat {
     /** Fenêtre du mini-chat ouverte : reçoit `etat` et `fragment`. */
     var recepteur: ((String, Any?) -> Unit)? = null
 
+    /** Fenêtre du vocal flottant ouverte : reçoit `vocal` et `niveau`. */
+    var recepteurVocal: ((String, Any?) -> Unit)? = null
+
     fun attacher(messager: BinaryMessenger) {
         canal = MethodChannel(messager, "jarvis/touch_chat").apply {
             setMethodCallHandler { appel, resultat ->
-                recepteur?.invoke(appel.method, appel.arguments)
+                if (appel.method == "vocal" || appel.method == "niveau") {
+                    recepteurVocal?.invoke(appel.method, appel.arguments)
+                } else {
+                    recepteur?.invoke(appel.method, appel.arguments)
+                }
                 resultat.success(null)
             }
         }

@@ -36,9 +36,12 @@ class ServiceJarvisTouch : Service() {
 
         private var enCours: ServiceJarvisTouch? = null
 
-        /** JARVIS revenu au premier plan : le mini-chat (redondant) se réduit. */
+        /** JARVIS revenu au premier plan : le mini-chat (redondant) se réduit
+         *  et le vocal flottant s'arrête (la session reste reprenable dans
+         *  JARVIS) : jamais deux interfaces vocales à la fois. */
         fun reduireChat() {
             enCours?.fenetres?.fermerChat()
+            enCours?.fenetres?.fermerVocal()
         }
 
         /** Résultat du démarrage, attendu par le pont (thread principal). */
@@ -113,7 +116,20 @@ class ServiceJarvisTouch : Service() {
         rappel(ok, message)
     }
 
-    private fun passerAuPremierPlan() {
+    /**
+     * Vocal flottant : le service déclare l'usage du micro (Android 11+ :
+     * type « microphone », exigé pour écouter hors de l'application) le
+     * temps de la session, puis le retire. Faux si Android refuse.
+     */
+    fun micro(oui: Boolean): Boolean = try {
+        passerAuPremierPlan(micro = oui)
+        true
+    } catch (e: Exception) {
+        Log.w(TAG, "micro au premier plan refusé (${e.javaClass.simpleName})")
+        false
+    }
+
+    private fun passerAuPremierPlan(micro: Boolean = false) {
         val gestionnaire = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             gestionnaire.createNotificationChannel(
@@ -141,10 +157,15 @@ class ServiceJarvisTouch : Service() {
             .setContentIntent(ouvrir)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(ID_NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(ID_NOTIFICATION, notification)
+        val typeMicro = if (micro) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                startForeground(ID_NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or typeMicro)
+            // Android 11-13 : type explicite (jamais « tous ceux du manifeste » :
+            // le micro n'est déclaré que pendant le vocal).
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                startForeground(ID_NOTIFICATION, notification, typeMicro)
+            else -> startForeground(ID_NOTIFICATION, notification)
         }
     }
 }

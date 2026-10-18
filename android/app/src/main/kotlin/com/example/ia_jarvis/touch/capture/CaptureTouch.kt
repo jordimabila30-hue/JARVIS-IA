@@ -74,6 +74,24 @@ class CaptureTouch(private val contexte: Context, image: Bitmap) {
         return true
     }
 
+    /** Miniature (hauteur [hauteur] px, proportions gardées) pour le mini-chat. */
+    fun miniature(hauteur: Int): Bitmap? {
+        if (supprimee || image.isRecycled) return null
+        val h = minOf(hauteur, image.height)
+        val l = maxOf(1, image.width * h / image.height)
+        return try {
+            Bitmap.createScaledBitmap(image, l, h, true)
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+    }
+
+    /** Capture validée et écrite : l'image en mémoire n'a plus d'usage
+     *  (le fichier reste, pour l'envoi voulu par l'utilisateur). */
+    fun libererImage() {
+        if (!supprimee) DepotCaptures.supprimer(emptyList(), listOf(image))
+    }
+
     /** Abandon : fichiers effacés et image libérée. */
     fun supprimer() {
         if (supprimee) return

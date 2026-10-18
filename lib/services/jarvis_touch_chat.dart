@@ -4,9 +4,13 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../models/capture_jointe.dart';
 import '../models/message_conversation.dart';
+import 'capture/fichier_capture.dart';
 import 'conversation/conversation_session.dart';
 import 'conversations/fournisseur_jarvis.dart';
+import 'jarvis_touch_vocal.dart';
+import 'voice_session.dart';
 import 'ecriture/texte_en_direct.dart';
 
 /// Mini-chat de JARVIS Touch (fenêtre native Android) : une autre vue de
@@ -26,10 +30,16 @@ import 'ecriture/texte_en_direct.dart';
 class PasserelleMiniChat {
   PasserelleMiniChat(
     this._session, {
+    VoiceSession? vocal,
     MethodChannel? canal,
     this.taillePage = 40,
     this.intervalle = const Duration(milliseconds: 50),
-  }) : _canal = canal ?? const MethodChannel('jarvis/touch_chat');
+  }) : _canal = canal ?? const MethodChannel('jarvis/touch_chat') {
+    if (vocal != null) _vocal = PasserelleVocalTouch(vocal, _canal);
+  }
+
+  /// Vocal flottant (même session vocale que l'accueil), null : absent.
+  PasserelleVocalTouch? _vocal;
 
   final ConversationSession _session;
   final MethodChannel _canal;
@@ -67,10 +77,13 @@ class PasserelleMiniChat {
 
   void detacher() {
     _canal.setMethodCallHandler(null);
+    _vocal?.detacher();
     _fermer();
   }
 
   Future<Object?> _surAppel(MethodCall appel) async {
+    final vocal = _vocal?.surAppel(appel);
+    if (vocal != null) return vocal;
     switch (appel.method) {
       case 'ouvrir':
         if (!_ouvert) {
@@ -91,6 +104,24 @@ class PasserelleMiniChat {
           if (_envois.contains(idEnvoi)) return true;
           _envois.addLast(idEnvoi);
           if (_envois.length > 32) _envois.removeFirst();
+        }
+        // Capture validée jointe (fichier du cache privé) : lue UNE fois,
+        // ici, au moment de l'envoi voulu par l'utilisateur.
+        final chemin = args['image'] as String?;
+        if (chemin != null && chemin.isNotEmpty) {
+          final octets = await lireCapture(chemin);
+          if (octets == null) {
+            _envois.remove(idEnvoi);
+            return 'capture_indisponible';
+          }
+          unawaited(
+            _session.envoyerAvecCapture(
+              texte,
+              CaptureJointe(chemin: chemin),
+              ImageAEnvoyer('image/png', octets),
+            ),
+          );
+          return true;
         }
         // Même chemin que la barre de l'accueil.
         unawaited(_session.envoyer(texte));
@@ -171,6 +202,7 @@ class PasserelleMiniChat {
 
   Map<String, Object?> _message(MessageConversation m) {
     final note = switch (m) {
+      _ when m.capture != null => 'Capture d’écran jointe',
       _ when m.pieceJointe != null =>
         'Conversation WhatsApp « ${m.pieceJointe!.titre} » jointe',
       _ when m.ajoutWhatsApp != null => 'Message WhatsApp ajouté',

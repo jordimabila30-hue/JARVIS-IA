@@ -14,6 +14,7 @@ import '../../services/integrations/service_gmail.dart';
 import '../../services/utilisation/service_utilisation.dart';
 import '../integrations/panneau_gmail.dart';
 import '../integrations/panneau_outils.dart';
+import 'pages_jarvis_touch.dart';
 import '../utilisation/panneau_utilisation.dart';
 import 'elements_parametres.dart';
 import 'icone_reacteur_arc.dart';
@@ -186,6 +187,12 @@ class _FenetreParametresState extends State<FenetreParametres> {
   /// Outils : outil ouvert (null : la liste des outils).
   OutilJarvis? _outil;
 
+  /// Général : sous-page ouverte (JARVIS Touch…), null : Général.
+  PageGenerale? _pageGenerale;
+
+  /// Une sous-page (outil ou page de Général) est ouverte.
+  bool get _sousPage => _outil != null || _pageGenerale != null;
+
   @override
   void initState() {
     super.initState();
@@ -197,15 +204,21 @@ class _FenetreParametresState extends State<FenetreParametres> {
   void _choisir(SectionParametres s) => setState(() {
     _section = s;
     _outil = null;
+    _pageGenerale = null;
     _dansSection = true;
   });
 
+  void _ouvrirPageGenerale(PageGenerale? p) => setState(() => _pageGenerale = p);
+
   void _ouvrirOutil(OutilJarvis? o) => setState(() => _outil = o);
 
-  /// Retour d'un niveau : outil → Outils → liste (téléphone).
+  /// Retour d'un niveau : outil → Outils, sous-page → page parente
+  /// (Capture → JARVIS Touch → Général), puis liste (téléphone).
   void _retour() => setState(() {
     if (_outil != null) {
       _outil = null;
+    } else if (_pageGenerale != null) {
+      _pageGenerale = _pageGenerale!.parent;
     } else {
       _dansSection = false;
     }
@@ -218,7 +231,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (_outil != null || (compact && _dansSection)) {
+          if (_sousPage || (compact && _dansSection)) {
             _retour();
           } else {
             _fermer();
@@ -277,6 +290,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             surChoix: (s) => setState(() {
                               _section = s;
                               _outil = null;
+                              _pageGenerale = null;
                             }),
                             compte: widget.compte,
                           ),
@@ -294,6 +308,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
                             gmail: widget.gmail,
                             outil: _outil,
                             surOutil: _ouvrirOutil,
+                            pageGenerale: _pageGenerale,
+                            surPageGenerale: _ouvrirPageGenerale,
                             marge: ecran.width >= 1100 ? 44 : 30,
                           ),
                         ),
@@ -330,13 +346,20 @@ class _FenetreParametresState extends State<FenetreParametres> {
             duration: const Duration(milliseconds: 220),
             child: _dansSection
                 ? Column(
-                    key: ValueKey((_section, _outil)),
+                    key: ValueKey((_section, _outil, _pageGenerale)),
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _EnteteMobile(
-                        titre: _outil?.nom ?? _section.libelle,
+                        titre:
+                            _outil?.nom ??
+                            _pageGenerale?.libelle ??
+                            _section.libelle,
                         surRetour: _retour,
-                        infoRetour: _outil != null ? 'Retour aux outils' : null,
+                        infoRetour: _outil != null
+                            ? 'Retour aux outils'
+                            : _pageGenerale != null
+                            ? 'Retour à ${_pageGenerale!.parent?.libelle ?? 'Général'}'
+                            : null,
                         surFermer: _fermer,
                       ),
                       Expanded(
@@ -352,6 +375,8 @@ class _FenetreParametresState extends State<FenetreParametres> {
                           gmail: widget.gmail,
                           outil: _outil,
                           surOutil: _ouvrirOutil,
+                          pageGenerale: _pageGenerale,
+                          surPageGenerale: _ouvrirPageGenerale,
                           marge: 18,
                           avecTitre: false,
                         ),
@@ -747,8 +772,14 @@ class _Contenu extends StatelessWidget {
     this.gmail,
     this.outil,
     this.surOutil,
+    this.pageGenerale,
+    this.surPageGenerale,
     this.avecTitre = true,
   });
+
+  /// Général : sous-page ouverte et navigation.
+  final PageGenerale? pageGenerale;
+  final ValueChanged<PageGenerale?>? surPageGenerale;
 
   final SectionParametres section;
 
@@ -781,7 +812,7 @@ class _Contenu extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, c) => SingleChildScrollView(
-        key: PageStorageKey((section, outil)),
+        key: PageStorageKey((section, outil, pageGenerale)),
         padding: marges,
         child: Align(
           alignment: outils ? Alignment.topCenter : Alignment.topLeft,
@@ -814,8 +845,21 @@ class _Contenu extends StatelessWidget {
                           _RetourOutils(surRetour: () => surOutil?.call(null)),
                           const SizedBox(width: 6),
                         ],
+                        if (section == SectionParametres.general &&
+                            pageGenerale != null) ...[
+                          _RetourOutils(
+                            libelle: pageGenerale!.parent?.libelle ?? 'Général',
+                            surRetour: () =>
+                                surPageGenerale?.call(pageGenerale!.parent),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         Text(
-                          outil?.nom ?? section.libelle,
+                          outil?.nom ??
+                              (section == SectionParametres.general
+                                  ? pageGenerale?.libelle
+                                  : null) ??
+                              section.libelle,
                           style: const TextStyle(
                             fontSize: 15,
                             color: CouleursJarvis.texteSecondaire,
@@ -835,7 +879,10 @@ class _Contenu extends StatelessWidget {
                     const SizedBox(height: 6),
                   ],
                   switch (section) {
-                    SectionParametres.general => const PanneauGeneral(),
+                    SectionParametres.general => PanneauGeneral(
+                      page: pageGenerale,
+                      surPage: (p) => surPageGenerale?.call(p),
+                    ),
                     SectionParametres.utilisation => PanneauUtilisation(
                       service: utilisation,
                     ),
@@ -889,16 +936,17 @@ class _Hauteur extends StatelessWidget {
 
 /// Ordinateur : « ‹ Outils » devant le nom de l'outil ouvert.
 class _RetourOutils extends StatelessWidget {
-  const _RetourOutils({required this.surRetour});
+  const _RetourOutils({required this.surRetour, this.libelle = 'Outils'});
 
   final VoidCallback surRetour;
+  final String libelle;
 
   @override
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: surRetour,
       icon: const Icon(Icons.arrow_back_rounded, size: 17),
-      label: const Text('Outils', style: TextStyle(fontSize: 15)),
+      label: Text(libelle, style: const TextStyle(fontSize: 15)),
       style: TextButton.styleFrom(
         foregroundColor: CouleursJarvis.signal,
         padding: const EdgeInsets.symmetric(horizontal: 8),

@@ -99,9 +99,14 @@ class MessageServeur {
     required this.role,
     required this.contenu,
     required this.date,
+    this.capture = false,
   });
 
   final String id;
+
+  /// Message de l'utilisateur qui portait une capture d'écran (trace
+  /// seulement : l'image n'est jamais enregistrée).
+  final bool capture;
 
   /// `user`, `assistant` ou `system`.
   final String role;
@@ -239,7 +244,9 @@ class DepotConversationsSupabase implements DepotConversations {
   }) => _executer((uid) async {
     var requete = _client
         .from('messages')
-        .select('id, role, content, created_at')
+        // Type de la 1re pièce jointe seulement (capture d'écran) : jamais
+        // tout le JSON des réponses (références, propositions).
+        .select('id, role, content, created_at, piece:attachments->0->>type')
         .eq('conversation_id', id)
         .eq('user_id', uid);
     if (avant != null) {
@@ -280,6 +287,7 @@ class DepotConversationsSupabase implements DepotConversations {
           role: '${l['role']}',
           contenu: l['content'] as String? ?? '',
           date: _date(l['created_at']),
+          capture: l['role'] == 'user' && l['piece'] == 'capture_ecran',
         ),
     ], plusAnciens: lignes.length > limite);
   });

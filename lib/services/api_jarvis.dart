@@ -1,3 +1,4 @@
+import '../models/capture_jointe.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -61,6 +62,10 @@ final class EchecApi<T> extends ResultatApi<T> {
 }
 
 enum ErreurApi {
+  /// Capture refusée avant tout appel (offre sans lecture d'image, image
+  /// invalide) ; [EchecApi.detail] : le message du serveur.
+  imageRefusee('L’image n’a pas pu être envoyée à JARVIS.'),
+
   /// Aucune session : aucun jeton à présenter.
   nonConnecte('Connectez-vous pour joindre le serveur JARVIS.'),
 
@@ -234,6 +239,7 @@ class ApiJarvis {
     String? tonPropose,
     String? propositionsMessage,
     String? longueurPropose,
+    ImageAEnvoyer? image,
     void Function(String conversation)? surConversation,
     void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
@@ -256,6 +262,7 @@ class ApiJarvis {
         tonPropose: tonPropose,
         propositionsMessage: propositionsMessage,
         longueurPropose: longueurPropose,
+        image: image,
         surPreparation: surPreparation,
       ),
       ),
@@ -699,6 +706,7 @@ class ApiJarvis {
     String? tonPropose,
     String? propositionsMessage,
     String? longueurPropose,
+    ImageAEnvoyer? image,
     void Function()? surPreparation,
   }) async {
     _Reponse<ReponseChat> echec(ErreurApi e, [String? detail]) =>
@@ -725,6 +733,11 @@ class ApiJarvis {
             'ton_propose': ?tonPropose,
             'propositions_message_id': ?propositionsMessage,
             'longueur_proposee': ?longueurPropose,
+            if (image != null)
+              'image': {
+                'media_type': image.typeMedia,
+                'data': base64Encode(image.octets),
+              },
           });
     final http.StreamedResponse r;
     try {
@@ -743,7 +756,10 @@ class ApiJarvis {
       } catch (_) {
         corps = '';
       }
+      final code = _code(corps) ?? '';
       return switch (r.statusCode) {
+        403 || 422 when code.startsWith('vision') || code.startsWith('image') =>
+          echec(ErreurApi.imageRefusee, _messageDetail(corps)),
         401 || 403 => _Refus(_detail(corps), j),
         404 when _detail(corps) == 'Consigne introuvable' => echec(
           ErreurApi.consigneIntrouvable,
@@ -841,6 +857,16 @@ class ApiJarvis {
     try {
       final d = (jsonDecode(corps) as Map<String, dynamic>)['detail'];
       return d is String ? d : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Message d'une erreur structurée (`{"detail": {"message": …}}`).
+  static String? _messageDetail(String corps) {
+    try {
+      final d = (jsonDecode(corps) as Map<String, dynamic>)['detail'];
+      return d is Map && d['message'] is String ? d['message'] as String : null;
     } catch (_) {
       return null;
     }

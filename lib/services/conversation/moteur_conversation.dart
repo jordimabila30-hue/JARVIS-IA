@@ -1,3 +1,4 @@
+import '../../models/capture_jointe.dart';
 import '../../models/importation/reference_whatsapp.dart';
 import '../../models/message_conversation.dart';
 import '../voice_command_service.dart';
@@ -28,7 +29,11 @@ class DemandeJarvis {
     this.tonPropose,
     this.propositionsMessage,
     this.longueurPropose,
+    this.image,
   }) : texteComplet = texteComplet ?? texte;
+
+  /// Capture jointe à ce message (toujours l'IA, jamais le moteur local).
+  final ImageAEnvoyer? image;
 
   /// Ce que l'utilisateur dit à JARVIS (sans la conversation collée).
   final String texte;
@@ -107,6 +112,7 @@ class DemandeJarvis {
     tonPropose: tonPropose,
     propositionsMessage: propositionsMessage,
     longueurPropose: longueurPropose,
+    image: image,
   );
 }
 

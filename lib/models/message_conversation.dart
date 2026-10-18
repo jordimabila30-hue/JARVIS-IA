@@ -1,3 +1,4 @@
+import 'capture_jointe.dart';
 import '../services/ecriture/ecriture_progressive.dart';
 import 'importation/piece_jointe_whatsapp.dart';
 import 'importation/propositions_reponse.dart';
@@ -137,6 +138,7 @@ class MessageConversation {
     this.noteReferences,
     this.propositions,
     this.ajoutWhatsApp,
+    this.capture,
   });
 
   final int id;
@@ -208,6 +210,10 @@ class MessageConversation {
   /// Phase 5.1 : bulle d'un message WhatsApp collé (reçu ou envoyé) ;
   /// [texte] reste vide (rien pour les détecteurs ni pour l'IA).
   final AjoutDansLeFil? ajoutWhatsApp;
+
+  /// Capture d'écran jointe par l'utilisateur (JARVIS Touch) : référence
+  /// seulement, jamais les octets.
+  final CaptureJointe? capture;
 
   bool get deJarvis => auteur == AuteurMessage.jarvis;
 
@@ -288,5 +294,6 @@ class MessageConversation {
     references: references ?? this.references,
     noteReferences: remplacerNote ? noteReferences : this.noteReferences,
     propositions: propositions ?? this.propositions,
+    capture: capture,
   );
 }

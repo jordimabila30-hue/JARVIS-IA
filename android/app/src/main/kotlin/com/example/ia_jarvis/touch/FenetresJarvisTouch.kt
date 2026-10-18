@@ -65,12 +65,19 @@ class FenetresJarvisTouch(private val service: Context) {
 
     private var menu: MenuJarvisTouch? = null
     private var chat: ChatJarvisTouch? = null
+    // Vocal flottant : fenêtre ouverte, ou réduite (session en cours,
+    // bulle marquée ; un toucher sur la bulle la rouvre).
+    private var vocal: VocalJarvisTouch? = null
+    private var vocalReduit = false
     private var fermeParExterieur = 0L
 
     // Capture d'écran : au plus une. Fermer = supprimée ; Valider = gardée
     // (cache privé) jusqu'à la capture suivante ou l'arrêt de la bulle.
     private var capture: CaptureTouch? = null
     private var editeur: EditeurCaptureTouch? = null
+    // Capture validée en attente d'envoi dans le mini-chat (gardée si le
+    // chat est réduit, jusqu'à l'envoi, au retrait ou à la capture suivante).
+    private var pieceEnAttente: ChatJarvisTouch.PieceCapture? = null
     private var ecranEteint: BroadcastReceiver? = null
 
     private var aDroite = memoire.getBoolean("droite", true)
@@ -78,7 +85,7 @@ class FenetresJarvisTouch(private val service: Context) {
     private var rangement: ValueAnimator? = null
 
     private val estomper = Runnable {
-        if (menu == null && chat == null && editeur == null) {
+        if (menu == null && chat == null && editeur == null && vocal == null && !vocalReduit) {
             bulle.animate().alpha(0.5f).setDuration(400).start()
             rendu.reposer()
         }
@@ -98,10 +105,12 @@ class FenetresJarvisTouch(private val service: Context) {
         fermerMenu()
         chat?.retirer()
         chat = null
+        fermerVocal()
         // JARVIS Touch arrêté : capture effacée, capture en cours ignorée.
         CaptureEcran.ecouteur = null
         fermerEditeur(rendre = false)
         supprimerCapture()
+        oublierPiece()
         rendu.liberer()
         if (ajoutee) {
             try {
@@ -217,6 +226,10 @@ class FenetresJarvisTouch(private val service: Context) {
     // ── Menu ────────────────────────────────────────────────────────────
 
     private fun basculerMenu() {
+        if (vocalReduit) {
+            ouvrirVocal()
+            return
+        }
         if (menu != null) {
             fermerMenu()
         } else if (SystemClock.uptimeMillis() - fermeParExterieur > 350) {
@@ -230,7 +243,8 @@ class FenetresJarvisTouch(private val service: Context) {
         val m = MenuJarvisTouch(contexte, surFermer = {
             fermeParExterieur = SystemClock.uptimeMillis()
             fermerMenu()
-        }, surDiscuter = { ouvrirChat() }, surCapturer = { capturerEcran() })
+        }, surDiscuter = { ouvrirChat() }, surCapturer = { capturerEcran() },
+            surVocal = { ouvrirVocal() }, surRedimension = { replacerMenu() })
         val (largeur, haut) = m.mesurer()
         val z = zone()
         val ecart = (8 * densite).roundToInt()
@@ -275,6 +289,15 @@ class FenetresJarvisTouch(private val service: Context) {
                 fermerChat()
                 ouvrirJarvis()
             },
+            capture = pieceEnAttente,
+            // Retirée : miniature et fichier effacés (jamais envoyée).
+            surRetirerCapture = {
+                oublierPiece()
+                supprimerCapture()
+            },
+            // Envoyée : la miniature n'a plus d'usage ; le fichier reste
+            // (aperçu dans le fil) jusqu'à la capture suivante.
+            surCaptureEnvoyee = { oublierPiece() },
         )
         try {
             c.afficher()
@@ -325,6 +348,8 @@ class FenetresJarvisTouch(private val service: Context) {
     private fun surIssueCapture(issue: CaptureEcran.Issue) {
         when (issue) {
             is CaptureEcran.Issue.Reussie -> {
+                // La capture précédente (même envoyée) est remplacée.
+                if (chat == null) oublierPiece()
                 supprimerCapture()
                 capture = CaptureTouch(service, issue.image)
                 ouvrirEditeur()
@@ -347,12 +372,7 @@ class FenetresJarvisTouch(private val service: Context) {
                 fermerEditeur()
                 supprimerCapture()
             },
-            surValider = { zone ->
-                fermerEditeur()
-                if (capture?.valider(zone) == false) {
-                    informer("Le recadrage n’a pas pu être appliqué (mémoire insuffisante).")
-                }
-            },
+            surValider = { zone -> validerCapture(zone) },
         )
         try {
             e.afficher()
@@ -366,6 +386,41 @@ class FenetresJarvisTouch(private val service: Context) {
             rendreBulle()
             informer("L’éditeur de capture n’a pas pu s’afficher.")
         }
+    }
+
+    /** Valider : recadrage appliqué, puis le mini-chat s'ouvre avec la
+     *  capture jointe (rien n'est envoyé avant l'appui sur Envoyer). */
+    private fun validerCapture(zone: Rect) {
+        fermerEditeur(rendre = false)
+        val c = capture
+        if (c == null || !c.valider(zone)) {
+            rendreBulle()
+            informer("Le recadrage n’a pas pu être appliqué (mémoire insuffisante).")
+            return
+        }
+        c.fichierValide { fichier ->
+            if (!ajoutee || capture !== c) return@fichierValide
+            val mini = c.miniature((60 * densite).roundToInt() * 2)
+            c.libererImage()
+            if (fichier == null || mini == null) {
+                mini?.recycle()
+                supprimerCapture()
+                rendreBulle()
+                informer("La capture n’a pas pu être préparée. Réessayez.")
+                return@fichierValide
+            }
+            oublierPiece()
+            val piece = ChatJarvisTouch.PieceCapture(fichier.path, mini)
+            pieceEnAttente = piece
+            val ouvert = chat
+            if (ouvert != null) ouvert.joindre(piece) else ouvrirChat()
+        }
+    }
+
+    /** Miniature en attente libérée (la vue l'a déjà lâchée). */
+    private fun oublierPiece() {
+        pieceEnAttente?.miniature?.recycle()
+        pieceEnAttente = null
     }
 
     private fun fermerEditeur(rendre: Boolean = true) {
@@ -382,7 +437,7 @@ class FenetresJarvisTouch(private val service: Context) {
     }
 
     private fun rendreBulle() {
-        if (!ajoutee || chat != null || editeur != null) return
+        if (!ajoutee || chat != null || editeur != null || vocal != null) return
         bulle.visibility = View.VISIBLE
         eveiller()
         planifierRepos()
@@ -422,6 +477,109 @@ class FenetresJarvisTouch(private val service: Context) {
 
     private fun informer(message: String) {
         Toast.makeText(service, message, Toast.LENGTH_LONG).show()
+    }
+
+    // ── Vocal flottant ──────────────────────────────────────────────────
+
+    /** « Vocal » (ou bulle marquée) : la fenêtre vocale, sur LA session
+     *  vocale de JARVIS ; micro déclaré au service le temps du vocal. */
+    private fun ouvrirVocal() {
+        fermerMenu()
+        if (vocal != null) return
+        if (chat != null) fermerChat()
+        principal.removeCallbacks(estomper)
+        val microOk = (service as? ServiceJarvisTouch)?.micro(true) ?: true
+        val v = VocalJarvisTouch(
+            contexte, wm, zoneEcran(),
+            surReduire = { reduireVocal() },
+            surChat = {
+                fermerVocal()
+                ouvrirChat()
+            },
+            surQuitter = { quitterVocal() },
+        )
+        try {
+            v.afficher()
+        } catch (_: Exception) {
+            v.retirer()
+            (service as? ServiceJarvisTouch)?.micro(false)
+            rendreBulle()
+            informer("Le vocal n’a pas pu s’afficher.")
+            return
+        }
+        vocal = v
+        vocalReduit = false
+        rendu.marquerVocal(false)
+        bulle.visibility = View.GONE
+        rendu.reposer()
+        CanalMiniChat.recepteurVocal = { methode, args ->
+            when (methode) {
+                "vocal" -> (args as? Map<*, *>)?.let { v.appliquer(it) }
+                "niveau" -> (args as? Number)?.let { v.niveau(it.toDouble()) }
+            }
+        }
+        if (!microOk) {
+            v.appliquer(mapOf("actif" to false, "probleme" to "Android refuse le micro hors de JARVIS. Ouvrez JARVIS pour parler."))
+            return
+        }
+        CanalMiniChat.appeler("vocalOuvrir", null, { e ->
+            (e as? Map<*, *>)?.let { if (vocal === v) v.appliquer(it) }
+        }, { raison ->
+            if (vocal === v) v.appliquer(mapOf("actif" to false, "probleme" to
+                (raison ?: "JARVIS n’est pas disponible ici : ouvrez l’application.")))
+        })
+    }
+
+    /** Réduire : la session continue ; la bulle, marquée, la rouvre. */
+    private fun reduireVocal() {
+        val v = vocal ?: return
+        vocal = null
+        CanalMiniChat.recepteurVocal = null
+        v.retirer()
+        vocalReduit = true
+        rendu.marquerVocal(true)
+        bulle.visibility = View.VISIBLE
+        bulle.alpha = 1f
+        rendu.eveiller()
+    }
+
+    /** Quitter : fin réelle (micro et voix libérés), bulle normale. */
+    private fun quitterVocal() {
+        retirerVocal()
+        CanalMiniChat.appeler("vocalQuitter", null, {}, {})
+        rendreBulle()
+    }
+
+    /** Fermé sans quitter (JARVIS au premier plan, Chat, arrêt de la
+     *  bulle) : écoute suspendue, session reprenable dans JARVIS. */
+    fun fermerVocal() {
+        if (vocal == null && !vocalReduit) return
+        retirerVocal()
+        CanalMiniChat.appeler("vocalFermer", null, {}, {})
+        rendreBulle()
+    }
+
+    private fun retirerVocal() {
+        val v = vocal
+        vocal = null
+        vocalReduit = false
+        CanalMiniChat.recepteurVocal = null
+        v?.retirer()
+        rendu.marquerVocal(false)
+        (service as? ServiceJarvisTouch)?.micro(false)
+    }
+
+    /** Menu redimensionné (Actions) : toujours entier à l'écran. */
+    private fun replacerMenu() {
+        val m = menu ?: return
+        val (_, haut) = m.mesurer()
+        val z = zone()
+        val p = m.vue.layoutParams as? WindowManager.LayoutParams ?: return
+        p.y = (params.y + taille / 2 - haut / 2).coerceIn(z.top, maxOf(z.top, z.bottom + taille - haut))
+        try {
+            wm.updateViewLayout(m.vue, p)
+        } catch (_: Exception) {
+        }
     }
 
     /** JARVIS au premier plan, sur la même conversation (même moteur). */

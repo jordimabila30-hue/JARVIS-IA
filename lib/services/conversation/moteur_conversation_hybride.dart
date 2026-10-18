@@ -34,8 +34,9 @@ class MoteurConversationHybride implements MoteurConversation {
   @override
   Future<ReponseJarvis> repondre(DemandeJarvis demande) async {
     final fil = _fil;
-    // Consigne d'une pièce jointe WhatsApp : toujours l'analyse du serveur.
-    if (demande.repondreA == null) {
+    // Consigne d'une pièce jointe WhatsApp, capture jointe : toujours
+    // l'analyse du serveur.
+    if (demande.repondreA == null && demande.image == null) {
       final locale = await _local.repondreLocalement(demande, avecIA: true);
       if (locale != null) return locale;
     }

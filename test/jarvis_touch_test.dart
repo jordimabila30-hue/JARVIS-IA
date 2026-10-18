@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/services/jarvis_touch_service.dart';
 import 'package:ia_jarvis/services/voice_settings_service.dart';
+import 'package:ia_jarvis/widgets/parametres/pages_jarvis_touch.dart';
 import 'package:ia_jarvis/widgets/parametres/panneau_general.dart';
 
 /// Module natif simulé : autorisation et bulle pilotées par le test.
@@ -131,59 +132,73 @@ void main() {
     },
   );
 
-  testWidgets('Général : interrupteur visible seulement si disponible', (
+  testWidgets('Général : une entrée JARVIS Touch, page dédiée avec interrupteur', (
     tester,
   ) async {
-    Future<void> monter(JarvisTouchService s) => tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(child: PanneauGeneral(touch: s)),
-        ),
-      ),
-    );
-    await monter(service());
+    PageGenerale? ouverte;
+    Future<void> monter(JarvisTouchService s, {PageGenerale? page}) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: PanneauGeneral(
+                  touch: s,
+                  page: page,
+                  surPage: (p) => ouverte = p,
+                ),
+              ),
+            ),
+          ),
+        );
+    final s = service();
+    await monter(s);
     expect(find.text('JARVIS Touch'), findsOneWidget);
-    expect(
-      find.text(
-        'Afficher JARVIS au-dessus des autres applications pour y '
-        'accéder rapidement.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Assistant flottant'), findsOneWidget);
+    // Général n'est plus chargé : ni interrupteur ni réglages de capture.
+    expect(find.byType(Switch), findsNothing);
+    expect(find.text('Capture d’écran'), findsNothing);
+    await tester.tap(find.text('JARVIS Touch'));
+    expect(ouverte, PageGenerale.touch);
+
+    await monter(s, page: PageGenerale.touch);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(find.text('Capture d’écran'), findsOneWidget);
+    expect(find.text('Personnalisation'), findsOneWidget);
+    await tester.tap(find.text('Capture d’écran'));
+    expect(ouverte, PageGenerale.capture);
 
     await monter(service(disponible: false));
     expect(find.text('JARVIS Touch'), findsNothing);
     expect(find.text('Version'), findsOneWidget);
   });
 
-  testWidgets('Capture d’écran : état réel du système, réglages d’Android', (
+  testWidgets('Capture d’écran : état réel, jamais « Autorisé » à tort', (
     tester,
   ) async {
     final s = service();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SingleChildScrollView(child: PanneauGeneral(touch: s)),
+          body: SingleChildScrollView(
+            child: PanneauGeneral(touch: s, page: PageGenerale.capture),
+          ),
         ),
       ),
     );
-    expect(find.text('Sans autorisation à chaque capture'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
 
     await tester.runAsync(s.synchroniser);
     await tester.pump();
-    expect(find.text('Désactivée'), findsOneWidget);
-    // Aucun faux interrupteur : seul celui de JARVIS Touch existe.
-    expect(find.byType(Switch), findsOneWidget);
+    expect(find.text('Non autorisé'), findsOneWidget);
+    expect(find.byType(Switch), findsNothing);   // aucun faux interrupteur
 
-    await tester.tap(find.text('Ouvrir les réglages d’accessibilité'));
+    await tester.tap(find.text('Gérer l’autorisation'));
     await tester.pump();
     expect(bulle.reglagesCapture, 1);
 
     bulle.captureSansAutorisation = true;
     await tester.runAsync(s.synchroniser);
     await tester.pump();
-    expect(find.text('Activée'), findsOneWidget);
+    expect(find.text('Autorisé'), findsOneWidget);
   });
 }

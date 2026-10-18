@@ -3,6 +3,7 @@ package com.example.ia_jarvis.touch
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
@@ -46,6 +47,10 @@ import kotlin.math.roundToInt
  * Fenêtre en haut de l'écran (le clavier reste dessous), focalisable pour
  * écrire ; un toucher ailleurs lui retire le focus (clavier rendu à
  * l'application de dessous). Retour = réduire.
+ *
+ * Capture jointe ([PieceCapture]) : miniature au-dessus du champ, croix
+ * pour la retirer ; elle ne part qu'avec le message, à l'appui sur
+ * Envoyer (jamais automatiquement).
  */
 class ChatJarvisTouch(
     private val contexte: Context,
@@ -53,7 +58,13 @@ class ChatJarvisTouch(
     private val zone: Rect,
     private val surReduire: () -> Unit,
     private val surOuvrirJarvis: () -> Unit,
+    private var capture: PieceCapture? = null,
+    private val surRetirerCapture: () -> Unit = {},
+    private val surCaptureEnvoyee: () -> Unit = {},
 ) {
+    /** Capture validée prête à partir : fichier PNG + miniature (petite). */
+    class PieceCapture(val chemin: String, val miniature: Bitmap)
+
     private companion object {
         const val TAG = "JarvisTouch"
         val IVOIRE = Color.rgb(0xFF, 0xFD, 0xF9)
@@ -106,6 +117,8 @@ class ChatJarvisTouch(
     private val statut = TextView(contexte)
     private val saisie = EditText(contexte)
     private val envoyer = ImageView(contexte)
+    private val zoneCapture = LinearLayout(contexte)
+    private val vignette = ImageView(contexte)
     private val adaptateur = Adaptateur()
     private var pulsation: ObjectAnimator? = null
 
@@ -152,6 +165,8 @@ class ChatJarvisTouch(
         CanalMiniChat.appeler("fermer", null, {}, {})
         pulsation?.cancel()
         cacherClavier()
+        // La miniature appartient aux fenêtres (gardée si le chat est réduit).
+        vignette.setImageDrawable(null)
         try {
             wm.removeViewImmediate(racine)
         } catch (_: Exception) {
@@ -269,10 +284,27 @@ class ChatJarvisTouch(
         // reviendrait dans le champ vidé.
         contexte.getSystemService(InputMethodManager::class.java)?.restartInput(saisie)
         forcerBas = true
-        val args = mapOf("texte" to texte, "idEnvoi" to UUID.randomUUID().toString())
+        val piece = capture
+        val args = mutableMapOf<String, Any>("texte" to texte, "idEnvoi" to UUID.randomUUID().toString())
+        if (piece != null) {
+            args["image"] = piece.chemin
+            // Une seule fois : la vignette quitte la barre dès l'envoi.
+            montrerCapture(null)
+        }
         CanalMiniChat.appeler("envoyer", args, { ok ->
-            if (ok != true) rendre(texte, "Message non envoyé.")
+            when {
+                ok == true -> if (piece != null) surCaptureEnvoyee()
+                ok == "capture_indisponible" -> {
+                    rendre(texte, "La capture n’est plus disponible : reprenez-en une.")
+                    surRetirerCapture()
+                }
+                else -> {
+                    if (piece != null && !ferme) montrerCapture(piece)
+                    rendre(texte, "Message non envoyé.")
+                }
+            }
         }, { raison ->
+            if (piece != null && !ferme) montrerCapture(piece)
             // Jamais perdu : il revient dans le champ, rien n'est renvoyé
             // automatiquement.
             rendre(texte, raison ?: "JARVIS n’est pas joignable : ouvrez l’application, puis réessayez.")
@@ -492,12 +524,72 @@ class ChatJarvisTouch(
             layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
         }
 
+    /** Vignette de la capture jointe (null : aucune). */
+    private fun montrerCapture(piece: PieceCapture?) {
+        capture = piece
+        if (piece == null) {
+            vignette.setImageDrawable(null)
+            zoneCapture.visibility = View.GONE
+            saisie.hint = "Écrire à JARVIS…"
+        } else {
+            vignette.setImageBitmap(piece.miniature)
+            zoneCapture.visibility = View.VISIBLE
+            saisie.hint = "Votre question sur la capture…"
+        }
+    }
+
+    /** Une nouvelle capture validée pendant que le mini-chat est ouvert. */
+    fun joindre(piece: PieceCapture) {
+        if (!ferme) montrerCapture(piece)
+    }
+
+    private fun zoneCapture(): View {
+        zoneCapture.apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(6), dp(10), 0)
+        }
+        vignette.apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            contentDescription = "Capture d’écran jointe"
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setStroke(dp(1), TRAIT)
+            }
+            clipToOutline = true
+        }
+        zoneCapture.addView(vignette, LinearLayout.LayoutParams(dp(44), dp(60)))
+        zoneCapture.addView(TextView(contexte).apply {
+            text = "Capture jointe · envoyée avec votre message"
+            textSize = 12.5f
+            setTextColor(SECONDAIRE)
+            setPadding(dp(10), 0, dp(6), 0)
+            maxLines = 2
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        zoneCapture.addView(TextView(contexte).apply {
+            text = "✕"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(SECONDAIRE)
+            contentDescription = "Retirer la capture"
+            setOnClickListener {
+                montrerCapture(null)
+                surRetirerCapture()
+            }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        montrerCapture(capture)
+        return zoneCapture
+    }
+
     private fun barreSaisie(): View {
+        val bloc = LinearLayout(contexte).apply { orientation = LinearLayout.VERTICAL }
+        bloc.addView(zoneCapture(), LinearLayout.LayoutParams(MATCH, WRAP))
         val ligne = LinearLayout(contexte).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.BOTTOM
             setPadding(dp(10), dp(6), dp(10), dp(10))
         }
+        bloc.addView(ligne, LinearLayout.LayoutParams(MATCH, WRAP))
         saisie.apply {
             hint = "Écrire à JARVIS…"
             setHintTextColor(SECONDAIRE)
@@ -539,7 +631,8 @@ class ChatJarvisTouch(
         }
         ligne.addView(envoyer, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) })
         activerEnvoi()
-        return ligne
+        montrerCapture(capture)
+        return bloc
     }
 
     private fun activerEnvoi() {

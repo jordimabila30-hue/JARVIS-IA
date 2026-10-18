@@ -182,6 +182,9 @@ def convertir(messages: Sequence[Message]) -> tuple[str | None, list[dict[str, A
         else:
             blocs = [{"type": "text", "text": r} for r in rappels]
             rappels = []
+            # Image jointe (capture) : avant le texte, comme le recommande l'API.
+            blocs += [{"type": "image", "source": {"type": "base64", "media_type": i["media_type"],
+                                                   "data": i["data"]}} for i in m.get("images") or ()]
             blocs.append({"type": "text", "text": neutraliser(contenu)})
         if tours and tours[-1]["role"] == role and "tour" not in m and not _a_outils(tours[-1]):
             tours[-1]["content"].extend(blocs)
@@ -208,6 +211,7 @@ def definitions(outils: Sequence[DefinitionOutil] | None) -> list[dict[str, Any]
 class FournisseurAnthropic(FournisseurLLM):
     nom = "anthropic"
     reflexion_dans_sortie = True
+    vision = True
 
     def __init__(self, *, cle: str, modele: str, effort: Effort | None = None,
                  budget_comprehension: int | None = None, client: AsyncAnthropic | None = None) -> None:

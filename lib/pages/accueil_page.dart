@@ -330,7 +330,8 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     // mini-chat affiche et alimente CETTE conversation.
     JarvisTouchService.instance.restaurer();
     if (JarvisTouchService.instance.disponible) {
-      _miniChat = PasserelleMiniChat(_conversation)..attacher();
+      _miniChat = PasserelleMiniChat(_conversation, vocal: _session)
+        ..attacher();
     }
     final consentement = _consentement;
     if (consentement != null && !consentement.charge) consentement.charger();

@@ -23,23 +23,33 @@ import kotlin.math.roundToInt
 /**
  * Menu rapide de JARVIS Touch (esprit AssistiveTouch) : panneau sombre
  * translucide aux coins très arrondis, quatre actions en grille 2 × 2
- * séparées par de fins traits. « Discuter » ouvre le mini-chat, « Capturer »
- * la capture d'écran ; « Vocal » et « Importer » annoncent « Disponible
- * prochainement » dans l'en-tête. Rendu natif léger : aucun flou, une seule
- * ombre, une animation courte à l'ouverture.
+ * séparées par de fins traits : Discuter (mini-chat), Vocal (vocal
+ * flottant), Capturer (capture d'écran), Actions (compétences à venir :
+ * liste seulement, « Bientôt disponible », aucun appel à l'IA). Rendu
+ * natif léger : aucun flou, une seule ombre, une animation courte.
  */
 class MenuJarvisTouch(
     private val contexte: Context,
     private val surFermer: () -> Unit,
     private val surDiscuter: () -> Unit,
     private val surCapturer: () -> Unit,
+    private val surVocal: () -> Unit,
+    /** Contenu changé (Actions ↔ grille) : la fenêtre se replace. */
+    private val surRedimension: () -> Unit = {},
 ) {
-    /** Entrées du menu (les actions réelles arrivent phase par phase). */
     enum class Entree(val libelle: String, val icone: Int) {
         DISCUTER("Discuter", R.drawable.touch_discuter),
         VOCAL("Vocal", R.drawable.touch_vocal),
         CAPTURER("Capturer", R.drawable.touch_ecran),
-        IMPORTER("Importer", R.drawable.touch_importer),
+        ACTIONS("Actions", R.drawable.touch_actions),
+    }
+
+    /** JARVIS Actions : compétences prévues, pas encore développées. */
+    enum class Action(val libelle: String, val detail: String, val icone: Int) {
+        EXPLIQUER("M’expliquer", "Simplifier un contenu difficile", R.drawable.touch_expliquer),
+        TRADUIRE("Traduire", "Traduction rapide", R.drawable.touch_traduire),
+        REPONDRE("Aider à répondre", "Préparer une réponse", R.drawable.touch_repondre),
+        RACCOURCIS("Mes raccourcis", "Commandes personnalisables", R.drawable.touch_raccourcis),
     }
 
     private companion object {
@@ -54,7 +64,11 @@ class MenuJarvisTouch(
     private val largeur = dp(264)
     private val principal = Handler(Looper.getMainLooper())
     private val titre = TextView(contexte)
+    private val retour = TextView(contexte)
     private val racine = LinearLayout(contexte)
+    private val grille = LinearLayout(contexte)
+    private val actions = LinearLayout(contexte)
+    private var titreRepos = "JARVIS"
 
     val vue: View get() = racine
 
@@ -80,16 +94,75 @@ class MenuJarvisTouch(
         }
 
         racine.addView(entete())
+        grille.orientation = LinearLayout.VERTICAL
         val entrees = Entree.values()
         for (ligne in entrees.indices step 2) {
-            if (ligne > 0) racine.addView(trait(horizontal = true))
+            if (ligne > 0) grille.addView(trait(horizontal = true))
             val rang = LinearLayout(contexte).apply { orientation = LinearLayout.HORIZONTAL }
             entrees.slice(ligne until minOf(ligne + 2, entrees.size)).forEachIndexed { i, entree ->
                 if (i > 0) rang.addView(trait(horizontal = false))
                 rang.addView(tuile(entree), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
-            racine.addView(rang)
+            grille.addView(rang)
         }
+        racine.addView(grille)
+        actions.orientation = LinearLayout.VERTICAL
+        actions.visibility = View.GONE
+        Action.values().forEachIndexed { i, a ->
+            if (i > 0) actions.addView(trait(horizontal = true))
+            actions.addView(ligneAction(a))
+        }
+        racine.addView(actions)
+    }
+
+    /** Actions ↔ grille, dans le même panneau. */
+    private fun montrerActions(oui: Boolean) {
+        principal.removeCallbacksAndMessages(null)
+        grille.visibility = if (oui) View.GONE else View.VISIBLE
+        actions.visibility = if (oui) View.VISIBLE else View.GONE
+        retour.visibility = if (oui) View.VISIBLE else View.GONE
+        titreRepos = if (oui) "ACTIONS" else "JARVIS"
+        titre.letterSpacing = 0.22f
+        titre.text = titreRepos
+        surRedimension()
+    }
+
+    private fun ligneAction(a: Action): View {
+        val ligne = LinearLayout(contexte).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            background = ondulation(GradientDrawable.RECTANGLE)
+            contentDescription = a.libelle
+            // Compétence non développée : aucun appel, une annonce.
+            setOnClickListener { annoncer() }
+        }
+        val pastille = FrameLayout(contexte).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(46, 122, 108, 240))
+                setStroke(dp(1), Color.argb(120, 150, 135, 255))
+            }
+        }
+        pastille.addView(ImageView(contexte).apply { setImageResource(a.icone) },
+            FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+        ligne.addView(pastille, LinearLayout.LayoutParams(dp(40), dp(40)))
+        val textes = LinearLayout(contexte).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        textes.addView(TextView(contexte).apply {
+            text = a.libelle
+            textSize = 14f
+            setTextColor(TEXTE)
+        })
+        textes.addView(TextView(contexte).apply {
+            text = a.detail
+            textSize = 12f
+            setTextColor(TITRE)
+        })
+        ligne.addView(textes, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        return ligne
     }
 
     /** Taille du menu avant son ajout (pour le placer à côté de la bulle). */
@@ -122,6 +195,16 @@ class MenuJarvisTouch(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), 0, 0, dp(6))
         }
+        retour.apply {
+            text = "‹"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(TEXTE)
+            contentDescription = "Retour au menu"
+            visibility = View.GONE
+            setOnClickListener { montrerActions(false) }
+        }
+        ligne.addView(retour, LinearLayout.LayoutParams(dp(32), dp(36)))
         titre.apply {
             text = "JARVIS"
             letterSpacing = 0.22f
@@ -169,7 +252,8 @@ class MenuJarvisTouch(
                 when (entree) {
                     Entree.DISCUTER -> surDiscuter()
                     Entree.CAPTURER -> surCapturer()
-                    else -> annoncer()
+                    Entree.VOCAL -> surVocal()
+                    Entree.ACTIONS -> montrerActions(true)
                 }
             }
         }
@@ -195,14 +279,14 @@ class MenuJarvisTouch(
         return colonne
     }
 
-    /** Vocal / Importer : rien n'est déclenché, l'en-tête l'annonce. */
+    /** Compétence pas encore développée : l'en-tête l'annonce. */
     private fun annoncer() {
         titre.letterSpacing = 0f
-        titre.text = "Disponible prochainement"
+        titre.text = "Bientôt disponible"
         principal.removeCallbacksAndMessages(null)
         principal.postDelayed({
             titre.letterSpacing = 0.22f
-            titre.text = "JARVIS"
+            titre.text = titreRepos
         }, 2200)
     }
 

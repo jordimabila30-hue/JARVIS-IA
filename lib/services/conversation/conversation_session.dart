@@ -1,3 +1,4 @@
+import '../../models/capture_jointe.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -164,6 +165,22 @@ class ConversationSession extends ChangeNotifier {
     if (t.isEmpty) return Future<void>.value();
     final generation = _generation;
     return _file = _file.then((_) => _traiter(t, generation));
+  }
+
+  /// Message avec une capture d'écran (JARVIS Touch) : [image] part avec
+  /// CE message seulement, après l'appui sur Envoyer ; le fil garde la
+  /// référence [capture]. Toujours l'IA (jamais le moteur local).
+  Future<void> envoyerAvecCapture(
+    String texte,
+    CaptureJointe capture,
+    ImageAEnvoyer image,
+  ) {
+    final t = texte.trim();
+    if (t.isEmpty) return Future<void>.value();
+    final generation = _generation;
+    return _file = _file.then(
+      (_) => _traiter(t, generation, capture: capture, image: image),
+    );
   }
 
   /// Message de pièce jointe sans compte : la consigne est reçue, mais
@@ -835,6 +852,8 @@ class ConversationSession extends ChangeNotifier {
     String texte,
     int generation, {
     bool vocal = false,
+    CaptureJointe? capture,
+    ImageAEnvoyer? image,
   }) async {
     if (_ferme || generation != _generation) return null;
     final analyse = _detecteur.analyser(
@@ -865,6 +884,7 @@ class ConversationSession extends ChangeNotifier {
         texte: analyse.demande,
         conversation: nouvelle,
         vocal: vocal,
+        capture: capture,
       ),
     );
     return _repondre(
@@ -881,6 +901,7 @@ class ConversationSession extends ChangeNotifier {
         tonPropose: _tonsRegardes[_idCourant],
         longueurPropose: _longueursRegardees[_idCourant]?.name,
         propositionsMessage: _dernieresPropositions()?.idServeur,
+        image: image,
       ),
       vocal: vocal,
     );
@@ -1488,6 +1509,7 @@ class ConversationSession extends ChangeNotifier {
       texte: jarvis ? MoteurConversationIA.texteSimple(r.contenu) : r.contenu,
       idServeur: r.id,
       enregistre: true,
+      capture: r.capture ? const CaptureJointe() : null,
     );
   }
 

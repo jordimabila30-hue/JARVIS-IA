@@ -1593,3 +1593,31 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - Phase 3B : utiliser la capture validée dans le mini-chat (`CaptureTouch.fichierValide`), sur action explicite.
 
+## 2026-10-18 — JARVIS Touch : Paramètres, capture → IA, vocal flottant, Actions
+
+### Fait
+- **Paramètres** : Général n'a plus qu'une entrée « JARVIS Touch · Assistant flottant » ; page dédiée (interrupteur existant, Capture d'écran, Personnalisation) ; page Capture : « Autorisé » / « Non autorisé » / « À chaque capture » selon l'état réel, « Gérer l'autorisation ».
+- **Capture → mini-chat** : après Valider, le mini-chat s'ouvre avec la vignette (rien n'est envoyé) ; croix = capture effacée ; gardée si le chat est réduit ; envoi seulement par Envoyer.
+- **Image → MIA** : champ `image` de `/chat/stream`, contrôlé (`app/vision.py`) ; Claude seulement (`vision`) ; offre Free → refus clair avant tout appel (décision de l'utilisateur : « Claude seulement en Pro ») ; jamais en base ; 1 h dans Redis pour les questions suivantes.
+- **Vocal flottant** : fenêtre compacte « JARVIS — Vocal » (symbole audio bleu, Micro / Chat / Quitter / Réduire) sur la session vocale de l'accueil ; micro déclaré au service au premier plan seulement pendant le vocal.
+- **Actions** : remplace « Importer » dans le menu ; 4 compétences affichées, « Bientôt disponible ».
+- **Backend de test arrêté** : `jarvis-api-gmail` (8001) arrêté (non supprimé) et `adb reverse 8001` retiré, à la demande de l'utilisateur ; production `jarvis-api` mise à jour (`docker compose up -d --build api`, image précédente gardée : `backend-api:avant-vision`).
+
+### Tests
+- Backend : 516 réussis, 1 ignoré (7 nouveaux `test_vision`) ; essai RÉEL `tests/essai_vision_reel.py` : Claude (`claude-opus-5-5`) via MIA lit une image fictive (« Rouge »).
+- Flutter : 804 réussis (nouveaux : `capture_jointe_test`, pages Paramètres dans `jarvis_touch_test`).
+- S10+ (Android 12, vrai backend) : menu (Actions, Bientôt disponible, retour), capture → éditeur → Valider → mini-chat avec vignette, réduction sans perte, envoi : image reçue par le serveur et refusée (Free) avec le message attendu, même échange dans JARVIS principal ; vocal : ouverture, écoute réelle (indicateur micro Android), Micro coupé / réactivé, Réduire (bulle marquée), réouverture, Quitter (capacité micro du processus retirée).
+- Corrigé pendant les essais : `DemandeJarvis.avecFragments` perdait l'image (test ajouté) ; l'appli lancée sans `JARVIS_API_URL` visait 10.0.2.2.
+
+### Mesures (S10+)
+- Recadrage (gfxinfo, 200 images : coins, bords, déplacement, double-toucher) : médiane 9 ms, 90e 12 ms, 95e 16 ms, 99e 20 ms, 2 % d'images saccadées.
+- Validation : PNG recadré 997 × 2235 en 247 ms (arrière-plan).
+- Mémoire : 414 Mo → 456 Mo juste après 6 captures → 430 Mo 10 s après (redescend : pas de fuite constatée) ; 0 fichier restant.
+
+- **Analyse visuelle de bout en bout (S10+, compte passé en Pro le temps de l’essai, avec l’accord de l’utilisateur, puis remis en Free : 150 messages / 50 000 tokens)** : capture Chrome → mini-chat → Envoyer → serveur (« Image jointe : image/png, 244 Ko ») → Claude (claude-opus-5-5) : description exacte de la page (sens de Flutter, Od1n, 10 h 18, batterie 100 %) ; question suivante sur la même image sans renvoi (contexte Redis) : réponse exacte (cinq rubriques) ; en base : référence seulement (118 caractères), aucun octet.
+
+### Non testé / limites
+- Vocal : reconnaissance d'une vraie phrase, réponse IA et lecture TTS non testées (personne pour parler au téléphone pendant l'essai).
+- Page Paramètres JARVIS Touch vérifiée par tests de widgets, pas ouverte sur le téléphone.
+- Un premier essai (avant correction) a enregistré dans le compte une question « Que vois-tu sur cette capture ? » avec une réponse GroqCloud sans image.
+

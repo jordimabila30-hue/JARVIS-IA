@@ -239,7 +239,7 @@ class SupabaseAdmin:
             "/messages",
             params={
                 "conversation_id": f"eq.{conversation_id}",
-                "select": "role,content",
+                "select": "role,content,attachments",
                 "order": "created_at.desc",
                 "limit": str(limit),
             },

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../models/capture_jointe.dart';
 import '../../models/message_conversation.dart';
+import '../../services/capture/fichier_capture.dart';
 import '../../theme/theme_jarvis.dart';
 import 'carte_conversation_externe.dart';
 import 'carte_piece_jointe.dart';
@@ -71,7 +73,11 @@ class BulleUtilisateur extends StatelessWidget {
                         piece: piece,
                         taille: taille - 0.5,
                       ),
-                    if ((conversation != null || piece != null) &&
+                    if (message.capture case final capture?)
+                      _CaptureJointe(capture),
+                    if ((conversation != null ||
+                            piece != null ||
+                            message.capture != null) &&
                         message.texte.isNotEmpty)
                       const SizedBox(height: 10),
                     if (message.texte.isNotEmpty)
@@ -94,4 +100,51 @@ class BulleUtilisateur extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Capture d'écran jointe (JARVIS Touch) : miniature si le fichier local
+/// existe encore, sinon une simple mention (l'image n'est jamais gardée
+/// par le serveur).
+class _CaptureJointe extends StatelessWidget {
+  const _CaptureJointe(this.capture);
+
+  final CaptureJointe capture;
+
+  @override
+  Widget build(BuildContext context) {
+    final chemin = capture.chemin;
+    final image = chemin == null ? null : miniatureCapture(chemin);
+    if (image != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 160, maxHeight: 220),
+          child: Image(
+            image: image,
+            fit: BoxFit.cover,
+            semanticLabel: 'Capture d’écran jointe',
+            errorBuilder: (_, _, _) => const _MentionCapture(),
+          ),
+        ),
+      );
+    }
+    return const _MentionCapture();
+  }
+}
+
+class _MentionCapture extends StatelessWidget {
+  const _MentionCapture();
+
+  @override
+  Widget build(BuildContext context) => const Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(Icons.screenshot_outlined, size: 16, color: CouleursJarvis.signal),
+      SizedBox(width: 6),
+      Text(
+        'Capture d’écran jointe',
+        style: TextStyle(fontSize: 13, color: CouleursJarvis.texteSecondaire),
+      ),
+    ],
+  );
 }

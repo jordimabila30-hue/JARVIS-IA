@@ -24,6 +24,9 @@ interface RenduBulle {
     fun reposer()
 
     fun liberer()
+
+    /** Vocal flottant réduit : la session continue, la bulle le montre. */
+    fun marquerVocal(oui: Boolean)
 }
 
 /**
@@ -49,6 +52,12 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
         color = Color.argb(60, 221, 213, 239)
     }
     private val halo = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val marqueVocal = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * densite
+        color = Color.rgb(0x7D, 0x8D, 0xF5)
+    }
+    private var vocal = false
     private val coeur = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private var phase = 0f
@@ -94,6 +103,13 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
         canvas.drawCircle(cx, cy, r * 0.62f, halo)
         canvas.restore()
         canvas.drawCircle(cx, cy, r * 0.34f, coeur)
+        if (vocal) canvas.drawCircle(cx, cy, r - 2.5f * densite, marqueVocal)
+    }
+
+    override fun marquerVocal(oui: Boolean) {
+        vocal = oui
+        contentDescription = if (oui) "JARVIS Touch : vocal en cours (toucher pour l’ouvrir)" else "JARVIS Touch"
+        invalidate()
     }
 
     override fun eveiller() {

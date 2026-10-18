@@ -254,6 +254,9 @@ class FournisseurLLM(ABC):
     #: La réflexion interne du modèle compte dans le plafond de sortie
     #: (Claude) : l'appelant doit prévoir un plafond plus large.
     reflexion_dans_sortie: bool = False
+    # Lit les images jointes (clé "images" d'un message user :
+    # [{"media_type", "data" base64}]). Faux : jamais d'image envoyée.
+    vision: bool = False
     #: Budget d'entrée du moteur de compréhension (tokens estimés) propre à
     #: ce fournisseur ; None : réglage commun (calé sur GroqCloud).
     budget_comprehension: int | None = None

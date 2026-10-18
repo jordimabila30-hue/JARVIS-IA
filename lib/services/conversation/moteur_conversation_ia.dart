@@ -75,6 +75,7 @@ class MoteurConversationIA {
       tonPropose: demande.tonPropose,
       propositionsMessage: demande.propositionsMessage,
       longueurPropose: demande.longueurPropose,
+      image: demande.image,
       // Dès l'événement `meta` : même si la génération échoue ensuite,
       // ou si le fil a changé entre-temps, la conversation locale garde
       // sa conversation serveur.
@@ -209,6 +210,8 @@ class MoteurConversationIA {
     ErreurApi.iaIndisponible => detail ?? type.message,
     // Message complet du serveur (type de limite + sa réinitialisation).
     ErreurApi.quotaAtteint => detail ?? type.message,
+    // Image refusée (offre sans lecture d'image, format…) : message du serveur.
+    ErreurApi.imageRefusee => detail ?? type.message,
     _ => type.message,
   };
 }
