@@ -177,8 +177,12 @@ token coûte différemment selon le fournisseur, l'entrée ou la sortie.
    `sauvegarde-avant-abonnements-phase2` ; base : la migration est additive
    (les anciens backends lisent toujours `users`).
 
-Instance de test (isolée) : `jarvis-api-abo`, port 8001, image
-`backend-api:abo-test`, Redis base 1, `ABONNEMENTS_ROUTAGE=true`.
+État au 2026-10-18 : étape 1 **faite** — `jarvis-api` (port 8000) sur la
+nouvelle image (quotas quotidiens de `plan_config`, `/me/quota` complet),
+`ABONNEMENTS_ROUTAGE=false` : Claude sert tous les comptes, Free compris.
+Retour arrière du code : image `backend-api:avant-abonnements`.
+L'instance de test `jarvis-api-abo` (port 8001) est supprimée ; étape 2
+(routage) en attente d'accord.
 
 ## 9. Limitations
 

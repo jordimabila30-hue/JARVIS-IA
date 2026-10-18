@@ -1368,3 +1368,17 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Valider le S10+ dès qu'il est disponible, puis commit avec accord.
+
+## 2026-10-18 — Déploiement du backend des abonnements en production
+
+### Fait
+- Image de production sauvegardée : `backend-api:avant-abonnements` (ancienne `1e0a52b54b6f`).
+- `jarvis-api` (port 8000) reconstruite depuis le code actuel (backend inchangé depuis la phase 2 validée, 417 tests) : image `954d097068c5`. Vérifié sans appel IA : santé ok, `/me/quota` 401 sans jeton, CORS localhost:3000 ok, `ABONNEMENTS_ROUTAGE=False`, cache des limites 30 s, `ENVIRONNEMENT=production`, `LLM_PROVIDER=anthropic`, `fournisseur_actif` présent.
+- Effet : quotas quotidiens de `plan_config` appliqués à tous (Free 150 / 50 000, Pro 300 / 100 000), aucune session ; Claude sert encore tous les comptes (routage désactivé).
+- Instance de test `jarvis-api-abo` (8001) supprimée, ainsi que les images `backend-api:abo-test` et `backend-api:mia-test`. Restent : `jarvis-api`, `jarvis-redis`, images de retour arrière `avant-abonnements` et `avant-mia`.
+- Applis Windows et Web relancées sur la production (aucune adresse 8001 dans le code ; `JARVIS_API_URL` absent = 8000).
+- Vérifié : Windows et Web lisent `/me/quota` sur la production (200, deux connexions, aucune erreur serveur) ; panneau Utilisation confirmé par l'utilisateur.
+
+### Prochaine étape
+- S10+ : réinstaller l'appli (`flutter run`) pour avoir l'interface Utilisation (l'APK installé est antérieur), `adb reverse tcp:8000 tcp:8000`.
+- Activer `ABONNEMENTS_ROUTAGE` (Free → GroqCloud) avec accord.
