@@ -325,3 +325,27 @@ async def test_mesures_journalisees_sans_contenu(env, caplog):
     assert "tours=2" in fin and "requetes_gmail=2" in fin and "premier_outil_ms=" in fin and "fournisseur=groq" in fin
     odo = " ".join(r.getMessage() for r in caplog.records if r.name == "app.odo")
     assert "privé" not in odo and "nscription" not in odo and USER not in odo
+
+
+# --- Masquage : TOUS les chemins de lecture (recherche, message, fil, résumé, mémoire) --------
+
+CODES = ["Votre code de vérification est 482913.", "Your verification code: 482 913", "Code OTP : 482-913",
+         "Su código es 482913", "Utilisez ce code\n482913\npour continuer"]
+
+
+@pytest.mark.parametrize("texte", CODES)
+async def test_masquage_sur_les_quatre_chemins_de_lecture(env, texte):
+    from app.odo.outils_gmail import GmailLireFil, GmailLireMessage, GmailPreparerResume
+    await connecter(env)
+    boite(env, m1aaaa=dict(objet="Code 482913", fil="filcode1", texte=texte + " https://compte.fr/login?t=zz9",
+                           pieces=["code_482913.pdf"]))
+    client = ClientGmail(env.google)
+    sorties = [
+        (await outil(env).executer({"termes": ["code"]}, ctx())).contenu,
+        (await GmailLireMessage(client).executer({"id": "m1aaaa"}, ctx())).contenu,
+        (await GmailLireFil(client).executer({"fil": "filcode1"}, ctx())).contenu,
+        (await GmailPreparerResume(client).executer({"ids": ["m1aaaa"]}, ctx())).contenu,
+    ]
+    for s in sorties:
+        assert "482" not in s and "zz9" not in s, s
+    assert all(CODE_MASQUE in s for s in sorties)

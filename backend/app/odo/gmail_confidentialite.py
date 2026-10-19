@@ -27,12 +27,14 @@ _URL_SENSIBLE = re.compile(
     r"reset|password|passwd|motdepasse|mot-de-passe|verif|confirm|login|log-in|signin|sign-in|auth|token|"
     r"magic|otp|activat|session|secure|code=|key=|sig=", re.I)
 # Mot qui annonce un code, puis (≤ 40 caractères plus loin) le code lui-même :
-# 4 à 10 caractères dont au moins un chiffre (123456, G-123456, A7K-29Q).
-_ANNONCE = (r"(?:code|otp|pin|passcode|v[ée]rification|verification|s[ée]curit[ée]|security|"
+# 4 à 10 caractères dont au moins un chiffre (123456, G-123456, A7K-29Q), ou
+# deux groupes de chiffres (482 913, 482-913). « code_482913.pdf » compris.
+_ANNONCE = (r"(?:code|c[oó]digo|otp|pin|passcode|v[ée]rification|verification|s[ée]curit[ée]|security|"
             r"usage unique|one[- ]time|2fa|authentification|authentication)")
 _CODE_ANNONCE = re.compile(
-    rf"({_ANNONCE}[^\n\d]{{0,40}}?)\b((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{{2,9}}[A-Z0-9])\b", re.I)
-_CODE_SEUL = re.compile(r"^(\s*)(?:G-)?\d{4,8}(\s*)$", re.M)
+    rf"({_ANNONCE}[^\n\d]{{0,40}}?)(?<![A-Za-z0-9])"
+    rf"(\d{{3,4}}[ .-]\d{{3,4}}|(?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{{2,9}}[A-Z0-9])(?![A-Za-z0-9])", re.I)
+_CODE_SEUL = re.compile(r"^(\s*)(?:G-)?(?:\d{4,8}|\d{3} \d{3})(\s*)$", re.M)
 _MDP = re.compile(r"((?:mot de passe|password|mdp)\s*(?:temporaire|provisoire)?\s*[:=]\s*)(\S+)", re.I)
 _CARTE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
 _IBAN = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b")

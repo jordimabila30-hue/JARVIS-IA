@@ -1841,3 +1841,18 @@ Appareil : Samsung Galaxy S10+ (SM-G975F, Android 12), `flutter run --profile` (
 - Limite quotidienne de tokens (Free) atteinte pendant les essais : les derniers échanges n'ont reçu que le message de limite.
 - Écouteurs, bruit ambiant, voix humaine proche du téléphone : non mesurés.
 
+
+## 2026-10-19 — Gmail phase 1 : campagne de validation (incomplète)
+
+### Résultats
+- Flutter : **843 réussis, 0 échec** (suite complète).
+- Backend : **576 réussis, 1 ignoré** (dont 5 nouveaux cas de masquage sur les 4 chemins de lecture).
+- Masquage renforcé : codes en deux groupes (« 482 913 », « 482-913 »), « código », codes collés à un mot (« code_482913.pdf »), noms de pièces jointes filtrés.
+- Masquage sur la VRAIE boîte (script serveur, compteurs seulement) : 10 messages, 6 liens sensibles avant → 0 après, sur recherche, message, fil et résumé ; aucun code de vérification présent dans ces messages (règle des codes vérifiée par les tests seulement).
+- Mesures réelles disponibles (Claude, 2026-10-18, instance 8002) : 2 tours, ~11 s, 1 appel d'outil, premier outil après 3,1-3,7 s, 7 583 / 9 697 tokens, 3 / 11 requêtes Gmail.
+
+### Non vérifié
+- Comportements réels sur le S10+ (demande indirecte, contexte, clarification, reprise, aucun résultat) : bloqués par la limite quotidienne du compte (offre Free en base : 50 000 tokens/jour, 61 996 consommés le 19/10). Instance 8002 (GroqCloud pour tous) arrêtée et supprimée ; production 8000 intacte.
+
+### Prochaine étape
+- Après 01:00 : relancer l'instance 8002 (GroqCloud) et les 6 essais guidés ; Claude seulement avec accord.

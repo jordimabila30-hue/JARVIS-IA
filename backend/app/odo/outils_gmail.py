@@ -90,7 +90,8 @@ def _ligne(e: ApercuEmail, pertinence: str | None = None, raisons: list[str] | N
 
 
 def _bloc(e: Email) -> str:
-    pieces = f"\nPièces jointes (non ouvertes) : {', '.join(e.pieces_jointes)}" if e.pieces_jointes else ""
+    pieces = (f"\nPièces jointes (non ouvertes) : {masquer_secrets(', '.join(e.pieces_jointes))}"
+              if e.pieces_jointes else "")
     coupe = "\n[… texte coupé]" if e.tronque else ""
     return (f"id={e.id} fil={e.fil}\nDe : {e.de}\nÀ : {e.a}\nDate : {e.date}\n"
             f"Objet : {masquer_secrets(e.objet) or '(sans objet)'}"
