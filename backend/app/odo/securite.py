@@ -20,7 +20,7 @@ import re
 from typing import Any
 
 BALISE = "resultat_outil"
-_BALISES = re.compile(r"<\s*/?\s*(resultat_outil|consignes_systeme)[^>]*>", re.I)
+_BALISES = re.compile(r"<\s*/?\s*(resultat_outil|consignes_systeme|gmail_derniere_recherche)[^>]*>", re.I)
 
 CONSIGNE_OUTILS = (
     "Outils : tu peux appeler les outils proposés quand ils aident à répondre. "

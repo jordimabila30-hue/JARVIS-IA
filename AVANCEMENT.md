@@ -1664,3 +1664,35 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - La réponse est dite en un seul énoncé, à la fin de la réception (comportement existant) : pas de lecture par segments pendant le flux.
 - Pendant l'essai, une autre personne a utilisé le téléphone (questions sur le soleil) : échanges réels, enregistrés dans la conversation.
 
+
+## 2026-10-19 — Gmail, phase 1 sur 3 : compréhension des demandes et recherche intelligente
+
+### Audit (avant)
+- Une seule requête Gmail, mots en ET strict, aucun synonyme ni élargissement ; résultats dans l'ordre de Gmail, sans pertinence ni regroupement par fil ; « Aucun e-mail ne correspond » (le modèle pouvait conclure qu'aucun e-mail n'existe).
+- Dates calculées par le modèle depuis la date UTC ; `after:AAAA/MM/JJ` interprété par Gmail dans son propre fuseau.
+- Identifiants trouvés perdus d'une demande à l'autre ; aucune règle de clarification.
+- **Confidentialité** : codes de vérification, liens de connexion, numéros de carte transmis au fournisseur IA (seule une consigne interdisait de les recopier) → corrigé.
+- Mesure par outil seulement.
+
+### Fait
+- `app/odo/gmail_recherche.py` (déterministe, identique GroqCloud / Claude) : périodes nommées dans le fuseau de l'appareil (secondes), requête sûre avec alternatives en OU et variantes sans accents, élargissement ≤ 3 requêtes, pertinence forte / moyenne / faible, un candidat par fil, expéditeurs distincts signalés, compte rendu de ce qui a été consulté.
+- `gmail_rechercher` : nouveaux critères (`expediteurs`, `termes` + reformulations, `periode`, `destinataire`, `pieces_jointes`, `envoyes`) ; consigne Gmail : comprendre, utiliser le contexte, chercher ou poser UNE question, reprendre après la réponse, prudence sur l'absence de résultat.
+- `app/odo/gmail_confidentialite.py` : secrets masqués avant le modèle (codes, mots de passe, liens de connexion, cartes, IBAN ; autres liens réduits au domaine).
+- Mémoire de la dernière recherche par compte et par chat (Redis 1 h, métadonnées seulement) → `<gmail_derniere_recherche>` jointe à la question suivante.
+- Route de chat : `fuseau_minutes` (envoyé par l'appli Flutter, écrit et vocal), date et heure locales dans le message système.
+- Mesures `ODO fin` : tours, appels, durée, temps avant le premier outil, tokens, requêtes Gmail, fournisseur (aucun contenu).
+- Décision OAuth documentée (GMAIL.md) : option A maintenant (non vérifiée), option C plus tard.
+- Point de restauration : branche `sauvegarde/avant-gmail-phase1` (`9657c7b`).
+
+### Tests
+- Backend : 539 réussis, 1 ignoré (31 nouveaux : 12 scénarios demandés, GroqCloud et Claude simulés pour les parcours de conversation, masquage, isolation, mesures).
+- Flutter : suite complète réussie après mise à jour de 3 tests (corps de requête avec `fuseau_minutes`) ; 7 demandes indirectes vérifiées comme envoyées au serveur.
+- Réel (instance temporaire 8002, compte passé en Pro → Claude, essais faits par l'utilisateur) : 2 demandes avec recherche Gmail = 2 tours, 10,7-11,0 s, 1 seul appel d'outil, premier outil après 3,1-3,7 s, 7 583 et 9 697 tokens, 3 et 11 requêtes Gmail ; 3 demandes sans outil (2,3-5 s). Contenu des échanges non vérifiable (aucun message enregistré en base) ; GroqCloud réel non essayé (limite quotidienne atteinte, puis téléphone déconnecté).
+
+### État
+- Production `jarvis-api` (8000) inchangée par cette phase ; instance 8002 arrêtée et supprimée ; image `backend-api:gmail-phase1` gardée.
+- Rien n'est commité.
+
+### Prochaine étape
+- Essais réels guidés (S10+) avec Claude ET GroqCloud sur les exemples A à E, puis déploiement en production sur accord.
+- Phase 2 : compréhension approfondie des contenus, importance, relations entre messages.

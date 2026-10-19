@@ -196,15 +196,22 @@ def test_requete_gmail_structuree_et_sure():
 
 
 async def test_recherche_par_expediteur_date_objet_et_aucun_resultat(env):
+    from datetime import datetime, timezone
+    from app.odo.gmail_recherche import Criteres
     await connecter(env)
     outil = GmailRechercher(ClientGmail(env.google))
-    r = await outil.executer({"expediteur": "martin", "depuis": "2026-10-18", "objet": "inscription"}, ctx())
-    assert r.contenu == "Aucun e-mail ne correspond à cette recherche."
-    assert env.faux.recherches[-1] == 'from:"martin" subject:"inscription" after:2026/10/18'
+    r = await outil.executer({"expediteurs": ["martin"], "depuis": "2026-10-18", "objet": "inscription"}, ctx())
+    assert "Aucun e-mail trouvé" in r.contenu and "ne prouve pas" in r.contenu
+    debut = int(datetime(2026, 10, 18, tzinfo=timezone.utc).timestamp())        # fuseau inconnu : UTC
+    assert env.faux.recherches[0] == f'from:"martin" subject:"inscription" after:{debut}'
     env.faux.messages = {"m1aaaa": message("m1aaaa"), "m2bbbb": message("m2bbbb", objet="Réunion")}
     r = await outil.executer({"max": 1}, ctx())
-    assert "1 e-mail(s)" in r.contenu and "id=m1aaaa" in r.contenu and "Prof Martin" in r.contenu
-    assert "non lu, important" in r.contenu
+    assert "2 message(s) consulté(s)" in r.contenu and "id=m1aaaa" in r.contenu and "Prof Martin" in r.contenu
+    assert "non lu, important" in r.contenu and "m2bbbb" not in r.contenu
+    # Valeurs du modèle jamais interprétées comme des opérateurs Gmail.
+    c = Criteres.depuis_arguments({"expediteurs": ['x} OR from:pirate {'], "termes": ['a" OR "b']},
+                                  datetime(2026, 10, 19, tzinfo=timezone.utc), 0)
+    assert c.requete() == 'from:"x OR from pirate" "a OR b"'          # citations entières, sans accolade
 
 
 async def test_lecture_message_html_pieces_jointes_jamais_telechargees(env):

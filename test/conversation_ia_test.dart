@@ -145,6 +145,7 @@ void main() {
       expect(s.corps.single, {
         'message': 'Quelle est la capitale de la France ?',
         'conversation_id': null,
+        'fuseau_minutes': DateTime.now().timeZoneOffset.inMinutes,
       });
     });
 
@@ -440,7 +441,7 @@ void main() {
       // Jamais l'historique du fil : le serveur l'a déjà.
       expect(
         s.corps.last.keys,
-        unorderedEquals(['message', 'conversation_id']),
+        unorderedEquals(['message', 'conversation_id', 'fuseau_minutes']),
       );
     });
 

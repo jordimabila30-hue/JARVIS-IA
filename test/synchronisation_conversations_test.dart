@@ -363,6 +363,7 @@ void main() {
       expect(backend.corps.single, {
         'message': 'Quel âge avait-il ?',
         'conversation_id': _a,
+        'fuseau_minutes': DateTime.now().timeZoneOffset.inMinutes,
       });
       x.fermer();
     });

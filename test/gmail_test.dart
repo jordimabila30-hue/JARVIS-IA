@@ -325,6 +325,14 @@ void main() {
       expect(sansServeur!.texte, MoteurConversationLocal.emailsSansServeur);
       final colle = await local.repondreLocalement(d('Résume ce mail'), avecIA: true);
       expect(colle!.texte, MoteurConversationLocal.demandeConversation);        // inchangé
+      // Demandes indirectes (phase 1 Gmail) : comprises par le serveur, jamais
+      // interceptées par le moteur local.
+      for (final p in ['Ils m’ont répondu ?', 'Est-ce que mon école m’a répondu ?', 'Le professeur m’a répondu ?',
+                       'J’ai reçu quelque chose d’important cette semaine ?', 'Celui de chimie.',
+                       'Tu peux retrouver ce mail où on me disait que mon rendez-vous avait changé ?',
+                       'Retrouve le message d’hier.']) {
+        expect(await local.repondreLocalement(d(p), avecIA: true), isNull, reason: p);
+      }
       final heure = await local.repondreLocalement(d('Quelle heure est-il ?'), avecIA: true);
       expect(heure, isNotNull);                                                  // commande locale gardée
     });

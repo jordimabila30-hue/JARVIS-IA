@@ -61,7 +61,7 @@ import json
 import logging
 import time
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -131,7 +131,7 @@ SYSTEM_PROMPT = """Tu es JARVIS, l'assistant personnel de l'utilisateur.
 Tu réponds en français, sauf si l'utilisateur écrit dans une autre langue.
 Tes réponses peuvent être lues à voix haute : évite les tableaux et le Markdown
 lourd, privilégie des phrases claires.
-Date du jour (UTC) : {date}.
+{date}
 
 Ton demandé : {ton}"""
 
@@ -149,8 +149,26 @@ Parle comme un assistant calme et précis qui explique, pas comme un document :
   une citation ou une formule demandée mot à mot reste mot à mot."""
 
 
-def build_system_prompt(ton: Ton, persona: str | None, now: datetime, oral: bool = False) -> str:
-    prompt = SYSTEM_PROMPT.format(date=now.date().isoformat(), ton=INSTRUCTIONS_TON[ton])
+JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+MOIS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre")
+
+
+def ligne_date(now: datetime, decalage_minutes: int | None) -> str:
+    """Date du jour : en heure LOCALE de l'utilisateur si l'appareil a donné
+    son décalage (« hier », « ce matin » justes), sinon en UTC."""
+    if decalage_minutes is None:
+        return f"Date du jour (UTC) : {now.date().isoformat()}."
+    local = now.astimezone(timezone(timedelta(minutes=decalage_minutes)))
+    signe = "+" if decalage_minutes >= 0 else "-"
+    h, m = divmod(abs(decalage_minutes), 60)
+    return (f"Date et heure locales de l'utilisateur : {JOURS[local.weekday()]} {local.day} "
+            f"{MOIS[local.month - 1]} {local.year}, {local:%H:%M} (UTC{signe}{h:02d}:{m:02d}).")
+
+
+def build_system_prompt(ton: Ton, persona: str | None, now: datetime, oral: bool = False,
+                        decalage_minutes: int | None = None) -> str:
+    prompt = SYSTEM_PROMPT.format(date=ligne_date(now, decalage_minutes), ton=INSTRUCTIONS_TON[ton])
     if persona:
         prompt += f"\nPersona actif : {persona}"
     if oral:
@@ -184,6 +202,9 @@ class ChatRequest(BaseModel):
     image: vision.ImageJointe | None = None
     # Échange du mode vocal : réponse formulée pour être dite.
     oral: bool = False
+    # Décalage horaire de l'appareil en minutes (UTC+1 = 60) : « hier »,
+    # « cette semaine » calculés en heure locale (date du jour, Gmail).
+    fuseau_minutes: int | None = Field(default=None, ge=-840, le=840)
 
 
 # --- Utilitaires --------------------------------------------------------------------
@@ -577,7 +598,8 @@ async def chat_stream(
             if history and history[-1]["role"] == "user" and history[-1]["content"] == question:
                 history = history[:-1]
 
-        systeme = build_system_prompt(body.ton, conversation.get("persona"), now, oral=body.oral)
+        systeme = build_system_prompt(body.ton, conversation.get("persona"), now, oral=body.oral,
+                                      decalage_minutes=body.fuseau_minutes)
         if contextes:
             # Aucun appel au fournisseur sans réponse explicite de
             # l'utilisateur sur l'envoi des messages WhatsApp.
@@ -741,7 +763,8 @@ async def chat_stream(
     execution = None
     if odo.actif and preparation is None and consigne is None:
         contexte_odo = await odo.contexte_compte(user_id=user_id, demande_id=demande_id,
-                                                 plan=reservation.status.plan, conversation_id=conversation_id)
+                                                 plan=reservation.status.plan, conversation_id=conversation_id,
+                                                 decalage_minutes=body.fuseau_minutes)
         execution = odo.execution(
             llm, contexte_odo,
             verifier_budget=lambda tokens: quota_service.budget_depasse(reservation, tokens),
@@ -751,6 +774,12 @@ async def chat_stream(
         note = odo.note(contexte_odo)
         if note and prompt and prompt[0]["role"] == "system":
             prompt = [{**prompt[0], "content": f"{prompt[0]['content']}\n\n{note}"}, *prompt[1:]]
+        # Dernière recherche Gmail de CE chat (métadonnées, 1 h) : « sa
+        # réponse », « l'autre », reprise après une clarification. Donnée
+        # non fiable : jointe à la question, jamais au message système.
+        rappel = await odo.rappel(contexte_odo) if execution is not None else None
+        if rappel and prompt and prompt[-1]["role"] == "user":
+            prompt = [*prompt[:-1], {**prompt[-1], "content": f"{rappel}\n\n{prompt[-1]['content']}"}]
     source = execution.flux if execution is not None else llm.flux
 
     async def event_stream():
@@ -982,6 +1011,8 @@ async def chat_stream(
                 attachments=stockees,
                 consomme_sans_texte=execution is not None and execution.tours > 0,
             ))
+            if execution is not None and execution.donnees:
+                _spawn(odo.memoriser(execution, conversation_id))
 
     return StreamingResponse(
         event_stream(),

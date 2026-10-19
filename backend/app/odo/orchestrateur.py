@@ -97,6 +97,10 @@ class ExecutionODO:
         self.prompt_courant: list[Message] = []
         self.texte_tour = ""       # texte du tour en cours (interruption)
         self._resultats: dict[str, ResultatAppel] = {}     # empreinte → résultat (doublons)
+        #: Données structurées des outils exécutés (mémoire de recherche, mesures).
+        self.donnees: list[tuple[str, dict[str, Any]]] = []
+        self._debut = time.perf_counter()
+        self._premier_outil_ms: int | None = None
 
     @property
     def actif(self) -> bool:
@@ -158,7 +162,12 @@ class ExecutionODO:
             self.sortie += fin.usage.sortie
             self.prompt_courant, self.texte_tour = [], ""
             if fin.raison is not RaisonArret.OUTIL or not fin.appels:
-                journaliser("fin", demande=self.contexte.demande_id, tours=self.tours, appels=self.appels)
+                # Mesures pour comparer les phases (aucun contenu, aucune identité).
+                journaliser("fin", demande=self.contexte.demande_id, tours=self.tours, appels=self.appels,
+                            duree_ms=(time.perf_counter() - self._debut) * 1000,
+                            premier_outil_ms=self._premier_outil_ms, entree=self.entree, sortie=self.sortie,
+                            requetes_gmail=sum(int(d.get("requetes_gmail", 0)) for _, d in self.donnees) or None,
+                            fournisseur=self.llm.nom)
                 yield replace(fin, usage=Usage(entree=self.entree, sortie=self.sortie), tour=None)
                 return
             resultats: list[ResultatAppel] = []
@@ -210,7 +219,12 @@ class ExecutionODO:
             self._resultats[cle] = resultats[-1]
             return
         yield EtatOutil(outil.nom, "en_cours")
+        if self._premier_outil_ms is None:
+            # Temps de « compréhension » : demande reçue → premier outil appelé.
+            self._premier_outil_ms = int((time.perf_counter() - self._debut) * 1000)
         r = await executer_outil(outil, appel.arguments, self.contexte, self.delai_outil)
+        if r.donnees:
+            self.donnees.append((outil.nom, r.donnees))
         yield EtatOutil(outil.nom, "erreur" if r.erreur else "termine", r.erreur)
         repondre(r.contenu, erreur=bool(r.erreur))
         self._resultats[cle] = resultats[-1]

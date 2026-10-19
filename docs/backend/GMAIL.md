@@ -141,6 +141,40 @@ Aucune ressource payante n'est nécessaire : l'API Gmail est gratuite dans ses q
 - ODO renvoie l'utilisateur vers « Paramètres › Outils › Gmail ».
 - Déploiement sur le backend principal : `DEPLOIEMENT_ODO_GMAIL.md`.
 
+## Recherche intelligente (phase 1 sur 3, 2026-10-19)
+
+Objectif : comprendre des demandes naturelles, imprécises ou indirectes (« Ils m'ont répondu ? », « ce mail où on me disait que mon rendez-vous avait changé ») et retrouver les bons e-mails, à l'identique en Free (GroqCloud) et en Pro (Claude). Phase 2 : compréhension approfondie des contenus ; phase 3 : résumés et optimisation des tokens.
+
+**Partage des rôles** (MIA et ODO restent distincts) :
+
+| Qui | Quoi |
+|---|---|
+| Modèle (via MIA, dans le MÊME tour) | comprend la demande et le contexte ; remplit des critères structurés : `expediteurs` (alternatives), `termes` (mots de l'utilisateur ET reformulations probables), `periode` nommée, `objet`, `destinataire`, `pieces_jointes`, `envoyes`… ; ou pose UNE question courte si la recherche ne peut pas trancher |
+| ODO, déterministe (`app/odo/gmail_recherche.py`) | périodes dans le fuseau de l'appareil (`fuseau_minutes`, after:/before: en secondes) ; requête Gmail sûre (OU entre alternatives, variantes sans accents) ; élargissement borné (≤ 3 requêtes, seulement si rien n'est trouvé) ; classement (objet ×3, expéditeur, extrait, récence) → pertinence forte / moyenne / faible ; un candidat par fil ; expéditeurs distincts signalés ; compte rendu de ce qui a été consulté |
+| ODO (`app/odo/gmail_confidentialite.py`) | codes, mots de passe, liens de connexion, numéros de carte / IBAN masqués AVANT l'envoi au fournisseur IA ; autres liens réduits au domaine |
+| ODO (`ServiceODO.memoriser` / `rappel`) | dernière recherche du chat gardée 1 h dans Redis (`odo:gmail:recherche:{compte}:{chat}` : description + candidats, métadonnées seulement), redonnée à la demande suivante du MÊME chat et du MÊME compte dans `<gmail_derniere_recherche>` (données, jointe à la question, jamais au message système) |
+| Route de chat | date et heure LOCALES dans le message système quand l'appareil donne `fuseau_minutes` ; écrit et vocal : même route, même historique (clarification puis reprise dans le fil habituel) |
+
+**Mesures** (journal `ODO fin`, aucun contenu ni identité) : `tours`, `appels`, `duree_ms`, `premier_outil_ms` (temps de compréhension), `entree` / `sortie` (tokens), `requetes_gmail`, `fournisseur`. Référence avant la phase 1 : « résume mes 3 derniers mails » = 3 tours, 11 s, 6 172 tokens.
+
+**Limites connues** : Gmail n'est pas une recherche sémantique (les reformulations viennent du modèle) ; la pertinence se juge sur l'objet, l'expéditeur et l'extrait (le corps n'est lu qu'à la demande) ; « important » au sens de l'utilisateur = phase 2.
+
+## Décision Google OAuth (2026-10-19)
+
+**Constat** : un compte Gmail absent de la liste des utilisateurs test a pu se connecter à JARVIS avec la configuration Google actuelle (application passée en production chez Google, **non vérifiée**).
+
+**Option A — retenue MAINTENANT** : garder l'intégration OAuth existante telle quelle (client « Application Web », portée `gmail.readonly`, application en production mais non vérifiée).
+- Ce n'est **ni une validation officielle de Google, ni une autorisation publique illimitée**.
+- Google peut afficher « Application non validée » ; une portée restreinte non vérifiée est plafonnée (nombre d'utilisateurs limité) et peut être restreinte ou suspendue par Google à tout moment.
+- Usage réservé aux essais et à un petit nombre de comptes connus.
+
+**Option C — PLUS TARD** : vérification officielle par Google.
+- Domaine vérifié, page d'accueil et règles de confidentialité publiques (site Netlify existant), vidéo de démonstration du parcours OAuth et de l'usage de `gmail.readonly`, justification de la portée.
+- Évaluation de sécurité annuelle par un tiers agréé (CASA) si Google l'exige pour une portée restreinte.
+- Respect de la *Google API Services User Data Policy* (utilisation limitée).
+
+**Règle pendant les phases Gmail 1 à 3** : aucune modification de la configuration OAuth, des portées ou du parcours de connexion sans nécessité démontrée et accord explicite du propriétaire.
+
 ## Tests
 
 | Fichier | Contenu |

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import base64
 import json
+import re
+from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs
 
 import httpx
@@ -47,6 +49,11 @@ class FauxGoogle:
         self.acces_expire_une_fois = False
         self.statut_gmail: int | None = None                # force une erreur de l'API Gmail
         self.recherches: list[str] = []
+        # True : la requête `q` est réellement évaluée (sous-ensemble de la
+        # syntaxe Gmail : from:, to:, subject:, "mot", {… OU …}, after:/before:
+        # en secondes, has:attachment, is:unread, is:important, in:sent).
+        self.filtrer = False
+        self.panne_recherche: Exception | None = None       # ex. httpx.ReadTimeout
 
     @property
     def gmail(self) -> list[httpx.Request]:
@@ -79,8 +86,13 @@ class FauxGoogle:
                 return httpx.Response(200, json={"emailAddress": self.email})
             if chemin == "messages":
                 self.recherches.append(r.url.params["q"])
+                if self.panne_recherche is not None:
+                    raise self.panne_recherche
                 n = int(r.url.params.get("maxResults", 5))
-                ids = list(self.messages)[:n]
+                ids = [i for i in self.messages if not self.filtrer or correspond(r.url.params["q"], self.messages[i])]
+                if self.filtrer:
+                    ids.sort(key=lambda i: _epoch(self.messages[i]), reverse=True)      # plus récents d'abord
+                ids = ids[:n]
                 return httpx.Response(200, json={"messages": [{"id": i, "threadId": self.messages[i]["threadId"]}
                                                               for i in ids]} if ids else {"resultSizeEstimate": 0})
             if chemin.startswith("messages/"):
@@ -129,3 +141,58 @@ def service_google(settings, redis, connexions: FauxConnexions, google: FauxGoog
 
 def json_corps(r: httpx.Response) -> dict:
     return json.loads(r.text)
+
+
+# --- Évaluation (simplifiée) d'une requête Gmail ---------------------------------------
+
+def _entete(m: dict, nom: str) -> str:
+    return next((h["value"] for h in m["payload"]["headers"] if h["name"] == nom), "")
+
+
+def _epoch(m: dict) -> int:
+    return int(parsedate_to_datetime(_entete(m, "Date")).timestamp())
+
+
+def _texte(m: dict) -> str:
+    morceaux = []
+    for p in m["payload"].get("parts", []):
+        if p["mimeType"].startswith("text/") and p["body"].get("data"):
+            d = p["body"]["data"]
+            morceaux.append(base64.urlsafe_b64decode(d + "=" * (-len(d) % 4)).decode())
+    return " ".join(morceaux)
+
+
+def _terme(t: str, m: dict) -> bool:
+    if ":" in t and not t.startswith('"'):
+        op, _, v = t.partition(":")
+        v = v.strip('"').lower()
+        match op:
+            case "from":
+                return v in _entete(m, "From").lower()
+            case "to":
+                return v in _entete(m, "To").lower()
+            case "subject":
+                return v in _entete(m, "Subject").lower()
+            case "after":
+                return _epoch(m) >= int(v)
+            case "before":
+                return _epoch(m) < int(v)
+            case "has":
+                return any(p.get("filename") for p in m["payload"].get("parts", []))
+            case "is":
+                return {"unread": "UNREAD", "important": "IMPORTANT"}[v] in m["labelIds"]
+            case "in":
+                return v != "sent" or "SENT" in m["labelIds"]
+        return False
+    v = t.strip('"').lower()
+    return v in (_entete(m, "Subject") + " " + _entete(m, "From") + " " + _texte(m)).lower()
+
+
+def correspond(q: str, m: dict) -> bool:
+    for morceau in re.findall(r'\{[^}]*\}|\S+:"[^"]*"|"[^"]*"|\S+', q):
+        if morceau.startswith("{"):
+            if not any(_terme(t, m) for t in re.findall(r'\S+:"[^"]*"|"[^"]*"|\S+', morceau[1:-1])):
+                return False
+        elif not _terme(morceau, m):
+            return False
+    return True

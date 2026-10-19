@@ -737,6 +737,8 @@ class ApiJarvis {
             'propositions_message_id': ?propositionsMessage,
             'longueur_proposee': ?longueurPropose,
             if (oral) 'oral': true,
+            // « hier », « cette semaine » : heure locale de l'appareil.
+            'fuseau_minutes': DateTime.now().timeZoneOffset.inMinutes,
             if (image != null)
               'image': {
                 'media_type': image.typeMedia,

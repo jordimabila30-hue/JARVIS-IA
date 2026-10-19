@@ -673,6 +673,15 @@ fonctions backend seulement) ; jamais dans Flutter. Compétences ODO
 « connectez Gmail ». « Résume mes mails » n'est plus intercepté par le
 moteur local (`DetecteurIntention.concerneMesEmails`). Android : retour par
 `jarvis://gmail`.
+Recherche intelligente (phase 1, doc `docs/backend/GMAIL.md`) : le modèle
+remplit des critères structurés (expéditeurs, termes + reformulations,
+période nommée) ou pose UNE question ; ODO calcule tout le reste,
+identique Free / Pro (`odo/gmail_recherche.py` : fuseau `fuseau_minutes`
+envoyé par l'appli, OU, élargissement ≤ 3 requêtes, pertinence, fils) ;
+secrets masqués avant le fournisseur IA (`odo/gmail_confidentialite.py`) ;
+dernière recherche du chat 1 h dans Redis (`ServiceODO.memoriser` /
+`rappel`, métadonnées seulement). Décision OAuth : option A (actuelle,
+non vérifiée) puis C (vérification Google), voir GMAIL.md.
 
 JARVIS Touch › « Capturer » (phases 3A / 3A.1, natif seulement,
 `android/.../touch/capture/`) : capture d'une image puis éditeur plein écran

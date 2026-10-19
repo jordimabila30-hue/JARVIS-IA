@@ -37,6 +37,9 @@ class ContexteOutil:
     connexions: frozenset[str] = frozenset()     # services externes connectés (phase 2 : « gmail »)
     a_renouveler: frozenset[str] = frozenset()   # connexions existantes mais à renouveler
     environnement: str = "production"
+    #: Décalage horaire de l'appareil (minutes, UTC+1 = 60) : périodes
+    #: relatives (« hier ») calculées en heure locale. None : UTC.
+    decalage_minutes: int | None = None
 
 
 @dataclass(frozen=True)
