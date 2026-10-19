@@ -279,7 +279,7 @@ async def test_citer_une_proposition_n_est_pas_une_citation_introuvable(env):
     await post(env, message="Aide-moi à lui répondre", conversation_id=CHAT, whatsapp_analysis="allowed")
     env.llm = reponse("Je te propose « Je suis là dans 10 minutes, promis. » parce que Pepper "
                       "s'impatiente ([[1]]).")
-    resp = await post(env, message="Pourquoi la deuxième ?", conversation_id=CHAT,
+    resp = await post(env, message="Pourquoi la deuxième ? Sur quoi tu te bases ?", conversation_id=CHAT,
                       whatsapp_analysis="allowed", ton_propose="Naturel")
     ev = evenements(resp.text)
     texte = "".join(d["text"] for e, d in ev if e == "delta")

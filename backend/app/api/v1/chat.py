@@ -925,14 +925,19 @@ async def chat_stream(
                 verification = verifier(filtre.visible, filtre.reperes, preparation.fournis, propres)
                 verification.corrigees = correcteur.corrigees
                 verification.ecartees = correcteur.ecartees
-                stockees = [entree_stockee(r) for r in verification.references]
+                # Cartes « Messages d'origine » seulement si l'utilisateur les
+                # demande ; sinon gardées en base comme masquées (« pourquoi
+                # tu dis ça ? » les refournit au modèle), jamais affichées.
+                afficher = reperes.demande_sources(question)
+                stockees = [{**entree_stockee(r), **({} if afficher else {"masquee": True})}
+                            for r in verification.references]
                 note = verification.note
                 if note:
                     stockees.append({"type": restauration.TYPE_NOTE, "text": note})
-                if verification.references or note:
+                if (verification.references and afficher) or note:
                     yield sse("references", {
                         "message_id": assistant_id,
-                        "references": verification.references,
+                        "references": verification.references if afficher else [],
                         "note": note,
                     })
                 if ensemble is not None:

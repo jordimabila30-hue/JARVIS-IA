@@ -77,6 +77,22 @@ _GENERAL = (r"souvent", r"toujours", r"jamais", r"en general", r"habitude\w*",
             r"globalement", r"recurrent\w*", r"reviennent")
 
 
+# L'utilisateur demande à VOIR les messages d'origine (cartes sous la
+# réponse) : sinon elles ne sont pas affichées (demande du 2026-10-19,
+# jugées encombrantes), même si la réponse s'appuie sur eux.
+_SOURCES = (r"montre\w*", r"fais[- ]moi voir", r"fais voir", r"ou (?:est-ce qu'(?:elle|il)|(?:elle|il)) (?:a|l'a|m'a) (?:dit|ecrit)",
+            r"ou (?:ca|cela) ", r"quel(?:le)?s? messages?", r"cite\w*", r"citation\w*", r"preuves?", r"source\w*",
+            r"messages? d'origine", r"extraits?", r"(?:a|l'a)[- ]t[- ](?:elle|il) vraiment (?:dit|ecrit)",
+            r"vraiment (?:dit|ecrit)", r"sur quoi tu te (?:bases|fondes|appuies)", r"te bases? sur",
+            r"pourquoi tu (?:dis|penses|crois) (?:ca|cela)", r"qu'est-ce qui te fait (?:dire|penser)",
+            r"retrouve\w*", r"passages?")
+
+
+def demande_sources(question: str) -> bool:
+    """Vrai si la question demande les messages d'origine (références)."""
+    return _contient(normaliser(question), _SOURCES)
+
+
 def _contient(t: str, motifs: tuple[str, ...]) -> bool:
     return any(re.search(rf"(?<![a-z]){m}(?![a-z])", t) for m in motifs)
 

@@ -52,10 +52,32 @@ ENGAGEMENTS: list[tuple[str, re.Pattern, re.Pattern]] = [
      re.compile(r"\bje (?:viens|passe|viendrai|passerai)\b|\bje (?:peux|vais|pourrais) (?:venir|passer)\b|"
                 r"\bpasser (?:te |vous )?voir\b|\bvenir (?:te |vous )?voir\b|\bje (?:te )?rejoins\b"),
      re.compile(r"\bviens\b|\bvenir\b|\bpasse[rz]?\b|\bchez (?:moi|toi|nous)\b|\brejoin\w*")),
+    # Validation S10+ (2026-10-19) : « Promis, je te préviendrai » répondait
+    # à « tu aurais pu me prévenir » et était refusé à tort ; un reproche
+    # justifie une promesse simple, pas une promesse absolue.
     ("promettre",
-     re.compile(r"\bje (?:te |vous )?(?:le )?promets\b|\bpromis\b|\bplus jamais\b|\bca n'arrivera plus\b|"
-                r"\bje (?:te |vous )?jure\b"),
-     re.compile(r"\bpromi\w*|\bpromet\w*|\bprochaine fois\b|\bplus jamais\b|\bjure\b")),
+     re.compile(r"\bje (?:te |vous )?(?:le )?promets\b|\bpromis\b|\bje (?:te |vous )?(?:previendrai|tiendrai au courant)\b"),
+     re.compile(r"\bpromi\w*|\bpromet\w*|\bprochaine fois\b|\bjure\b|\btu aurais (?:pu|du)\b|\bvous auriez (?:pu|du)\b|"
+                r"\boubli\w*|\bsans (?:me |nous )?(?:prevenir|rien dire)\b|\bprevenir\b|\bdecu\w*|\bpas la premiere fois\b")),
+    ("promettre que cela ne se reproduira jamais",
+     re.compile(r"\bplus jamais\b|\b(?:ca|cela) n'arrivera plus\b|\bne se reproduira (?:plus|jamais)\b|"
+                r"\bje ne recommencerai (?:plus|jamais)\b|\bje (?:te |vous )?jure\b"),
+     re.compile(r"\bpromi\w*|\bpromet\w*|\bplus jamais\b|\bjure\b")),
+    ("donner une excuse que les messages ne donnent pas",
+     re.compile(r"\bj'etais (?:pris|occupe|coince|bloque|debord\w*|en reunion|au (?:travail|boulot))\b|"
+                r"\b(?:a cause|en raison) (?:du|de mon) (?:travail|boulot)\b|\bpris (?:par|dans) (?:le|mon) (?:travail|boulot)\b"),
+     re.compile(r"\btravail\b|\bboulot\b|\breunion\b|\boccupe\b|\bdebord\w*|\bcoince\b|\bbloque\b")),
+    ("proposer une sortie ou une invitation",
+     re.compile(r"\bon se (?:rattrape|fait|boit|prend)\b|\bje t'invite\b|\bje (?:t'|vous )?(?:offre|paie|paye)\b|"
+                r"\b(?:on en (?:parle|discute)|en parler|en discuter)(?: \w+)? (?:ce soir|demain|ce week-end)\b|"
+                r"\b(?:un|une|des|petit|petite) (?:verre|cafe|chocolat|dessert|resto\w*|diner|apero|biere)\b[^.!]*\?"),
+     re.compile(r"\bon se voit\b|\bretrouv\w*|\brendez\b|\brdv\b|\bsorti\w*|\binvit\w*|\bverre\b|\bcafe\b|\bresto\w*|"
+                r"\bdiner\b|\bapero\b|\bon fait quoi\b")),
+    ("mettre en place une organisation",
+     re.compile(r"\b(?:instaurer|instaurerai|mettre en place|mettrai en place|programmer|installer|fixer) "
+                r"(?:un|une|des|ce|cette|mon) (?:petit |petite )?(?:systeme|rappel|alerte|alarme|signal|procedure|planning)\w*|"
+                r"\brappel (?:quotidien|automatique|chaque)\b|\balerte pour chaque\b"),
+     re.compile(r"\brappel\w*|\balerte\w*|\balarme\w*|\bsysteme\b|\borganis\w*|\bplanning\b")),
     ("appeler quelqu'un",
      re.compile(r"\bj'appelle\b|\bje (?:vais |peux |t'|l'|les |vous )+appeler\b|\bje (?:t'|l'|les )appelle\b|"
                 r"\bappeler (?:ton|ta|tes|son|sa|le|la|les) \w+"),
@@ -63,7 +85,8 @@ ENGAGEMENTS: list[tuple[str, re.Pattern, re.Pattern]] = [
     ("fixer un rendez-vous",
      re.compile(r"\bon se (?:retrouve|voit|rejoint)\b|\brendez-vous\b|\brdv\b|\bje (?:te |vous )?(?:propose|fixe) "
                 r"(?:un|une) (?:creneau|date|heure)\b"),
-     re.compile(r"\bretrouv\w*|\bon se voit\b|\brendez\b|\brdv\b|\bdispo\w*|\bcreneau\b|\bquand\b|\bdate\b")),
+     re.compile(r"\bretrouv\w*|\bon se voit\b|\brendez\b|\brdv\b|\bdispo\w*|\bcreneau\b|\bnouvelle date\b|"
+                r"\bpas ce (?:samedi|dimanche|soir|week-end|lundi|mardi|mercredi|jeudi|vendredi)\b|\breport\w*|\bdecal\w*")),
 ]
 
 # Initiative suggérée par une INTERPRÉTATION (lecture commune, analyse).

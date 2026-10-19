@@ -318,7 +318,7 @@ def evenements(raw):
 async def test_flux_sans_repere_visible_puis_references(env):
     env.llm = reponse("Oui, vous vous taquinez : Pepper répond « mdr » [", "[3]] et tu ",
                       "répliques « Arrête de te moquer ! » [[4]].")
-    resp = await post(env, message="On plaisante souvent ?", conversation_id=CHAT,
+    resp = await post(env, message="On plaisante souvent ? Montre-moi des exemples.", conversation_id=CHAT,
                       whatsapp_analysis="allowed")
     ev = evenements(resp.text)
     noms = [e for e, _ in ev]
@@ -340,7 +340,7 @@ async def test_flux_sans_repere_visible_puis_references(env):
 
 async def test_restauration_relit_supabase(env):
     env.llm = reponse("Pepper répond « mdr » [[3]].")
-    await post(env, message="x", conversation_id=CHAT, whatsapp_analysis="allowed")
+    await post(env, message="Montre-moi", conversation_id=CHAT, whatsapp_analysis="allowed")
     resp = await env.client.get(f"/api/v1/conversations/{CHAT}/references", headers=auth_headers())
     assert resp.status_code == 200
     [r] = resp.json()["items"]
@@ -355,7 +355,7 @@ async def test_restauration_relit_supabase(env):
 
 async def test_restauration_autre_compte_et_identifiant_force(env):
     env.llm = reponse("Pepper répond « mdr » [[3]].")
-    await post(env, message="x", conversation_id=CHAT, whatsapp_analysis="allowed")
+    await post(env, message="Montre-moi", conversation_id=CHAT, whatsapp_analysis="allowed")
     # Une entrée modifiée pour viser le message d'un autre compte.
     ligne = [r for r in env.supa.inserted if r["role"] == "assistant"][0]
     ligne["attachments"].append({"type": "reference_whatsapp", "context_id": "autre",
@@ -477,3 +477,26 @@ async def test_battement_pendant_un_long_silence_du_modele(env, monkeypatch):
     ev = evenements(resp.text)
     assert "".join(d["text"] for e, d in ev if e == "delta") == "Réponse après réflexion."
     assert ev[-1][0] == "done"
+
+
+async def test_messages_d_origine_seulement_sur_demande(env):
+    """2026-10-19 : les cartes « Messages d'origine » encombraient chaque
+    réponse. Sans demande explicite : aucune carte (ni en direct, ni à la
+    restauration), mais les messages cités restent connus pour « pourquoi
+    tu dis ça ? »."""
+    env.llm = reponse("Pepper répond « mdr » [[3]].")
+    resp = await post(env, message="Que penses-tu de sa réponse ?", conversation_id=CHAT,
+                      whatsapp_analysis="allowed")
+    assert "references" not in [e for e, _ in evenements(resp.text)]
+    assert "[[" not in "".join(d["text"] for e, d in evenements(resp.text) if e == "delta")
+    ligne = [r for r in env.supa.inserted if r["role"] == "assistant"][0]
+    assert [a.get("masquee") for a in ligne["attachments"]] == [True]
+    resp = await env.client.get(f"/api/v1/conversations/{CHAT}/references", headers=auth_headers())
+    assert resp.json() == {"items": []}
+    from app.comprehension import restauration
+    assert restauration.cites([ligne]) == {CTX_PEPPER: {2}}
+    for q in ("Montre-moi le message", "Où est-ce qu'elle a dit ça ?", "Pourquoi tu dis ça ?",
+              "Sur quoi tu te bases ?", "Elle l'a vraiment écrit ?", "Quel message ?"):
+        assert reperes.demande_sources(q), q
+    for q in ("Que penses-tu de sa dernière réponse ?", "Résume", "Aide-moi à répondre"):
+        assert not reperes.demande_sources(q), q

@@ -176,7 +176,7 @@ async def test_reponse_retrouvee_dans_un_nouvel_export_pas_comptee_deux_fois(env
 
 async def test_chat_sans_propositions_inchange(env):
     env.llm = reponse("Pepper répond « mdr » [[3]].")
-    resp = await post(env, message="Qui rit ?", conversation_id=CHAT, whatsapp_analysis="allowed")
+    resp = await post(env, message="Qui rit ? Montre-moi.", conversation_id=CHAT, whatsapp_analysis="allowed")
     ev = evenements(resp.text)
     assert [r["author"] for r in next(d for e, d in ev if e == "references")["references"]] == ["Pepper Potts"]
     assert all(m["role"] != "system" for m in env.llm.calls[0]["messages"][1:])

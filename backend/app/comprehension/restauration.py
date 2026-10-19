@@ -74,6 +74,8 @@ async def references_conversation(supabase, user_id: str, conversation_id: str) 
     for l in lignes:
         refs = []
         for e in sorted(entrees(l.get("attachments")), key=lambda e: e.get("rang", 0)):
+            if e.get("masquee"):
+                continue        # non demandée par l'utilisateur : jamais affichée
             ctx = contextes.get(str(e.get("context_id")))
             m = messages.get(str(e.get("context_message_id")))
             # Message absent, ou rattaché à un autre contexte : jamais affiché.

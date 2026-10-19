@@ -204,7 +204,7 @@ async def test_question_suivante_voit_le_message_colle(env):
     await ajouter(env, message("received", "Ah bon ? Et tu comptais me le dire quand ?"))
     assert not await env.redis.get(cle_cache(CTX_PEPPER))       # cache vidé : contexte à jour
     env.llm = reponse("Elle t'a écrit « Ah bon ? Et tu comptais me le dire quand ? ».")
-    resp = await env.client.post("/api/v1/chat/stream", json={"message": "Tu penses quoi de sa réponse ?",
+    resp = await env.client.post("/api/v1/chat/stream", json={"message": "Tu penses quoi de sa réponse ? Montre-moi le message.",
                                  "conversation_id": CHAT, "whatsapp_analysis": "allowed"}, headers=auth_headers())
     systeme = env.llm.calls[0]["messages"][0]["content"]
     assert "Pepper Potts (ajouté à la main) : «Ah bon ? Et tu comptais me le dire quand ?»" in systeme
@@ -230,7 +230,7 @@ async def test_question_suivante_voit_le_message_colle(env):
 async def test_reference_vers_un_ajout_supprime_disparait(env):
     [l] = (await ajouter(env, message("received", "Message à supprimer"))).json()["messages"]
     env.llm = reponse("Elle a écrit « Message à supprimer ».")
-    await env.client.post("/api/v1/chat/stream", json={"message": "Et ça ?", "conversation_id": CHAT,
+    await env.client.post("/api/v1/chat/stream", json={"message": "Et ça ? Montre-moi.", "conversation_id": CHAT,
                           "whatsapp_analysis": "allowed"}, headers=auth_headers())
     await chat.wait_background_tasks()
     items = (await env.client.get(f"/api/v1/conversations/{CHAT}/references", headers=auth_headers())).json()["items"]

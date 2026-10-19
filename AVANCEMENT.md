@@ -1767,7 +1767,7 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 - Point de restauration : image `backend-api:avant-comprehension` (`c0e5e6e302e3`). Retour arrière : `docker tag backend-api:avant-comprehension backend-api:latest` puis, depuis `backend/`, `docker compose up -d --no-deps api`.
 - `docker compose up -d --build --no-deps api` : seul `jarvis-api` a été recréé (image `debb8cfe8ce3`) ; `jarvis-redis` et son volume n'ont pas été touchés ; même `.env` (production, `LLM_PROVIDER=anthropic`, routage par abonnement actif, ODO actif). Aucune migration.
 - Vérifié : conteneur sain ; `/health`, `/health/ready` (Redis et Supabase ok) et `/health/clock` en 200 ; `/me`, `/me/quota` et `/api/v1/chat/stream` en 401 sans jeton ou avec un jeton invalide.
-- Test fonctionnel avec le compte de test confirmé (`mjmabs007`, Free → GroqCloud). La production n'accepte que les jetons Supabase asymétriques : le scénario a donc été exécuté DANS le processus de `jarvis-api` (application déployée, vrai Supabase, vrai Redis, vrai GroqCloud), avec la seule vérification du jeton remplacée. Étapes : contexte « Amitié » fictif (201), ajout de l'annonce (201), ciblage (`participant`, rang 783, `manual_received`), préparation 2,5 s, contrôle de la lecture 28 ms (rien à retirer), 3 lots en 37 s (14 refusées au format + 1 au contrôle : visite non justifiée), événements SSE `meta` / `preparation` / `propositions` / `done` et 7 battements, 36 identifiants distincts, persistance relue (mêmes 36 identifiants), « Reprendre » sur l'ensemble complet → 200 sans IA (0,8 s), quota du jour 12 619 tokens.
+- Test fonctionnel avec le compte de test confirmé (Free → GroqCloud). La production n'accepte que les jetons Supabase asymétriques : le scénario a donc été exécuté DANS le processus de `jarvis-api` (application déployée, vrai Supabase, vrai Redis, vrai GroqCloud), avec la seule vérification du jeton remplacée. Étapes : contexte « Amitié » fictif (201), ajout de l'annonce (201), ciblage (`participant`, rang 783, `manual_received`), préparation 2,5 s, contrôle de la lecture 28 ms (rien à retirer), 3 lots en 37 s (14 refusées au format + 1 au contrôle : visite non justifiée), événements SSE `meta` / `preparation` / `propositions` / `done` et 7 battements, 36 identifiants distincts, persistance relue (mêmes 36 identifiants), « Reprendre » sur l'ensemble complet → 200 sans IA (0,8 s), quota du jour 12 619 tokens.
 - Qualité : aucun remplacement, aucune plaisanterie, aucune date inventée, report de l'escalade fondé sur « Pas ce samedi » ; Court 7-14 mots, Moyen 13-29, Long 37-59. Réserves : quelques formules professionnelles un peu raides (« relais pour nos projets »), et une réponse principale réduite à « Voici quelques idées de réponse ».
 - Non vérifié : la reprise d'un ensemble réellement incomplet sur le serveur réel (couverte par les tests simulés), la chronologie exacte des événements SSE vue par un client (le client en processus reçoit le flux d'un bloc), l'essai depuis l'appli sur téléphone.
 - Conversation de test créée dans le compte de test : « [TEST FICTIF] Conversation de démonstration Samuel Petit » (`f5f9a7bb-…`), conservée.
@@ -1777,3 +1777,44 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 
 ### Prochaine étape
 - Essai depuis l'appli (S10+) sur le même scénario ; commit sur accord.
+
+
+## 2026-10-19 — Validation finale du module WhatsApp — Galaxy S10+
+
+Appareil : Samsung Galaxy S10+ (SM-G975F, Android 12), `flutter run --profile` (`--dart-define-from-file=config_locale.json`, `JARVIS_API_URL=http://127.0.0.1:8000`), `adb reverse tcp:8000 tcp:8000`, backend principal `jarvis-api` uniquement, compte de test (Free → GroqCloud `openai/gpt-oss-120b`), authentification Supabase réelle (jeton de l'appli, aucun contournement). Pilotage par ADB (captures d'écran, touches) ; saisie ADB sans accents (« derniere reponse »).
+
+### Validé sur appareil réel
+- Démarrage : bloqué sur l'écran de lancement avec le Wi-Fi « ULC-Icam Students2 » (33 % de pertes vers Supabase, restauration de session sans réponse) ; normal après changement de réseau.
+- Scénario C, annonce grave : ensemble réel (36/36) restauré depuis Supabase ; 4 tons × 3 longueurs ; changement de ton ou de longueur instantané, AUCUN appel au backend ; appui long → « Vous → Samuel Petit » en une bulle (PUT 200, sélecteurs masqués, sans doublon) ; menu `···` (Copier, Annuler le choix, date) ; annulation (DELETE 200) → propositions restaurées ; autre choix (n° 3) → persistant après fermeture et réouverture de l'appli. Aucune proposition de remplacement ni plaisanterie. (« Copier » : menu refermé, presse-papiers non lu.)
+- Scénario A, Lina : import ZIP → filtrage (tout cocher, 96) → « Vous êtes : Alex Martin » → consigne. Question 1 : ciblage `participant, rang 95, export`, 2 références justes. Ajout manuel d'une réponse reçue (petit glissement → bouton révélé ; volet « Reçu, De : Lina Moreau » ; 201 ; bulle à gauche). Même question : ciblage `rang 96, manual_received` (le nouveau message, pas l'ancien « traitement »). Suivi « Pourquoi elle dit ça ? » (après correction) : même message visé, lien avec le reproche, prudence (« probablement »).
+- Propositions en direct (« propose-moi trois réponses… ») : texte écrit progressivement puis « ••• Je prépare les propositions » pendant les lots ; défilement, clavier et PIM fluides. Génération 65 s (4 lots) → incomplète (contrôle trop strict, voir corrections) ; « Reprendre » (touché par un de mes gestes de défilement) → 4 lots, 24 s, 36/36 complet, enregistré.
+- Scénario B, Projet Nova (4 792 messages) : « dernière réponse de Samuel » → ciblage `rang 4786` = « Calomnie !! … ok peut-être un peu » malgré les messages d'Alex, Lina et Nora après ; taquinerie de Lina correctement attribuée ; aucune confusion de participants.
+- Actualisation : grand glissement → volet ouvert directement ; groupe : auteur à choisir ; message envoyé (201, bulle à droite « Vous → Projet Nova ») ; modification (PATCH 200, « corrigé ») ; suppression confirmée (DELETE 204) ; brouillon de la barre conservé ; conversation intacte.
+- Non-régressions : menu latéral (chats classés sous WhatsApp), références cliquables (anciennes réponses), barre de saisie, PIM, retour Android (clavier puis sortie), authentification. Mode vocal non touché, non testé.
+
+### Défauts trouvés et corrigés (déployés)
+1. Réponses avec étiquettes en gras (« **Faits** », « **Indices** », « **Ambiguïté** ») — induites par la consigne qui citait ces mots — habitude inventée (« "je te pardonne" souvent utilisé par elle »), « clairement humoristique » : instructions reformulées (phrases ordinaires, aucune étiquette ni gras, pas de « clairement » sur un ton, habitude seulement si l'aperçu ou plusieurs messages la montrent). Vérifié sur le S10+ : plus d'étiquettes.
+2. Contrôle trop strict : « Promis, je te préviendrai » refusé alors que Lina reproche « tu aurais pu me prévenir » (6 refus → ensemble incomplet). Un reproche justifie désormais une promesse simple ; une promesse absolue (« plus jamais », « ça n'arrivera plus ») reste à justifier.
+3. Initiatives inventées non détectées : sorties (« un verre / un café ce soir ? », « on en parle ce soir »), organisation (« j'instaure un système de rappel »), excuse inventée (« j'étais pris dans le travail ») → nouvelles familles dans `controle.py` (11 des 36 propositions réelles de Lina seraient désormais refusées, les bonnes gardées) ; consignes des lots : pas d'excuse non écrite, Taquin non théâtral, Professionnel sans procédure, accords corrects.
+4. Demande de l'utilisateur : les cartes « Messages d'origine » encombraient chaque réponse → affichées SEULEMENT si la question les demande (`reperes.demande_sources` : « montre-moi », « où est-ce qu'elle a dit ça ? », « pourquoi tu dis ça ? », « sur quoi tu te bases ? »…). Sinon enregistrées `masquee: true` (jamais renvoyées par `GET /references`, toujours utilisées pour « pourquoi tu dis ça ? »). Vérifié sur le S10+ (3 puis 1 référence masquées). Les réponses enregistrées avant gardent leurs cartes.
+
+### Validé par tests automatisés
+- Backend : 571 réussis, 1 ignoré (8 tests de références adaptés : leurs questions demandent maintenant les messages ; nouveaux tests : masquage, promesse justifiée par un reproche, sorties, organisation, excuse, instructions sans étiquettes). Image `backend-api` + pytest, pytest-asyncio, fakeredis[lua].
+- Flutter : aucun fichier Flutter modifié ; suite non relancée.
+
+### Délais et consommation (GroqCloud réel, compte de test, 2026-10-19)
+- Analyse : préparation 2,4-6,7 s (groupe), premier fragment 2,1-3,8 s, réponse 2,4-4,4 s, enregistrement 0,3-0,6 s.
+- Génération des propositions : 65 s (4 lots, incomplète) + reprise 24 s ; contrôle de la compréhension 5 ms.
+- Tokens du compte ce jour : 48 132 / 50 000 avant les deux derniers essais ; exception temporaire (75 000) posée pour le suivi et le groupe, puis retirée (retour à `limits_override=false`, 150 messages, 50 000 tokens).
+
+### Déploiement
+- `jarvis-api` reconstruit une fois (`docker compose up -d --build --no-deps api`) : image `04754e448bc0` ; points de restauration `backend-api:avant-validation-s10` (`debb8cfe8ce3`) et `backend-api:avant-comprehension` (`c0e5e6e302e3`). `jarvis-redis` et ses données intacts. `/health`, `/health/ready` (Redis, Supabase ok) 200 ; routes protégées 401 sans jeton.
+- Attention : l'image a été construite depuis l'arbre de travail, qui contenait aussi un travail vocal NON commité d'une autre session (interruption de la réponse : `ChatRequest.interruption`, `note_interruption` dans `chat.py`, `test_vision.py`, fichiers Flutter / Kotlin du vocal). Il est donc en service sur `jarvis-api` (suite backend complète réussie avec lui), mais il n'est pas dans le commit de cette validation ; l'APK installé sur le S10+ le contenait aussi.
+
+### Non testé
+- Mode vocal ; « Copier » vérifié dans le presse-papiers ; génération complète de 36 propositions APRÈS les corrections 2-3 (quota épuisé ; contrôle rejoué sur les propositions réelles, déterministe) ; Windows / Web.
+
+### Limites restantes
+- Le modèle parle parfois de l'utilisateur à la 3ᵉ personne (« Alex ») et rattache encore une ancienne blague ; formulations Taquin parfois forcées.
+- Les sorties et excuses inventées sont filtrées par motifs lexicaux : une formulation nouvelle peut passer.
+- Une restauration de session Supabase sans délai d'attente laisse l'appli sur l'écran de lancement quand le réseau est mauvais.

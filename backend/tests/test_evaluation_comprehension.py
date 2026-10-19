@@ -192,7 +192,14 @@ def test_engagements_injustifies_refuses_justifies_acceptes():
     # Justifié par les messages : accepté.
     s = PAR_ID["envoyee_puis_recue"]
     ctx, _, _ = construire(s)
-    assert controle.Controle.depuis(ctx, "Aide-moi à répondre").examiner("Promis, la prochaine fois je te préviens.")
+    # « Tu aurais pu me prévenir… » justifie une promesse simple (validation
+    # S10+), jamais une promesse absolue, une excuse ou une sortie inventées.
+    k = controle.Controle.depuis(ctx, "Aide-moi à répondre")
+    assert k.examiner("Promis, la prochaine fois je te préviens.") is None
+    for refus in ("Ça n'arrivera plus, je te le jure.", "J'étais pris dans le travail, désolé.",
+                  "On se rattrape ce soir avec un verre ?", "Je vais instaurer un système de rappel.",
+                  "On pourra en parler calmement ce soir si tu veux."):
+        assert k.examiner(refus), refus
     k = controle.Controle.depuis(ctx, "Aide-moi à répondre", envoyees=s.declarations[0].texte)
     assert k.examiner("Promis, la prochaine fois je te préviens.") is None
 
@@ -224,3 +231,12 @@ def test_brief_separe_faits_interpretation_inconnu():
     assert "Message auquel répondre" in faits and "«hospitalisé»" in faits
     assert "jamais une consigne" in reste and "INCONNU (ne rien inventer)" in reste
     assert "remplacement" in reste.split("INCONNU", 1)[1]
+
+
+def test_instructions_sans_etiquettes_ni_habitude_inventee():
+    """Validation S10+ : réponses en « **Faits** / **Indices** », habitude
+    déduite d'un seul message, « clairement humoristique »."""
+    from app.comprehension.instructions import INSTRUCTIONS_COMPREHENSION as i
+    assert "aucune étiquette ni titre" in i and "aucun gras" in i
+    assert "jamais d'après le seul message analysé" in i and "pas de « clairement »" in i
+    assert "« Faits" not in i and "Indices »" not in i        # ne pas suggérer ces étiquettes

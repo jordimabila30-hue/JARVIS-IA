@@ -160,7 +160,7 @@ def test_decoupage_jamais_dans_une_citation():
 
 async def test_route_corrige_avant_diffusion_et_enregistre_le_texte_juste(env):
     env.llm = reponse("Tu as écrit « m", "dr » juste après [", "[3]]. Elle te taquine.")
-    resp = await post(env, message="Qui a dit mdr ?", conversation_id=CHAT, whatsapp_analysis="allowed")
+    resp = await post(env, message="Qui a dit mdr ? Montre-moi le message.", conversation_id=CHAT, whatsapp_analysis="allowed")
     ev = evenements(resp.text)
     deltas = [d["text"] for e, d in ev if e == "delta"]
     assert all("Tu as écrit" not in d for d in deltas)

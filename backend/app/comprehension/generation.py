@@ -394,7 +394,8 @@ def brief(ctx: ContexteJoint, *, question: str, analyse: str, aujourd_hui: date 
     qui = neutraliser(cible.auteur) if cible is not None and cible.auteur and not ctx.est_moi(cible.auteur) \
         else "l'interlocuteur"
     inconnu = [f"intentions et sentiments exacts de {qui}",
-               "tout projet, aide, remplacement, visite, rendez-vous ou promesse que les messages ne mentionnent pas"]
+               "tout projet, aide, remplacement, visite, sortie, rendez-vous ou promesse que les messages ne mentionnent pas",
+               "les raisons ou excuses de l'utilisateur, s'il ne les a pas écrites"]
     if any(m.manuel and m.date is None for m in ctx.messages[-derniers:]):
         inconnu.append("date d'envoi des messages ajoutés à la main")
     parties.append("INCONNU (ne rien inventer) : " + " ; ".join(inconnu) + ".")
@@ -426,7 +427,8 @@ Réponds UNIQUEMENT par un objet JSON valide, sans aucun texte autour, de cette 
 {"tons": [{"nom": "Amical", "court": [{"approche": "…", "texte": "…", "appuis": [12]}], "moyen": […], "long": […]}]}
 Règles :
 - Fonde chaque proposition sur les FAITS et le « Message auquel répondre ». L'INTERPRÉTATION n'est qu'une piste : si elle ne colle pas aux messages, ignore-la. Aucun fait, rendez-vous, promesse, date, souvenir ni citation inventés ; la relation entre les personnes ne change pas.
-- L'utilisateur décide de ses engagements : aucune initiative concrète (remplacer quelqu'un, venir, promettre, appeler un tiers, fixer un rendez-vous) qui ne découle pas clairement des messages ou de sa demande. Situation grave : sobre et attentif, sans solution improvisée.
+- L'utilisateur décide de ses engagements : aucune initiative concrète (remplacer quelqu'un, venir, promettre « plus jamais », appeler un tiers, proposer une sortie ou un rendez-vous, instaurer un rappel ou une organisation) qui ne découle pas clairement des messages ou de sa demande. Aucune excuse ni raison (travail, imprévu…) que les messages ne donnent pas. Situation grave : sobre et attentif, sans solution improvisée.
+- Taquin reste léger et crédible, jamais théâtral (pas de prison, de magie ou de superlatifs) ; Professionnel reste simple, sans procédure ni vocabulaire administratif. Accorde correctement selon qui parle (l'utilisateur) et à qui.
 - Voix de l'utilisateur (registre, longueur habituelle, émojis et expressions s'il en met), jamais celle d'un assistant : ni formule toute faite, ni compliment appuyé, ni explication inutile, ni question ajoutée par réflexe.
 - Le ton change la manière de répondre : Naturel = spontané et simple ; Amical ou Chaleureux = attentionné, sans familiarité excessive ; Taquin = léger et joueur si la situation le permet, sinon doux et complice sans blague ; Professionnel = clair, précis, respectueux, jamais froid ni distant. Rien de drôle si le sujet est sérieux.
 - « Professionnel » garde le registre habituel de la discussion (indiqué plus bas) : deux personnes qui se tutoient restent au tutoiement.

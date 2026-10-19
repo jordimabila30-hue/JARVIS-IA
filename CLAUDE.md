@@ -244,7 +244,7 @@ lib/
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
 ├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour selon l'abonnement (sessions désactivées : plan_config.session_* NULL) (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic ; appels d'outils : DefinitionOutil, TourAssistant, ResultatAppel) — raccordé à chat_stream, appel_lot, contexts.completer ; odo/ = ODO (outils : registre, permissions, validation, sécurité, confirmations, orchestrateur, compétences Gmail lecture seule ; ODO_ACTIF=false) ; integrations/ = Google OAuth (Vault) + client Gmail (GET seulement)
-├── tests/                            # pytest (563, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis ; image backend-api + pytest, pytest-asyncio, fakeredis[lua]) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py, evaluation_comprehension.py (--reel)
+├── tests/                            # pytest (571, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis ; image backend-api + pytest, pytest-asyncio, fakeredis[lua]) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py, evaluation_comprehension.py (--reel)
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
@@ -654,6 +654,13 @@ appeler, rendez-vous ; date ou jour inventés ; rire si grave) et les vrais
 doublons entre tons sont refusés ; seule la combinaison est redemandée
 (`Ensemble.refus` redonné au lot). `brief` : FAITS / INTERPRÉTATION
 POSSIBLE (une piste, jamais une consigne) / INCONNU.
+Validation S10+ (2026-10-19) : un reproche (« tu aurais pu me prévenir »)
+justifie une promesse simple ; refusés sans justification : sorties
+(« un verre ce soir ? »), organisation (« système de rappel »), excuses
+non écrites. Cartes « Messages d'origine » seulement si la question les
+demande (`reperes.demande_sources`) ; sinon références enregistrées
+`masquee: true` (jamais restaurées, toujours utilisées par « pourquoi tu
+dis ça ? »). Réponses sans étiquettes ni gras.
 
 Utilisation (abonnements, doc `docs/backend/ABONNEMENTS.md` §10-11) :
 Paramètres › Utilisation (`PanneauUtilisation`) et `UtilisationPage` :
