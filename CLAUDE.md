@@ -244,7 +244,7 @@ lib/
 ```text
 backend/                              # FastAPI (Docker : jarvis-api + jarvis-redis) — seul backend actif
 ├── app/                              # auth JWT Supabase, chat SSE (MIA universel : Claude par défaut, GroqCloud pour les tests), comprehension/ (WhatsApp → IA), échanges locaux (/api/v1/conversations/local-exchanges), contextes WhatsApp (api/v1/contexts.py, contextes.py), quotas Redis par jour selon l'abonnement (sessions désactivées : plan_config.session_* NULL) (quota.py, limites de plan_config ; routage MIA par abonnement : ABONNEMENTS_ROUTAGE), horloge.py ; llm/ = MIA universel (contrat FournisseurLLM, Claude via `anthropic`, GroqCloud, selection.py ; LLM_PROVIDER=anthropic ; appels d'outils : DefinitionOutil, TourAssistant, ResultatAppel) — raccordé à chat_stream, appel_lot, contexts.completer ; odo/ = ODO (outils : registre, permissions, validation, sécurité, confirmations, orchestrateur, compétences Gmail lecture seule ; ODO_ACTIF=false) ; integrations/ = Google OAuth (Vault) + client Gmail (GET seulement)
-├── tests/                            # pytest (417, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py
+├── tests/                            # pytest (563, dont test_llm_*, test_mia_*, test_abonnements avec faux serveurs tests/faux_llm.py ; monter tout le dépôt : tests_whatsapp/ requis ; image backend-api + pytest, pytest-asyncio, fakeredis[lua]) ; essais manuels : qualite_comprehension.py, quota_groq.py, diag_preparation.py, essai_ciblage_reel.py, evaluation_comprehension.py (--reel)
 ├── docker-compose.yml, Dockerfile    # lancer depuis backend/ : docker compose up -d --build
 └── .env                              # SECRETS serveur, jamais versionné (modèle : .env.example)
 supabase/schema.sql                   # schéma de référence (users, conversations, messages, quota_usage, RLS)
@@ -626,6 +626,34 @@ avant les lots) → `ConversationSession.preparationEnCours(id)` →
 `PreparationPropositions` (trois points animés sous le texte) jusqu'à
 `propositions` / `done` ; battements SSE pendant les lots (le client coupe
 après 30 s de silence).
+
+Optimisation de la compréhension (2026-10-19, doc
+`docs/backend/COMPREHENSION_CONVERSATIONNELLE.md` § Optimisation) : état
+partagé `app/comprehension/etat.py` (faits sans IA, recalculés, rien de
+stocké) : habitudes par auteur, jalons (décisions / changements, forcés
+dans les extraits), indices de sérieux, proportion (« Ok 👍 » → réponses
+proportionnées), suite récente ordonnée (ajouts `created_at` ↔ réponses
+déclarées `declared_at`), échange en cours vs plus tôt. Interprétation
+écrite UNE fois par la réponse principale : attribut `lecture` du bloc
+`<propositions>`, stockée avec l'ensemble, donnée à tous les lots et à
+« Reprendre ». Ciblage des suivis naturels (« pourquoi elle me dit ça ? »,
+« tu crois qu'il plaisante ? », « que répondre ? ») sauf question ancrée
+(citation, « quand il m'a dit… »). Lots : « Message auquel répondre »,
+habitudes de l'utilisateur, sérieux, décisions, 14 derniers messages avec lecture (sinon 24), consignes de ton / longueur
+/ approches alignées ; Moyen 6-70 mots, Long ≤ 140 (légère : Long dès 12
+mots, deux phrases). Évaluation : `tests/scenarios_comprehension.py` (12
+situations), `tests/evaluation_comprehension.py` (déterministe ; `--reel`
+GroqCloud, coûteux).
+Fiabilité (déployée le 2026-10-19) : `app/comprehension/controle.py`, sans
+IA. Avant les lots, la lecture et l'analyse sont confrontées aux messages
+récents (`nettoyer_interpretation` : initiative non justifiée, humour en
+situation grave, décision non écrite, citation, date ou participant absents
+→ retirés ; certitude → nuancée). Après, chaque proposition passe
+`Controle.examiner` (engagement non justifié : remplacer, venir, promettre,
+appeler, rendez-vous ; date ou jour inventés ; rire si grave) et les vrais
+doublons entre tons sont refusés ; seule la combinaison est redemandée
+(`Ensemble.refus` redonné au lot). `brief` : FAITS / INTERPRÉTATION
+POSSIBLE (une piste, jamais une consigne) / INCONNU.
 
 Utilisation (abonnements, doc `docs/backend/ABONNEMENTS.md` §10-11) :
 Paramètres › Utilisation (`PanneauUtilisation`) et `UtilisationPage` :

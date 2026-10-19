@@ -91,8 +91,38 @@ def test_plusieurs_contextes_dans_le_meme_chat():
 
 def test_questions_sans_dernier_message_non_ciblees():
     ctx = contexte(LINA)
-    assert ciblage.cibler("Pourquoi elle dit ça ?", [ctx]) is None
     assert ciblage.cibler("Résume la discussion", [ctx]) is None
+    # Ancrée sur un autre message (citation, « quand elle a écrit… ») : le
+    # modèle garde ce référent, rien n'est imposé.
+    assert ciblage.cibler("Pourquoi elle a écrit « Tu fais ce que tu veux » ?", [ctx]) is None
+    assert ciblage.cibler("Tu crois qu'elle plaisante ?", [ctx],
+                          ["Quand elle m'a dit que j'étais un génie, c'était sérieux ?"]) is None
+
+
+def test_suivi_naturel_vise_le_message_actif():
+    """Optimisation de la compréhension : « Pourquoi elle dit ça ? » (discussion
+    à deux) porte sur le dernier message du contact, même ajouté sans date."""
+    ctx = contexte(LINA)
+    c = ciblage.cibler("Pourquoi elle dit ça ?", [ctx])
+    assert c.cible.message.auteur == "Lina Moreau" and c.cible.message is ctx.messages[-1]
+    m = ajouter(ctx, "Lina Moreau", "Bon, je te pardonne pour cette fois.", "manual_received")
+    for q in ("Pourquoi elle me dit ça ?", "Tu crois qu'elle plaisante ?", "Qu'est-ce que je devrais répondre ?"):
+        assert ciblage.cibler(q, [ctx]).cible.message is m, q
+
+
+def test_suivi_naturel_dans_un_groupe():
+    ctx = contexte(GROUPE)
+    # Personne nommée nulle part : clarification, aucune supposition.
+    c = ciblage.cibler("Pourquoi il dit ça ?", [ctx])
+    assert c.cible is None and c.ambigus
+    # Nommée dans la question précédente : sa dernière réponse.
+    c = ciblage.cibler("Pourquoi il dit ça ?", [ctx], ["Quelle est la dernière réponse de Samuel ?"])
+    assert c.cible.message.auteur == "Samuel Petit"
+    # Message qu'il vient de coller : le référent actif.
+    m = ajouter(ctx, "Maya Martin", "Je ne viendrai pas demain.", "manual_received")
+    assert ciblage.cibler("Pourquoi elle dit ça ?", [ctx]).cible.message is m
+    # « Que répondre ? » sans nom : le dernier message reçu.
+    assert ciblage.cibler("Qu'est-ce que je devrais répondre ?", [ctx]).cible.message is m
 
 
 def test_message_vise_toujours_fourni_sous_une_petite_limite_de_tokens():

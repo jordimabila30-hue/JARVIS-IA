@@ -82,6 +82,9 @@ class MessageSource:
     # export | manual_received | manual_sent (phase 5) : un message collé
     # par l'utilisateur n'est pas une réception vérifiée sur WhatsApp.
     origine: str = "export"
+    # Enregistrement d'un ajout manuel (UTC) : ordre réel par rapport aux
+    # réponses déclarées envoyées (etat.fil). Jamais une date WhatsApp.
+    cree_le: datetime | None = None
 
     @property
     def manuel(self) -> bool:
@@ -324,7 +327,8 @@ def _cout(messages: list[MessageSource], ctx: ContexteJoint, i: int) -> int:
 
 
 def selectionner(
-    ctx: ContexteJoint, reperes: Reperes, budget: int, forces: list[int] | None = None
+    ctx: ContexteJoint, reperes: Reperes, budget: int, forces: list[int] | None = None,
+    jalons: list[int] | None = None,
 ) -> Selection:
     """Indices des messages à fournir, dans [budget] tokens. [forces] :
     messages cités par les réponses précédentes (« pourquoi tu dis ça ? »),
@@ -375,6 +379,16 @@ def selectionner(
             raisons.append(f"messages de la période demandée ({libelles})")
         else:
             raisons.append(f"aucun message daté de la période demandée ({libelles})")
+
+    # 1 bis. Derniers changements et décisions annoncés (etat.jalons), avec
+    #    le message qui les précède : « finalement le 20 juin » ne doit pas
+    #    être remplacé par l'ancienne date d'un extrait.
+    if jalons:
+        voisins = []
+        for i in reversed(jalons):
+            voisins.extend([i, i - 1])
+        prendre(voisins, int(budget * 0.1))
+        raisons.append("derniers changements et décisions")
 
     # 2. Position : début, milieu, fin.
     part = 0.45 if (reperes.debut + reperes.milieu + reperes.fin) == 1 else 0.25

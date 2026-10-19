@@ -158,9 +158,12 @@ def test_confirmation_attribuee_a_tort_corrigee():
 
 def test_reactions_identiques_de_plusieurs_auteurs_jamais_attribuees_au_hasard():
     p = preparer(contexte("JARVIS_TEST_GROUPE.zip"), "Qui a répondu oui au report ?")
-    # « oui » existe chez plusieurs auteurs : rien n'est rattaché au hasard.
+    # « oui » existe chez plusieurs auteurs : jamais rattaché à un autre
+    # auteur que celui nommé (seul un « oui » de Maya, unique parmi les
+    # messages fournis, peut l'être : ici celui qui suit l'annonce du report).
     visible, v = corriger(p, "Maya a écrit « oui ».")
-    assert visible == "Maya a écrit « oui »." and v.references == [] and v.corrigees == 0
+    assert visible == "Maya a écrit « oui »." and v.corrigees == 0
+    assert all(r["author"] == "Maya Martin" for r in v.references)
 
 
 def test_genie_selon_l_auteur():

@@ -15,6 +15,15 @@ les messages enregistrés (auteur, provenance, ordre réel), avant tout appel
   - « sa dernière réponse » sans nom : le contact d'une discussion à deux,
     sinon la personne de la question précédente, sinon clarification.
 
+Suivis naturels (« Pourquoi elle me dit ça ? », « Tu crois qu'il
+plaisante ? », « Qu'est-ce que je devrais répondre ? ») : le référent actif
+est le dernier message de la personne (nommée, de la question précédente,
+ou le contact d'une discussion à deux) ; dans un groupe sans nom, le
+message que l'utilisateur vient de coller (dernier ajout reçu), le dernier
+reçu pour « que répondre ? », sinon clarification. Une question ancrée sur
+un autre message (citation « … », « quand il m'a dit… ») ou qui suit une
+telle question n'est pas ciblée : le modèle garde ce référent.
+
 L'ordre réel est le rang (`message_order`) ; un ajout manuel sans date
 n'est jamais devancé par un ancien message daté. Plusieurs personnes ou
 contacts possibles : aucune supposition, clarification demandée.
@@ -34,6 +43,18 @@ _ENVOYE = re.compile(r"\benvoy")
 _RECU = re.compile(r"\brecu")
 _AJOUT = re.compile(r"\bajout|\bcolle")
 _INTERLOCUTEUR = re.compile(r"\breponse\b|\b(?:elle|il|sa|son|lui)\b")
+# Suivi qui désigne le message actif sans le nommer (texte normalisé).
+_DEICTIQUE = re.compile(
+    r"\bpourquoi (?:elle|il) (?:me |m'|nous )?(?:dit|ecrit|repond|reagit|parle)\b"
+    r"|\b(?:elle|il) (?:me |m'|nous )?(?:dit|ecrit|repond|reagit) (?:ca|cela|comme ca)\b"
+    r"|\b(?:elle|il) (?:plaisante|rigole|blague|ironise|se moque|me taquine|me charrie|m'en veut|boude"
+    r"|est (?:serieu\w*|fache\w*|vexe\w*|sarcastique|ironique|en colere))\b"
+    r"|\bqu'est-ce qu'(?:elle|il) (?:veut dire|entend|sous-entend|insinue)\b|\b(?:elle|il) veut dire quoi\b"
+    r"|\bca veut dire quoi\b|\bje (?:lui )?(?:reponds|dis|ecris) quoi\b"
+    r"|\b(?:que|quoi|qu'est-ce que) (?:je )?(?:devrais|dois|peux|pourrais) (?:lui )?(?:repondre|dire|ecrire)\b")
+_AIDE_DEICTIQUE = re.compile(r"\b(?:repondre|dire|ecrire|reponds|dis|ecris)\b")
+# Question ancrée sur un message précis autre que le dernier.
+_ANCRE = re.compile(r"[«\"“]|\bquand (?:elle|il|\w+) (?:m'a |a |m'avait |avait |me |m')?(?:dit|ecrit|repondu|envoye)\b")
 
 GENRES = {
     "conversation": "dernier message de la conversation",
@@ -62,6 +83,19 @@ class Ciblage:
 
     cible: Cible | None = None
     ambigus: list[str] = field(default_factory=list)
+
+
+def suivi_deictique(question: str, precedentes: list[str] | None = None) -> bool:
+    """« Pourquoi elle me dit ça ? » : suivi sur le message actif, sauf si la
+    question (ou la précédente) est ancrée sur un autre message."""
+    q = reperes.normaliser(question)
+    if not _DEICTIQUE.search(q) or _ANCRE.search(question) or _ANCRE.search(q):
+        return False
+    if precedentes:
+        avant = precedentes[-1]
+        if _ANCRE.search(avant) or _ANCRE.search(reperes.normaliser(avant)):
+            return False
+    return True
 
 
 def vise_un_dernier(question: str) -> bool:
@@ -105,12 +139,15 @@ def cibler(question: str, contextes: list[ContexteJoint], precedentes: list[str]
     """Message visé par [question] parmi les [contextes] chargés (pièces
     jointes visées), ou None si la question ne vise pas « le dernier »."""
     q = reperes.normaliser(question)
-    if not contextes or not _DERNIER.search(q):
+    deictique = not _DERNIER.search(q) and suivi_deictique(question, precedentes)
+    if not contextes or not (_DERNIER.search(q) or deictique):
         return None
     noms = list(dict.fromkeys(n for c in contextes for n in _nommes(c, q)))
     plusieurs_contacts = len(_contacts(contextes)) > 1
 
-    if _AJOUT.search(q):
+    if deictique:
+        genre = "participant"
+    elif _AJOUT.search(q):
         genre = "ajout"
     elif _MOI.search(q) or (_ENVOYE.search(q) and not _RECU.search(q)):
         genre = "envoye"
@@ -131,6 +168,17 @@ def cibler(question: str, contextes: list[ContexteJoint], precedentes: list[str]
             noms = list(dict.fromkeys(n for c in contextes for n in _nommes(c, pn) if not c.est_moi(n)))
             if noms:
                 break
+        if not noms and deictique and not plusieurs_contacts and contextes[-1].groupe:
+            # Groupe, personne non nommée : le message qu'il vient de coller,
+            # ou, pour « que répondre ? », le dernier message reçu.
+            ctx = contextes[-1]
+            hs = _humains(ctx)
+            if hs and hs[-1].manuel and not ctx.est_moi(hs[-1].auteur):
+                return Ciblage(cible=Cible("participant", ctx, hs[-1], participant=hs[-1].auteur))
+            if _AIDE_DEICTIQUE.search(q):
+                recu = next((m for m in reversed(hs) if not ctx.est_moi(m.auteur)), None)
+                if recu is not None:
+                    return Ciblage(cible=Cible("recu", ctx, recu))
         if not noms:
             if plusieurs_contacts or any(c.groupe for c in contextes):
                 auteurs = list(dict.fromkeys(m.auteur for c in contextes for m in _humains(c)
@@ -172,10 +220,13 @@ def voisins(ciblage: Ciblage | None, avant: int = 3) -> dict[str, set[int]]:
     return {c.contexte.id: {m.ordre for m in humains[max(0, i - avant): i + 1]}}
 
 
-def bloc(ciblage: Ciblage | None, fournis: dict) -> str | None:
+def bloc(ciblage: Ciblage | None, fournis: dict, envoyees: dict[str, list[dict]] | None = None) -> str | None:
     """Bloc placé juste avant la question : le message visé (numéro de
-    CETTE requête, identifiant, auteur, provenance) et ce qui le précède."""
-    from .extraits import citer, date_ligne, neutraliser, texte_affiche
+    CETTE requête, identifiant, auteur, provenance) et ce qui le précède
+    dans l'ordre réel, réponses déclarées envoyées comprises (etat.fil) :
+    « pourquoi elle me dit ça ? » relie sa réponse à la promesse envoyée."""
+    from . import etat
+    from .extraits import neutraliser
 
     if ciblage is None:
         return None
@@ -192,27 +243,44 @@ def bloc(ciblage: Ciblage | None, fournis: dict) -> str | None:
     if n is None:
         return None
 
-    def ligne(m: MessageSource) -> str:
-        k = numeros.get((m.context_id, m.ordre))
-        qui = neutraliser(m.auteur or "")
-        if c.contexte.est_moi(m.auteur):
-            qui += " (utilisateur)"
-        origine = ", ajouté à la main" if m.manuel else ""
+    def ligne(e: "etat.Evenement") -> str:
         # Contenu importé, cité comme dans le bloc de données : ni balise ni
         # guillemet ne peut sortir de la citation.
-        return f"[{k}] {date_ligne(m, c.contexte)} · {qui}{origine} : «{citer(texte_affiche(m)[:400])}»"
+        return etat.ligne_evenement(e, c.contexte, numeros)
 
-    humains = _humains(c.contexte)
-    i = next(k for k, m in enumerate(humains) if m.ordre == c.message.ordre)
-    avant = [m for m in humains[max(0, i - 3): i] if (m.context_id, m.ordre) in numeros]
+    suite = etat.fil(c.contexte, (envoyees or {}).get(c.contexte.id))
+    i = next(k for k, e in enumerate(suite) if e.message is not None and e.message.ordre == c.message.ordre)
+
+    def fourni(e: "etat.Evenement") -> bool:
+        return e.declaration is not None or (e.message.context_id, e.message.ordre) in numeros
+
+    # Échange en cours (même moment) d'abord, ce qui est plus ancien à part :
+    # vu en réel, un pardon après un reproche collé à la main était lu à la
+    # lumière d'une vieille blague de l'export, juste avant dans la liste.
+    debut = etat.debut_episode(suite, i, c.contexte)
+    avant = [e for e in suite[max(debut, i - 4): i] if fourni(e)]
+    # Rien dans l'échange en cours (« Pas ce samedi… » collé seul) : ce qui
+    # précède, présenté comme plus ancien.
+    plus_tot = [e for e in suite[max(0, debut - 2): debut] if fourni(e)] if not avant else []
+    apres = [e for e in suite[i + 1:] if e.declaration is not None]
     lignes = [
         "<message_vise>",
         f"La question porte sur le {c.description} (identifié par JARVIS dans les messages enregistrés : "
         "auteur, provenance et ordre réel ; un ajout manuel est plus récent que tout l'export).",
-        f"MESSAGE VISÉ (identifiant {c.message.id or 'inconnu'}) : {ligne(c.message)}",
+        f"MESSAGE VISÉ (identifiant {c.message.id or 'inconnu'}) : {ligne(suite[i])}",
     ]
     if avant:
-        lignes.append("Juste avant : " + " ; ".join(ligne(m) for m in avant))
+        lignes.append("Échange en cours (même moment, ce qui précède directement le message visé) : "
+                      + " ; ".join(ligne(e) for e in avant))
+    if plus_tot:
+        lignes.append("Plus tôt, à un autre moment (fin de l'export ou longue pause) : "
+                      + " ; ".join(ligne(e) for e in plus_tot))
+    lignes.append("Lis d'abord le message visé avec l'échange en cours ; ce qui est plus ancien (habitudes, "
+                  "anciennes blagues) ne compte que si le message y renvoie clairement.")
+    if any(e.declaration is not None for e in avant):
+        lignes.append("Le message visé est arrivé APRÈS la réponse déclarée envoyée : il y réagit probablement.")
+    if apres:
+        lignes.append("Ensuite : " + " ; ".join(ligne(e) for e in apres))
     lignes.append(
         f"Réponds sur CE message et appuie-toi sur [[{n}]]. Ne le confonds avec aucun autre, même daté plus tard "
         "dans l'export. Les réponses précédentes de ce chat sur « le dernier message » ont été retirées : "

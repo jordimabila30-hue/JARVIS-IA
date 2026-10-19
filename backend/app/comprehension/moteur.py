@@ -28,7 +28,7 @@ from redis.exceptions import RedisError
 
 from ..config import Settings
 from ..supabase_client import SupabaseAdmin
-from . import ciblage as ciblage_mod, extraits, propositions, reperes
+from . import ciblage as ciblage_mod, etat, extraits, propositions, reperes
 from .extraits import ContexteJoint, MessageSource, estimer_tokens
 from .references import Fourni
 from .instructions import INSTRUCTIONS_COMPREHENSION, NOTE_SANS_CONSENTEMENT, bloc_donnees
@@ -117,7 +117,20 @@ def message_source(ctx: ContexteJoint, r: dict) -> MessageSource:
         date=_date(r.get("sent_at")),
         date_brute=r.get("sent_at_raw") or "",
         origine=r.get("origin") or "export",
+        cree_le=_instant(r.get("created_at")) if (r.get("origin") or "export") != "export" else None,
     )
+
+
+def _instant(valeur) -> datetime | None:
+    """Instant d'enregistrement (UTC) d'un ajout manuel : jamais une date
+    WhatsApp, seulement l'ordre par rapport aux déclarations."""
+    if not valeur:
+        return None
+    try:
+        d = datetime.fromisoformat(str(valeur).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else None
 
 
 def borner_historique(historique: list[dict], budget: int) -> list[dict]:
@@ -238,11 +251,25 @@ class MoteurComprehension:
             + estimer_tokens(catalogue) + estimer_tokens(question)
             + sum(estimer_tokens(m["content"]) + 4 for m in historique) + 80
         )
-        apercus = {c.id: extraits.apercu(c, aujourd_hui) for c in cibles}
-        fixe += sum(estimer_tokens(a) + 30 for a in apercus.values())
+        # Aperçu = faits comptés sur tout + état partagé (habitudes, jalons,
+        # indices de sérieux, inconnues : etat.py), le même que reçoivent les
+        # lots de propositions.
+        apercus = {c.id: "\n".join([extraits.apercu(c, aujourd_hui), *etat.faits(c)]) for c in cibles}
+        cout_apercus = sum(estimer_tokens(a) + 30 for a in apercus.values())
+        if budget - fixe - cout_apercus < PLANCHER_MESSAGES:
+            # Budget serré (aide à répondre sur GroqCloud) : état compact,
+            # plutôt que dépasser la limite ou sacrifier les messages.
+            apercus = {c.id: "\n".join([extraits.apercu(c, aujourd_hui), *etat.faits(c, compact=True)])
+                       for c in cibles}
+            cout_apercus = sum(estimer_tokens(a) + 30 for a in apercus.values())
+        fixe += cout_apercus
         memoires = [propositions.bloc_memoire(envoyees[c.id], c.contact)
                     for c in cibles if envoyees and envoyees.get(c.id)]
         fixe += sum(estimer_tokens(m) + 10 for m in memoires)
+        # Suite récente (ajouts + réponses déclarées envoyées, ordre réel).
+        fixe += sum(estimer_tokens(etat.bloc_fil(c, (envoyees or {}).get(c.id), {}) or "") for c in cibles)
+        if ciblage is not None:
+            fixe += 120   # bloc du message visé (message et ce qui précède)
         if propositions_faites:
             fixe += estimer_tokens(propositions.bloc_precedentes(propositions_faites, {}, ton_affiche, question, longueur_affichee)) + 20
         disponible = max(PLANCHER_MESSAGES, budget - fixe)
@@ -256,7 +283,7 @@ class MoteurComprehension:
             part = int(disponible * len(c.messages) / total)
             rangs = (cites or {}).get(c.id) or set()
             forces = [i for i, m in enumerate(c.messages) if m.ordre in rangs]
-            sel = extraits.selectionner(c, r, part, forces)
+            sel = extraits.selectionner(c, r, part, forces, etat.jalons(c))
             complete &= sel.complete and len(c.messages) >= c.nombre
             if sel.complete and len(c.messages) >= c.nombre:
                 couverture = f"conversation entière ({len(c.messages)} messages)"
@@ -287,9 +314,15 @@ class MoteurComprehension:
         # en fin de long message système, le modèle les ignorait et citait
         # une proposition inventée).
         blocs = [*memoires]
-        vise = ciblage_mod.bloc(ciblage, fournis)
+        vise = ciblage_mod.bloc(ciblage, fournis, envoyees)
         if vise:
-            blocs.append(vise)
+            blocs.append(vise)      # il contient déjà la suite qui précède le message visé
+        else:
+            numeros = {(f.message.context_id, f.message.ordre): n for n, f in fournis.items()}
+            for c in cibles:
+                suite = etat.bloc_fil(c, (envoyees or {}).get(c.id), numeros)
+                if suite:
+                    blocs.append(suite)
         if propositions_faites:
             blocs.append(propositions.bloc_precedentes(propositions_faites, fournis, ton_affiche, question,
                                                     longueur_affichee))

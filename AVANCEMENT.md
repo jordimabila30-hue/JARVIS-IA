@@ -1696,3 +1696,84 @@ Journal des avancées du projet, de la plus récente à la plus ancienne.
 ### Prochaine étape
 - Essais réels guidés (S10+) avec Claude ET GroqCloud sur les exemples A à E, puis déploiement en production sur accord.
 - Phase 2 : compréhension approfondie des contenus, importance, relations entre messages.
+
+
+## 2026-10-19 — Optimisation de la compréhension conversationnelle WhatsApp
+
+### Faiblesses identifiées (audit de `app/comprehension/`)
+1. Les lots de propositions ne partageaient aucune compréhension : 24 derniers messages bruts + analyse tronquée ; ni message auquel répondre, ni interprétation commune (chaque lot relisait la situation).
+2. Aucune habitude d'écriture observable (seulement des comptes) ; les propositions « dans la voix de l'utilisateur » ignoraient sa longueur, ses émojis, ses expressions.
+3. Longueurs non proportionnées : Moyen jamais vérifié, Long forcé à 3 phrases même pour répondre à « Ok 👍 » (réel : 47 mots en moyenne, « PDF » et « pièce jointe » inventés).
+4. Suivis naturels non ciblés (« Pourquoi elle me dit ça ? », « Tu crois qu'elle plaisante ? ») ; réponses déclarées envoyées sans place dans la chronologie (réel : la réaction de Lina à la promesse était expliquée par l'ancienne blague du « traitement »).
+5. Message lu à la lumière d'anciennes habitudes plutôt que de l'échange qui l'a déclenché (réel : un pardon après un vrai reproche décrit comme une « boutade »).
+
+### Fait
+- `app/comprehension/etat.py` (nouveau) : état de compréhension partagé, faits sans IA, rien de stocké — habitudes par auteur, jalons de décision (forcés dans les extraits), indices de sérieux, proportion, suite récente ordonnée (ajouts / réponses déclarées), échange en cours vs plus tôt, message auquel répondre, inconnues ; mode compact si le budget est serré.
+- `ciblage.py` : suivis déictiques ciblés (sauf question ancrée sur un autre message) ; groupe : dernier ajout collé, dernier reçu pour « que répondre ? », sinon clarification ; `<message_vise>` : échange en cours, plus tôt, réponse déclarée envoyée placée avant la réponse reçue.
+- `generation.py` : attribut `lecture` (interprétation unique écrite par la réponse principale, stockée, reprise par « Reprendre ») ; `brief` commun à tous les lots ; consignes réécrites (tons, longueurs proportionnées, 3 approches alignées entre longueurs, pas de voix d'assistant, rien d'inventé) ; Moyen 6-70 mots, Long ≤ 140 (légère : dès 12 mots et 2 phrases).
+- `instructions.py` : « Comprendre un message en contexte » (déclencheur d'abord, contre-indices, certain / probable / ambigu / inconnu, intention, habitudes ≠ situation, dernière décision, fils de groupe), taille quasi inchangée (+50 tokens).
+- `reperes.py` : « et avant, c'était pareil ? » = évolution. `extraits.py` : `cree_le` des ajouts, jalons dans la sélection. `chat.py` : message visé transmis aux lots.
+- Aucun changement Flutter, aucune migration, aucune nouvelle table, Docker de production non reconstruit.
+
+### Évaluation (`backend/tests/scenarios_comprehension.py`, `evaluation_comprehension.py`)
+- 12 situations sur les 5 exports fictifs.
+- Déterministe (ce que le moteur prépare, même script sur l'ancienne version) : 41/64 → 62/64. Auteurs 6/11 → 11/11, suivis 0/5 → 5/5, clarification 0/1 → 1/1, chronologie 12/13 → 13/13, contexte récent 1/3 → 3/3, informations aux lots 0/8 → 8/8, sélection 11/11 → 11/11, budget 11/12 → 10/12.
+- Réel GroqCloud (gpt-oss-120b), 6 scénarios avant / après + passe finale sur 4 :
+  - même « je te pardonne pour cette fois » : avant, deux fois « boutade / humour » (ancienne blague du traitement citée) ; après, déception réelle apaisée (Lina) vs prolongement de la joute (Samuel), sans le traitement ;
+  - réponse reçue après une réponse déclarée envoyée : avant, hors sujet (traitement, listes) ; après, scepticisme relié à la promesse, message cité ;
+  - suivi ambigu en groupe : clarification en une phrase (avant : une liste de suppositions) ;
+  - « Ok 👍 » : Long 47 → 26 mots en moyenne, Moyen 21 → 16, aucun nombre ni détail inventé (avant : « 12 h », « PDF », « pièce jointe ») ;
+  - annonce grave : aucune plaisanterie avant comme après ; le souvenir inventé (« mon père était hospitalisé ») a disparu ; « condoléances » employé à tort une fois ;
+  - diversité : approches distinctes 12/12 partout, similarité intra-combinaison moyenne 0,12-0,22.
+- Jugements linguistiques : les miens sur 10 réponses et ~250 propositions ; pas une preuve statistique.
+
+### Tests
+- Backend : 563 réussis, 1 ignoré (24 nouveaux ; 3 anciens ajustés au nouveau comportement voulu : suivi « Pourquoi elle dit ça ? », formulation des ajouts, « oui » de Maya désormais correctement fourni). Image `backend-api` + pytest, pytest-asyncio, fakeredis[lua] (l'image `jarvis-tests` n'a pas `anthropic`).
+
+### Limites
+- Lots plus lourds (~+325 tokens chacun) : sur GroqCloud (8 000 tokens/min), l'ensemble « annonce grave » a fini 2 fois sur 2 « incomplet » (quota, Reprendre) alors qu'il était complet avant.
+- Demandes d'aide : 350 à 650 tokens au-delà du budget réservé (plancher de 1 000 tokens de messages).
+- Heuristiques lexicales (habitudes, jalons, gravité) en français ; habitudes encore parfois sur-invoquées par le modèle (« comme elle le fait souvent »).
+
+### État
+- Rien n'est commité ni poussé. Production (`jarvis-api`) inchangée : les modifications seront actives après reconstruction de l'image.
+
+### Allègement des lots (même jour)
+- `brief` avec lecture commune : 14 derniers messages au lieu de 24 (`DERNIERS_AVEC_LECTURE`), analyse limitée à 250 caractères. Par lot : 1 539 tokens estimés (d'origine 1 473, version précédente 1 798). Sans lecture (anciens ensembles) : inchangé.
+- Tests : 563 réussis, 1 ignoré.
+- Un essai réel GroqCloud « annonce grave » : ensemble COMPLET (36/36, 5 lots — le maximum —, 52,9 s, 7 918 + 2 900 tokens), aucune plaisanterie, aucun nombre inventé, Court 9,8 / Moyen 23,3 / Long 48,3 mots en moyenne.
+- Défauts observés : la lecture commune du modèle (« proposer une alternative ») a été propagée à TOUS les lots, avec un contresens (« je peux prendre ta place à l'escalade ») ; la cohérence entre lots fonctionne, mais une mauvaise lecture se retrouve partout. Approches distinctes 10/12 (étiquettes répétées) ; une proposition identique dans deux tons (« Je suis désolé, comment va ton père ? »).
+
+### Prochaine étape
+- Essais sur appareil après déploiement ; si les ensembles restent à la limite des 5 lots, envisager une attente plus longue (`PROPOSITIONS_ATTENTE_MAX`) ; contrôle des doublons entre tons d'une même longueur.
+
+
+## 2026-10-19 — Fiabilité de la compréhension partagée + déploiement sur jarvis-api
+
+### Cause du contresens (« annonce grave »)
+- La réponse principale avait écrit la lecture « proposer ton soutien ou une alternative » (et « le remplacer plus tard » pour dire reporter l'escalade). Les lots la recevaient comme « fixée, la même pour toutes les propositions », donc comme une consigne, et rien ne vérifiait les engagements proposés : 15 propositions sur 36 offraient de « prendre ta place ».
+
+### Fait
+- `app/comprehension/controle.py` (nouveau, sans IA) : `nettoyer_interpretation` avant les lots (lecture et analyse confrontées aux 10 derniers messages : initiative non justifiée, humour en situation grave, décision non écrite, citation / date / participant absents → retirés ; certitude → « probablement ») ; `Controle.examiner` après génération (engagement non justifié par les 8 derniers messages, la demande ou les réponses déclarées : remplacer, venir, promettre, appeler, rendez-vous ; date, heure ou jour inventés ; rire en situation grave). Doublons exacts entre tons refusés. Seule la combinaison concernée est redemandée, avec la raison (`Ensemble.refus`).
+- Contexte des lots en trois blocs : FAITS / INTERPRÉTATION POSSIBLE (une piste, jamais une consigne) / INCONNU. Consignes : « l'utilisateur décide de ses engagements », situation grave sobre.
+- Journaux du contrôle (raisons et volumes, jamais de contenu) et durées des lots.
+
+### Tests
+- Backend : 568 réussis, 1 ignoré (5 nouveaux tests du contrôle).
+- Évaluation déterministe : 62/64 (référence avant optimisation : 41/64). Les deux échecs sont le dépassement de budget des demandes d'aide sur GroqCloud (plancher de 1 000 tokens de messages) : une limite du budget, pas un défaut de compréhension.
+- Contrôle rejoué sur les 36 propositions fautives de l'essai précédent : 15 refusées (tous les remplacements, sauf une formule vague).
+
+### Déploiement
+- Point de restauration : image `backend-api:avant-comprehension` (`c0e5e6e302e3`). Retour arrière : `docker tag backend-api:avant-comprehension backend-api:latest` puis, depuis `backend/`, `docker compose up -d --no-deps api`.
+- `docker compose up -d --build --no-deps api` : seul `jarvis-api` a été recréé (image `debb8cfe8ce3`) ; `jarvis-redis` et son volume n'ont pas été touchés ; même `.env` (production, `LLM_PROVIDER=anthropic`, routage par abonnement actif, ODO actif). Aucune migration.
+- Vérifié : conteneur sain ; `/health`, `/health/ready` (Redis et Supabase ok) et `/health/clock` en 200 ; `/me`, `/me/quota` et `/api/v1/chat/stream` en 401 sans jeton ou avec un jeton invalide.
+- Test fonctionnel avec le compte de test confirmé (`mjmabs007`, Free → GroqCloud). La production n'accepte que les jetons Supabase asymétriques : le scénario a donc été exécuté DANS le processus de `jarvis-api` (application déployée, vrai Supabase, vrai Redis, vrai GroqCloud), avec la seule vérification du jeton remplacée. Étapes : contexte « Amitié » fictif (201), ajout de l'annonce (201), ciblage (`participant`, rang 783, `manual_received`), préparation 2,5 s, contrôle de la lecture 28 ms (rien à retirer), 3 lots en 37 s (14 refusées au format + 1 au contrôle : visite non justifiée), événements SSE `meta` / `preparation` / `propositions` / `done` et 7 battements, 36 identifiants distincts, persistance relue (mêmes 36 identifiants), « Reprendre » sur l'ensemble complet → 200 sans IA (0,8 s), quota du jour 12 619 tokens.
+- Qualité : aucun remplacement, aucune plaisanterie, aucune date inventée, report de l'escalade fondé sur « Pas ce samedi » ; Court 7-14 mots, Moyen 13-29, Long 37-59. Réserves : quelques formules professionnelles un peu raides (« relais pour nos projets »), et une réponse principale réduite à « Voici quelques idées de réponse ».
+- Non vérifié : la reprise d'un ensemble réellement incomplet sur le serveur réel (couverte par les tests simulés), la chronologie exacte des événements SSE vue par un client (le client en processus reçoit le flux d'un bloc), l'essai depuis l'appli sur téléphone.
+- Conversation de test créée dans le compte de test : « [TEST FICTIF] Conversation de démonstration Samuel Petit » (`f5f9a7bb-…`), conservée.
+
+### État
+- Déployé sur `jarvis-api`. Rien n'est commité ni poussé.
+
+### Prochaine étape
+- Essai depuis l'appli (S10+) sur le même scénario ; commit sur accord.

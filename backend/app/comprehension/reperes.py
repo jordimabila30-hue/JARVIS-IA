@@ -66,7 +66,9 @@ _AIDE = (r"repond\w*", r"(?:une|quelle|ma|mes|des|meilleure|bonne|autre) reponse
 _MILIEU = (r"au milieu", r"milieu de")
 _EVOLUTION = (r"evolu\w*", r"a change", r"ont change", r"change\w*", r"compar\w*",
               r"au fil", r"avant et apres", r"different\w*", r"devenu\w*",
-              r"devient", r"progress\w*")
+              r"devient", r"progress\w*",
+              # Suivi : « Et avant, c'était pareil ? » (comparer à plus tôt).
+              r"et avant", r"avant ca", r"(?:c'etait|c'est|etait) pareil", r"comme avant", r"d'habitude")
 _GENERAL = (r"souvent", r"toujours", r"jamais", r"en general", r"habitude\w*",
             r"frequemment", r"regulierement", r"plaisant\w*", r"plaisant", r"humour\w*",
             r"blague\w*", r"taquin\w*", r"ironi\w*", r"sarcas\w*", r"second degre",

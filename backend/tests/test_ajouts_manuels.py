@@ -215,7 +215,7 @@ async def test_question_suivante_voit_le_message_colle(env):
                      systeme)
     assert ("- Dernier message : de Pepper Potts, ajouté à la main après l'export, date inconnue : "
             "«Ah bon ? Et tu comptais me le dire quand ?»") in systeme
-    assert "sont les PLUS RÉCENTS" in systeme
+    assert "la suite la PLUS RÉCENTE" in systeme
     # « sa réponse » : le message visé est nommé juste avant la question.
     rappel = env.llm.calls[0]["messages"][-2]
     assert rappel["role"] == "system" and "<message_vise>" in rappel["content"]

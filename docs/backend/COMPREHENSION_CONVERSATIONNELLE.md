@@ -25,6 +25,8 @@ normal du chat (SSE, quota, enregistrement dans `messages`).
 | `backend/tests/test_attribution.py` | 15 tests : deux participants, groupes, réactions courtes, citations ambiguës, suivis, flux morceau par morceau |
 | `backend/tests/test_propositions.py` | 15 tests : filtre, validation, dernier auteur, route, restauration, « pourquoi la deuxième ? » |
 | `backend/tests/qualite_comprehension.py` | essai **réel** de qualité (à lancer à la main, consomme du quota) |
+| `backend/app/comprehension/etat.py` | état de compréhension partagé (habitudes, jalons, gravité, proportion, suite récente, échange en cours) : voir « Optimisation de la compréhension » |
+| `backend/tests/scenarios_comprehension.py`, `evaluation_comprehension.py`, `test_evaluation_comprehension.py` | jeu d'évaluation (12 situations), mesure déterministe et réelle |
 
 ## Requête de chat
 
@@ -410,3 +412,143 @@ proposition).
   `ReponsesEnvoyeesApi` ; `ApiJarvis.statutEnvoyee`.
 - Limite : lecture-modification de la colonne JSON (pas de verrou) ; une
   table dédiée avec clé unique (compte, proposition) serait plus stricte.
+
+## Optimisation de la compréhension (2026-10-19)
+
+Objectif : comprendre un message à partir de ce qui l'a déclenché, relier la
+suite récente (ajouts manuels, réponses déclarées envoyées) et partager UNE
+compréhension entre la réponse principale et tous les lots de propositions.
+Aucune nouvelle table, aucune migration, aucun nouveau fournisseur.
+
+### État de compréhension partagé (`app/comprehension/etat.py`)
+
+Faits calculés sans IA sur les messages enregistrés, reconstruits à chaque
+demande (rien de stocké) :
+
+| Élément | Contenu |
+| --- | --- |
+| `habitudes` | par auteur : médiane de mots, % émojis, % rires, % questions, tu / vous, réactions courtes récurrentes ; « récemment » si les 40 derniers messages s'écartent nettement. Des tendances, jamais un profil ; dans un groupe, chacun les siennes |
+| `jalons` | derniers messages qui annoncent un changement ou une décision (« finalement », « on décale », « mise à jour », « erreur »…) ; forcés dans les extraits (10 % du budget) |
+| `indices_serieux` / `grave` | mots de gravité (hôpital, licenciement…) ou de tension (« je suis sérieuse », « pas une blague ») dans les 6 derniers messages : des indices, pas une conclusion |
+| `proportion` | `legere` si l'interlocuteur a écrit en dernier un message très court sans question (« Ok 👍 ») |
+| `fil` / `bloc_fil` | suite récente dans l'ordre réel : une réponse déclarée envoyée se place avant le premier ajout enregistré après elle (`created_at` de l'ajout, `declared_at` ; jamais une date WhatsApp inventée) ; une déclaration déjà présente comme message n'est jamais comptée deux fois |
+| `debut_episode` | l'échange en cours : la suite récente forme un échange à part de l'export ; dans l'export, une pause de plus de 6 h en ouvre un autre |
+| `a_repondre` | message auquel les propositions répondent (message visé s'il vient d'un interlocuteur, sinon le dernier reçu, ou le dernier de l'utilisateur pour une relance) |
+| `faits` | lignes ajoutées à l'aperçu ; `compact=True` quand le budget est serré (habitudes de l'utilisateur et du dernier interlocuteur, deux jalons) |
+
+Faits / interprétations / inconnues : l'aperçu ne contient que des faits et
+des indices (ligne « Inconnu » : dates d'ajout, ordre jour/mois, utilisateur
+non confirmé). L'interprétation est celle du modèle, écrite UNE fois :
+attribut `lecture` du bloc `<propositions … lecture="…">` (une phrase ≤ 30
+mots), enregistré avec l'ensemble (`lecture` dans `messages.attachments`,
+relu par « Reprendre »).
+
+### Ciblage des suivis naturels (`ciblage.py`)
+
+« Pourquoi elle me dit ça ? », « Tu crois qu'il plaisante ? », « Qu'est-ce
+que je devrais répondre ? » (`_DEICTIQUE`) visent le message actif :
+personne nommée, sinon celle de la question précédente, sinon le contact
+(discussion à deux). Groupe sans nom : le dernier ajout reçu (message qu'il
+vient de coller), le dernier reçu pour « que répondre ? », sinon
+clarification. Question ancrée sur un autre message (citation « … »,
+« quand il m'a dit… ») ou qui suit une telle question : aucune cible, le
+modèle garde ce référent. `<message_vise>` sépare désormais l'« Échange en
+cours » (même moment, réponses déclarées envoyées comprises) de ce qui est
+« Plus tôt » (montré seulement si l'échange en cours est vide), et dit
+quand le message visé est arrivé après une réponse déclarée envoyée.
+
+### Lots de propositions (`generation.py`)
+
+- `brief` : demande, lecture commune, analyse (250 caractères quand la
+  lecture existe), « Message auquel répondre » (numéroté, inclus même s'il
+  est plus ancien que les derniers messages), situation, registre, habitudes de
+  l'utilisateur et de l'interlocuteur, proportion, sérieux, trois dernières
+  décisions, mémoire, derniers messages (14 avec une lecture commune,
+  `DERNIERS_AVEC_LECTURE`, sinon 24). Identique pour tous les lots.
+- `CONSIGNES_LOT` : tons qui changent la manière de répondre, longueurs
+  proportionnées, 3 approches par ton alignées entre longueurs (n°1 court /
+  moyen / long = même orientation), voix de l'utilisateur et non d'un
+  assistant, aucun souvenir ni détail inventé.
+- Validation (`_mots_valides`) : Moyen 6 à 70 mots, ≤ 4 phrases ; Long
+  ≤ 140 mots ; proportion `legere` : Moyen dès 4 mots, Long dès 12 mots et
+  deux phrases (au lieu d'un remplissage pour atteindre trois phrases).
+
+### Instructions (`instructions.py`)
+
+Section « Comprendre un message en contexte » : d'abord l'échange qui a
+déclenché le message, puis les réactions, les événements récents, enfin les
+habitudes ; chercher ce qui contredit la première lecture ; certain /
+probable / ambigu / inconnu (sans titres « Faits / Indices » dans la
+réponse) ; intention seulement si les indices la montrent ; habitudes ≠
+situation actuelle ; dernière décision écrite prime ; fils croisés dans un
+groupe. Taille ≈ celle d'avant (+50 tokens).
+
+### Évaluation (`tests/scenarios_comprehension.py`, `tests/evaluation_comprehension.py`)
+
+Douze situations sur les 5 exports fictifs (même message dans deux
+contextes, ironie, désaccord puis réconciliation, changement de décision,
+ajout sans date, dernier message d'un participant de groupe, annonce grave
+dans une amitié blagueuse, suivi ambigu en groupe, réponse déclarée envoyée
+puis réponse reçue, « Ok 👍 », « tu crois qu'elle plaisante ? »).
+
+- Déterministe (gratuit, aussi sur l'ancienne version) :
+  `python tests/evaluation_comprehension.py` ; test pytest
+  `tests/test_evaluation_comprehension.py`.
+- Réel (`--reel --scenarios a,b`, GroqCloud par défaut, 60 s entre deux
+  scénarios, reprise après 429) : mesures automatiques (longueurs, diversité
+  par similarité de Jaccard, approches distinctes, plaisanteries en
+  situation grave, nombres absents des sources, mots attendus / interdits)
+  + textes à juger. Ne prouve pas à lui seul une meilleure compréhension.
+
+### Limites
+
+- Habitudes, jalons et gravité sont des heuristiques lexicales (français) :
+  un jalon peut être manqué ou superflu ; la gravité ne voit que les 6
+  derniers messages.
+- Demandes d'aide sur GroqCloud : la partie fixe dépasse le budget réservé
+  (3 500 tokens) de 350 à 650 tokens, car les messages gardent leur
+  plancher de 1 000 tokens (l'ancienne version dépassait déjà sur un
+  scénario). Lots : ~+66 tokens chacun par rapport à avant l'optimisation ;
+  un ensemble « annonce grave » a utilisé les 5 lots permis (complet).
+- Une lecture commune erronée est appliquée à tous les lots (cohérente,
+  mais fausse partout) ; aucun contrôle des doublons entre tons.
+- `created_at` d'un ajout = moment de l'enregistrement, pas de l'envoi
+  WhatsApp : il ne sert qu'à ordonner ajouts et déclarations.
+
+## Fiabilité de la compréhension partagée (2026-10-19, déployée)
+
+Cause du contresens « annonce grave » : la réponse principale avait écrit
+« proposer ton soutien ou une alternative » (et « le remplacer plus tard »
+pour reporter l'escalade) ; les lots recevaient cette lecture comme
+« fixée, la même pour toutes les propositions », donc comme une consigne,
+et rien ne contrôlait les engagements proposés : 15 propositions sur 36
+offraient de « prendre ta place ».
+
+- `app/comprehension/controle.py` (sans IA) :
+  - `nettoyer_interpretation` (avant les lots, lecture ET analyse) :
+    découpe en propositions, confrontées aux 10 derniers messages + demande ;
+    retire initiative non justifiée (alternative, remplacer, venir,
+    promettre, appeler, rendez-vous), humour en situation grave, décision
+    non écrite, citation introuvable, date / heure / jour absents, participant
+    absent de l'échange ; nuance « clairement, forcément… » → « probablement ».
+  - `Controle.examiner` (chaque proposition) : engagement pris à la place de
+    l'utilisateur sans justification dans les 8 derniers messages, la
+    demande ou ses réponses déclarées envoyées ; date, heure ou jour
+    inventés ; rire en situation grave. `Ensemble.integrer` refuse aussi les
+    vrais doublons entre tons (même longueur). Seule la combinaison
+    concernée est redemandée, avec la raison du refus (`Ensemble.refus`).
+- `brief` : blocs FAITS (message auquel répondre, situation, registre, mots
+  graves, décisions écrites) / INTERPRÉTATION POSSIBLE (« une piste, jamais
+  une consigne ; les messages priment ») / INCONNU (intentions exactes, tout
+  projet, aide, remplacement, visite, rendez-vous ou promesse non écrits).
+- `CONSIGNES_LOT` : « l'utilisateur décide de ses engagements » ; situation
+  grave : sobre, sans solution improvisée.
+- Journaux (volumes seulement) : « Contrôle de la compréhension : lecture n
+  retrait(s) [raisons]… ms », « Contrôle des propositions : n refus [raisons] ;
+  lots … ms ».
+- Essai réel sur `jarvis-api` déployée (GroqCloud, compte de test Free,
+  conversation fictive « Amitié » + annonce collée) : 36/36 en 3 lots
+  (37 s de lots, 42 s au total ; avant : 5 lots, 53 s), 12 619 tokens, 1 refus
+  (visite non justifiée), aucune proposition de remplacement, aucune
+  plaisanterie. Limite : la réponse principale s'est réduite à « Voici
+  quelques idées de réponse » (aucune analyse visible).

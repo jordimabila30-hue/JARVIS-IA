@@ -93,7 +93,7 @@ from ...llm.base import MESSAGES as MESSAGES_LLM
 from ...odo.contrat import DemandeConfirmation, EtatOutil
 from ...odo.service import ServiceODO, get_odo
 from ...comprehension.instructions import NOTE_PIECE_SUPPRIMEE
-from ...comprehension import ciblage, generation, memoire, propositions as aide, reperes, restauration
+from ...comprehension import ciblage, controle, etat, generation, memoire, propositions as aide, reperes, restauration
 from ...comprehension.attribution import CorrecteurAttributions
 from ...comprehension.moteur import MoteurComprehension, Preparation, choisir
 from ...comprehension.references import FiltreReperes, entree_stockee, verifier
@@ -508,11 +508,31 @@ def appel_lot(llm: FournisseurLLM, settings: Settings) -> generation.Appel:
 
 
 async def completer_ensemble(ensemble: "generation.Ensemble", ctx, *, question: str, analyse: str,
-                             aujourd_hui, memoire_bloc: str | None, llm: FournisseurLLM, settings: Settings):
-    """Complète [ensemble] par lots (battements None pendant les attentes)."""
+                             aujourd_hui, memoire_bloc: str | None, llm: FournisseurLLM, settings: Settings,
+                             vise=None):
+    """Complète [ensemble] par lots (battements None pendant les attentes).
+    Tous les lots reçoivent le même contexte : lecture commune, message
+    auquel répondre ([vise] : message ciblé par la question), état partagé."""
+    debut = time.perf_counter()
     ensemble.registre = generation.registre(ctx)
-    contexte, fournis = generation.brief(ctx, question=question, analyse=analyse,
-                                         aujourd_hui=aujourd_hui, memoire=memoire_bloc)
+    ensemble.proportion = etat.proportion(ctx)
+    # Contrôle de la compréhension partagée AVANT les lots (controle.py,
+    # sans IA) : l'interprétation est confrontée aux vrais messages ; ce qui
+    # n'y est pas justifié est retiré, les faits restent.
+    grave = etat.grave(ctx)
+    cible = etat.a_repondre(ctx, ensemble.mode, vise)
+    lecture = controle.nettoyer_interpretation(ensemble.lecture, ctx, question=question, cible=cible, grave=grave)
+    resume = controle.nettoyer_interpretation(analyse, ctx, question=question, cible=cible, grave=grave)
+    ensemble.lecture = lecture.texte
+    ensemble.controle = controle.Controle.depuis(ctx, question, grave, memoire_bloc or "")
+    contexte, fournis = generation.brief(ctx, question=question, analyse=resume.texte or "",
+                                         aujourd_hui=aujourd_hui, memoire=memoire_bloc,
+                                         ensemble=ensemble, vise=vise)
+    # Raisons et volumes seulement : jamais de contenu.
+    logger.info("Contrôle de la compréhension : lecture %d retrait(s) %s, %d nuance(s) ; analyse %d retrait(s) ; "
+                "grave=%s ; %d ms", len(lecture.retraits), sorted(set(lecture.retraits)), lecture.nuances,
+                len(resume.retraits), grave, (time.perf_counter() - debut) * 1000)
+    debut_lots = time.perf_counter()
     # Battement au moins toutes les SILENCE_MAX_FLUX secondes, même pendant
     # un lot lent : le client (délai d'inactivité 30 s) ne coupe jamais.
     async for _ in _avec_battement(generation.completer(
@@ -523,6 +543,9 @@ async def completer_ensemble(ensemble: "generation.Ensemble", ctx, *, question: 
         plafond_sortie=settings.propositions_lot_max_tokens,
     )):
         yield None
+    logger.info("Contrôle des propositions : %d refus %s ; lots %d ms, %d requête(s)",
+                sum(ensemble.controle.refus.values()), sorted(ensemble.controle.refus.items()),
+                (time.perf_counter() - debut_lots) * 1000, ensemble.requetes)
 
 
 # --- Route --------------------------------------------------------------------------
@@ -929,6 +952,9 @@ async def chat_stream(
                             ensemble, ctx, question=question, analyse=filtre.visible,
                             aujourd_hui=now.date(), memoire_bloc=memoire_bloc,
                             llm=llm, settings=settings,
+                            vise=(preparation.ciblage.cible.message
+                                  if preparation.ciblage is not None and preparation.ciblage.cible is not None
+                                  and preparation.ciblage.cible.contexte.id == ctx.id else None),
                         ):
                             yield b": preparation des propositions\n\n"
                     if ensemble.requetes:
