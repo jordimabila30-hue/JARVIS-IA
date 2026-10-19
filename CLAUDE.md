@@ -783,6 +783,24 @@ JARVIS Touch, intégration (2026-10-18) :
   `VocalJarvisTouch.contextuel`). Réglage commun : Paramètres › Chat vocal ›
   Interruption de la parole (`VoiceSettings.interruption` ; automatique
   indisponible, jamais relu comme actif).
+- Voix en flux (2026-10-19) : `LectureEnFlux` (`services/lecture_en_flux.dart`)
+  dit les phrases COMPLÈTES pendant la réception (`repondeur(phrase,
+  surFragment:)` ← `ConversationSession.repondreVocal`) ; réponse reçue
+  avant le début de la lecture = dite d'un seul tenant ; démarrage dès 2
+  phrases / ~140 caractères, ou 1 phrase après 1,8 s ; coupure réseau :
+  phrases complètes terminées, bout inachevé jamais dit, phrase « Le réseau
+  a coupé la fin de ma réponse. ». Interruption en UN toucher
+  (`arreterParole`) : voix coupée, file vidée, tour invalidé (`_tour`),
+  génération arrêtée (`DemandeJarvis.annulation` → requête abandonnée,
+  `ErreurApi.annulee`, « Interrompue par vous. », le serveur garde le
+  partiel), puis écoute aussitôt. Continuité : ce qui a été ENTENDU
+  (`LectureEnFlux.entendu`) part avec la question suivante de la même
+  conversation (`interruption.entendu` → `note_interruption` côté serveur,
+  une seule fois). Interruption automatique : `DetecteurIntervention`
+  (Kotlin `voix/`, VOICE_COMMUNICATION + AEC + NS, énergie durable au-dessus
+  du fond + structure vocale) en mode mesure seulement
+  (`--dart-define=JARVIS_MESURE_INTERRUPTION=true`, n'interrompt jamais) ;
+  `ModeInterruption.automatique.disponible = false` tant que non validée.
 - Téléphone USB : lancer avec `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`
   (+ `adb reverse tcp:8000 tcp:8000`), sinon l'appli vise 10.0.2.2.
 

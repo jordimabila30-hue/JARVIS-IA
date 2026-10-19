@@ -79,6 +79,8 @@ class MoteurConversationIA {
       // Échange vocal : réponse formulée pour être dite (même et unique
       // réponse, écrite telle quelle dans la conversation).
       oral: demande.vocale,
+      annulation: demande.annulation,
+      entendu: demande.entendu,
       // Dès l'événement `meta` : même si la génération échoue ensuite,
       // ou si le fil a changé entre-temps, la conversation locale garde
       // sa conversation serveur.
@@ -138,6 +140,7 @@ class MoteurConversationIA {
   /// Explication affichée sous une réponse interrompue en cours de route.
   static String messageInterruption(ErreurApi type, String? detail) =>
       switch (type) {
+        ErreurApi.annulee => 'Interrompue par vous.',
         ErreurApi.iaIndisponible =>
           'Réponse interrompue : ${detail ?? type.message}',
         ErreurApi.delaiDepasse =>

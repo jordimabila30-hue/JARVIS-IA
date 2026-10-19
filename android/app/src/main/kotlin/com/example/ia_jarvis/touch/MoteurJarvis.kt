@@ -5,6 +5,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
+import com.example.ia_jarvis.voix.DetecteurIntervention
 
 /**
  * Le moteur Flutter de JARVIS, unique pour tout le processus. Il appartient
@@ -21,6 +22,8 @@ object MoteurJarvis {
         val moteur = FlutterEngine(contexte.applicationContext, arguments)
         FlutterEngineCache.getInstance().put(ID, moteur)
         CanalMiniChat.attacher(moteur.dartExecutor.binaryMessenger)
+        // Interruption automatique (expérimentale) : détection lié au moteur.
+        DetecteurIntervention(moteur.dartExecutor.binaryMessenger)
         return moteur
     }
 

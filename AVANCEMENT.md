@@ -1818,3 +1818,26 @@ Appareil : Samsung Galaxy S10+ (SM-G975F, Android 12), `flutter run --profile` (
 - Le modèle parle parfois de l'utilisateur à la 3ᵉ personne (« Alex ») et rattache encore une ancienne blague ; formulations Taquin parfois forcées.
 - Les sorties et excuses inventées sont filtrées par motifs lexicaux : une formulation nouvelle peut passer.
 - Une restauration de session Supabase sans délai d'attente laisse l'appli sur l'écran de lancement quand le réseau est mauvais.
+
+## 2026-10-19 — Voix en flux, interruption en un toucher, continuité
+
+### Fait
+- **Lecture en flux** (`LectureEnFlux`) : phrases complètes dites pendant la réception, réserve adaptative (2 phrases / ~140 caractères / 1 phrase après 1,8 s), jamais de fragment ni de répétition ; réponse arrivée avant le début de la lecture : dite d'un seul tenant (comme avant).
+- **Réseau** : lent → lecture des phrases prêtes puis attente ; coupé → phrases complètes terminées, bout inachevé jamais lu, phrase discrète ; aucune reprise depuis le début.
+- **Interruption en un toucher** (« Arrêter la parole », vocal principal et JARVIS Touch) : voix coupée, file vidée, ancien tour neutralisé, génération arrêtée, écoute aussitôt (plus de bouton « Parler »).
+- **Continuité** : ce que l'utilisateur a réellement entendu part avec la question suivante (même conversation, une fois) ; le serveur demande de répondre dans le même sujet sans reprendre l'explication (sauf « continue »). Aucun appel en double ; message coupé marqué « Interrompue par vous. ».
+- **Interruption automatique** : détecteur natif expérimental (micro VOICE_COMMUNICATION + AEC + réduction de bruit, énergie durable + structure vocale, jamais un simple pic) en **mode mesure seulement** ; réglage « Automatique · bientôt » toujours indisponible.
+- Backend en production mis à jour (image précédente : `backend-api:avant-interruption`).
+
+### Tests
+- Flutter : 843 réussis (nouveaux : `lecture_en_flux_test` 7, `arret_parole_test` 3, `interruption_conversation_test` 1). Backend : 569 réussis, 1 ignoré (note d'interruption, seulement dans la même conversation).
+
+### Mesures S10+ (réelles, peu nombreuses)
+- Début de la voix : 1 329 à 1 475 ms après la question (GroqCloud : réponse souvent entière avant le début → lue d'un bloc).
+- Détection, AEC et NS disponibles : voix de JARVIS seule, 2 séances (≈ 12,7 s) → 0 fausse détection, mais écho résiduel jusqu'à **11,5 dB** au-dessus du fond ; intervention (voix du PC, à distance) → **manquée** (6,3 dB). Les deux distributions se recouvrent : **non fiable en l'état**, mode automatique indisponible.
+
+### Non testé / limites
+- Interruption en un toucher et continuité **non essayées sur le téléphone** (essais à voix haute arrêtés : l'utilisateur était en cours ; le micro a capté des phrases de la salle, enregistrées dans la conversation). Couvertes par les tests automatisés.
+- Limite quotidienne de tokens (Free) atteinte pendant les essais : les derniers échanges n'ont reçu que le message de limite.
+- Écouteurs, bruit ambiant, voix humaine proche du téléphone : non mesurés.
+

@@ -62,6 +62,9 @@ final class EchecApi<T> extends ResultatApi<T> {
 }
 
 enum ErreurApi {
+  /// Réponse arrêtée par l'utilisateur (interruption vocale).
+  annulee('Réponse arrêtée.'),
+
   /// Capture refusée avant tout appel (offre sans lecture d'image, image
   /// invalide) ; [EchecApi.detail] : le message du serveur.
   imageRefusee('L’image n’a pas pu être envoyée à JARVIS.'),
@@ -241,6 +244,8 @@ class ApiJarvis {
     String? longueurPropose,
     ImageAEnvoyer? image,
     bool oral = false,
+    Future<void>? annulation,
+    String? entendu,
     void Function(String conversation)? surConversation,
     void Function(String message)? surMessage,
     void Function(String fragment)? surFragment,
@@ -265,6 +270,8 @@ class ApiJarvis {
         longueurPropose: longueurPropose,
         image: image,
         oral: oral,
+        annulation: annulation,
+        entendu: entendu,
         surPreparation: surPreparation,
       ),
       ),
@@ -710,13 +717,25 @@ class ApiJarvis {
     String? longueurPropose,
     ImageAEnvoyer? image,
     bool oral = false,
+    Future<void>? annulation,
+    String? entendu,
     void Function()? surPreparation,
   }) async {
     _Reponse<ReponseChat> echec(ErreurApi e, [String? detail]) =>
         _Resultat(EchecApi(e, detail: detail));
 
-    // Délai dépassé : la requête est abandonnée (connexion fermée).
+    // Délai dépassé ou arrêt demandé : la requête est abandonnée (connexion
+    // fermée ; le serveur enregistre le texte déjà généré).
     final abandon = Completer<void>();
+    var annulee = false;
+    if (annulation != null) {
+      unawaited(
+        annulation.then((_) {
+          annulee = true;
+          if (!abandon.isCompleted) abandon.complete();
+        }),
+      );
+    }
     final requete =
         http.AbortableRequest(
             'POST',
@@ -737,6 +756,7 @@ class ApiJarvis {
             'propositions_message_id': ?propositionsMessage,
             'longueur_proposee': ?longueurPropose,
             if (oral) 'oral': true,
+            if (entendu != null) 'interruption': {'entendu': entendu},
             // « hier », « cette semaine » : heure locale de l'appareil.
             'fuseau_minutes': DateTime.now().timeZoneOffset.inMinutes,
             if (image != null)
@@ -749,10 +769,10 @@ class ApiJarvis {
     try {
       r = await _client.send(requete).timeout(delaiChat);
     } on TimeoutException {
-      abandon.complete();
+      if (!abandon.isCompleted) abandon.complete();
       return echec(ErreurApi.delaiDepasse);
     } catch (_) {
-      return echec(ErreurApi.injoignable);
+      return echec(annulee ? ErreurApi.annulee : ErreurApi.injoignable);
     }
 
     if (r.statusCode != 200) {
@@ -790,6 +810,7 @@ class ApiJarvis {
     _Reponse<ReponseChat>? fin;
     try {
       await for (final e in decoderSse(r.stream.timeout(delaiInactivite))) {
+        if (annulee) break;
         if (fin != null) continue;
         final donnees = e.donnees.isEmpty
             ? const <String, dynamic>{}
@@ -848,8 +869,9 @@ class ApiJarvis {
     } on FormatException {
       return fin ?? echec(ErreurApi.serveur, 'flux illisible');
     } catch (_) {
-      return fin ?? echec(ErreurApi.fluxInterrompu);
+      return fin ?? echec(annulee ? ErreurApi.annulee : ErreurApi.fluxInterrompu);
     }
+    if (annulee) return fin ?? echec(ErreurApi.annulee);
     // Fin du flux sans `done` : réponse incomplète.
     return fin ?? echec(ErreurApi.fluxInterrompu);
   }

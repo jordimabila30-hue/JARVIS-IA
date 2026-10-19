@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/signal_vocal.dart';
+import '../models/voice_settings.dart';
 import '../models/voice_state.dart';
+import 'detecteur_intervention.dart';
+import 'lecture_en_flux.dart';
 import 'microphone_service.dart';
 import 'niveau_micro.dart';
 import 'prosodie.dart';
@@ -110,7 +113,43 @@ class VoiceSession extends ChangeNotifier {
   /// ajoutée avec sa réponse (même historique, même contexte). Sans
   /// répondeur, la session répond seule (ses propres règles locales).
   /// Null en retour : la conversation a été effacée, rien à dire.
-  Future<ReponseVocale?> Function(String phrase)? repondeur;
+  ///
+  /// [surFragment] : texte de la réponse au fil de sa réception (IA) ; la
+  /// voix commence avant la fin ([LectureEnFlux]).
+  Future<ReponseVocale?> Function(
+    String phrase, {
+    void Function(String fragment)? surFragment,
+  })?
+  repondeur;
+
+  /// Interruption : la génération en cours (s'il y en a une) est arrêtée,
+  /// et [entendu] (ce que l'utilisateur a réellement pu entendre) est
+  /// gardé pour la question suivante. Branché sur la conversation partagée.
+  void Function(String entendu)? annulerReponse;
+
+  /// Détection d'une intervention pendant la parole (Android ; null :
+  /// absente). Active seulement en mode automatique validé, ou en mode
+  /// mesure ([DetecteurIntervention.mesure]) où elle n'interrompt jamais.
+  DetecteurIntervention? detecteur;
+
+  bool get _detectionVoulue =>
+      detecteur != null &&
+      (DetecteurIntervention.mesure ||
+          (reglages.reglages.interruption == ModeInterruption.automatique &&
+              ModeInterruption.automatique.disponible));
+
+  /// Intervention détectée pendant la parole : en mode automatique, même
+  /// effet que le bouton (voix coupée, écoute aussitôt) ; en mesure, rien.
+  void _surCandidat(int tour) {
+    if (tour != _tour || !parle) return;
+    if (DetecteurIntervention.mesure &&
+        reglages.reglages.interruption != ModeInterruption.automatique) {
+      debugPrint('[JARVIS voix] intervention détectée (mesure, sans effet)');
+      return;
+    }
+    debugPrint('[JARVIS voix] interruption automatique');
+    arreterParole();
+  }
   String statut = '';
   String transcription = '';
 
@@ -231,50 +270,53 @@ class VoiceSession extends ChangeNotifier {
     await _voix.arreter();
   }
 
-  // ---- Arrêt de la parole (manuel) -----------------------------------------
+  // ---- Interruption (une seule action) --------------------------------------
   //
-  // Quatre actions distinctes : arrêter la parole (ici), couper le micro
-  // (`mettreEnArrierePlan`), réduire une fenêtre (interface), quitter
-  // (`quitterChatVocal`). Arrêter la parole ne touche ni au micro ni à la
-  // session : JARVIS se tait, rien ne reprend seul, « Parler » relance
-  // l'écoute. La réponse reste écrite dans la conversation.
+  // « Arrêter la parole » : la voix se tait, les phrases en attente sont
+  // oubliées, la génération en cours est arrêtée, puis l'écoute reprend
+  // AUSSITÔT (aucun second toucher). Distinct de couper le micro
+  // (`mettreEnArrierePlan`), réduire une fenêtre (interface) et quitter
+  // (`quitterChatVocal`). Chaque réponse a son tour ([_tour]) : un ancien
+  // tour (fragment tardif, fin de lecture) ne relance jamais la voix.
 
-  bool _paroleArretee = false;
-
-  /// Vrai après « Arrêter la parole », jusqu'à « Parler » : la session est
-  /// ouverte, le micro attend une action volontaire.
-  bool get paroleInterrompue => _paroleInterrompue;
-  bool _paroleInterrompue = false;
+  int _tour = 0;
+  LectureEnFlux? _lecture;
 
   /// Durée du dernier arrêt de la voix (mesure, millisecondes).
   int? dernierArretMs;
 
+  /// Vrai pendant que JARVIS parle ou attend la suite de sa réponse.
+  bool get parle => actif && etat == VoiceState.speaking;
+
   Future<void> arreterParole() async {
-    if (!actif || etat != VoiceState.speaking || _paroleArretee) return;
-    _paroleArretee = true;
-    _rythmeEstime?.cancel();
-    // L'état change TOUT DE SUITE (interfaces cohérentes, aucune lecture
-    // intermédiaire de « parle »), puis la voix est coupée.
-    _paroleInterrompue = true;
-    amplitude.value = 0;
-    _changer(VoiceState.idle, 'Parole interrompue');
+    if (!parle) return;
     final chrono = Stopwatch()..start();
+    _tour++;
+    final lecture = _lecture;
+    _lecture = null;
+    final entendu = lecture?.entendu ?? '';
+    lecture?.annuler();
+    _rythmeEstime?.cancel();
+    amplitude.value = 0;
+    // Le micro de détection est rendu avant que la reconnaissance l'ouvre.
+    final detection = detecteur?.arreter();
+    // Transition contrôlée : plus « parle », pas encore « écoute ».
+    _changer(VoiceState.idle, 'Interruption…');
+    annulerReponse?.call(entendu);
     await _voix.arreter();
+    await detection;
     dernierArretMs = chrono.elapsedMilliseconds;
     debugPrint('[JARVIS voix] parole arrêtée en $dernierArretMs ms');
-  }
-
-  /// « Parler » après un arrêt : l'écoute reprend, sur la même session.
-  void parler() {
-    if (!actif || !_paroleInterrompue) return;
-    _paroleInterrompue = false;
+    if (!actif) return;
     transcription = '';
     _ecouter(_jeton);
+    debugPrint(
+      '[JARVIS voix] écoute relancée ${chrono.elapsedMilliseconds} ms '
+      'après l’interruption',
+    );
   }
 
   Future<void> demarrer() async {
-    _paroleInterrompue = false;
-    _paroleArretee = false;
     // Le chat vocal a la parole : plus de lecture de réponse écrite.
     await arreterLecture();
     final jeton = ++_jeton;
@@ -339,8 +381,10 @@ class VoiceSession extends ChangeNotifier {
 
   Future<void> arreter() async {
     _jeton++;
-    _paroleArretee = false;
-    _paroleInterrompue = false;
+    _tour++;
+    _lecture?.annuler();
+    _lecture = null;
+    await detecteur?.arreter();
     _jetonApercu++;
     apercuEnCours = false;
     actif = false;
@@ -479,46 +523,91 @@ class VoiceSession extends ChangeNotifier {
 
   Future<void> _repondre(int jeton, String phrase) async {
     if (!_valide(jeton)) return;
+    final tour = ++_tour;
+    bool courant() => _valide(jeton) && tour == _tour;
     _changer(VoiceState.thinking, 'JARVIS réfléchit…');
     await _reconnaissance.annuler();
+    await _voix.appliquer(reglages.reglages);
+    if (!courant()) return;
 
     final debut = DateTime.now();
+    var derniereVoix = debut;
+    var pauses = 0;
+    final lecture = _lecture = LectureEnFlux(
+      dire: (segment) async {
+        // Écrit inchangé dans la conversation ; la voix dit la version
+        // orale, phrase par phrase.
+        if (!courant()) return ResultatParole.interrompue;
+        final ecart = DateTime.now().difference(derniereVoix);
+        if (_lecture?.segmentsDits != 0 && ecart > const Duration(milliseconds: 600)) {
+          pauses++;
+        }
+        final r = await _prononcer(courant, segment);
+        derniereVoix = DateTime.now();
+        if (!r.reussie && r.issue == IssueParole.echec && courant()) {
+          erreurVoix = r.message;
+          notifyListeners();
+        }
+        return r;
+      },
+      surDebut: () {
+        if (!courant()) return;
+        debugPrint(
+          '[JARVIS voix] début de parole '
+          '${DateTime.now().difference(debut).inMilliseconds} ms après la question',
+        );
+        _changer(VoiceState.speaking, 'JARVIS parle…');
+        if (_detectionVoulue) {
+          detecteur!.surCandidat = (_) => _surCandidat(tour);
+          detecteur!.demarrer();
+        }
+      },
+    );
     final repondeur = this.repondeur;
     final reponseJarvis = repondeur == null
         ? await _commandes.traiter(phrase)
-        : await repondeur(phrase);
-    if (reponseJarvis == null) return;
-    // Réflexion visible entre 0,6 et 1,2 s pour les réponses locales.
-    final duree = Duration(milliseconds: 600 + _hasard.nextInt(600));
-    final reste = duree - DateTime.now().difference(debut);
-    if (!reste.isNegative) await Future<void>.delayed(reste);
-    if (!_valide(jeton)) return;
-
-    reponse = reponseJarvis.texte;
-    _echanges++;
-    _changer(VoiceState.speaking, 'JARVIS parle…');
-    await _voix.appliquer(reglages.reglages);
-    if (!_valide(jeton)) return;
-    // Écrit inchangé dans la conversation ; la voix dit sa version orale.
-    final oral = TexteOral.preparer(reponseJarvis.texte);
-    final debutVoix = DateTime.now();
-    final lecture = await _prononcer(
-      () => _valide(jeton) && !_paroleArretee,
-      oral,
-      surDebut: () => debugPrint(
-        '[JARVIS voix] début de parole après '
-        '${DateTime.now().difference(debutVoix).inMilliseconds} ms',
-      ),
-    );
-    if (!_valide(jeton)) return;
-    if (_paroleArretee) {
-      // Arrêtée par l'utilisateur (état déjà « interrompu ») : rien ne
-      // reprend seul, ni la voix ni l'écoute ; « Parler » relance.
-      _paroleArretee = false;
+        : await repondeur(
+            phrase,
+            surFragment: (f) {
+              if (courant()) lecture.ajouter(f);
+            },
+          );
+    // Interrompu pendant la réception : l'écoute a déjà repris, rien de
+    // l'ancien tour ne doit parler ni relancer quoi que ce soit.
+    if (!courant()) return;
+    if (reponseJarvis == null) {
+      lecture.annuler();
       return;
     }
-    erreurVoix = lecture.reussie ? null : lecture.message;
-    if (erreurVoix != null) notifyListeners();
+    if (!lecture.demarre) {
+      // Réponse locale ou courte : réflexion visible entre 0,6 et 1,2 s.
+      final duree = Duration(milliseconds: 600 + _hasard.nextInt(600));
+      final reste = duree - DateTime.now().difference(debut);
+      if (!reste.isNegative) await Future<void>.delayed(reste);
+      if (!courant()) return;
+    }
+    reponse = reponseJarvis.texte;
+    _echanges++;
+    notifyListeners();
+    lecture.terminer(
+      texteComplet: reponseJarvis.texte,
+      coupee: reponseJarvis.interrompue,
+    );
+    await lecture.fin;
+    await detecteur?.arreter();
+    if (!courant()) return;
+    if (lecture.segmentsDits > 1) {
+      debugPrint(
+        '[JARVIS voix] lecture en flux : ${lecture.segmentsDits} phrases, '
+        '$pauses pause(s) > 0,6 s',
+      );
+    }
+    if (reponseJarvis.interrompue) {
+      // Coupure réseau : rien d'inventé, une phrase discrète.
+      await _prononcer(courant, 'Le réseau a coupé la fin de ma réponse.');
+      if (!courant()) return;
+    }
+    _lecture = null;
 
     if (reponseJarvis.terminerSession) {
       // « Au revoir JARVIS » : le chat vocal est terminé, rien à reprendre.
@@ -531,7 +620,7 @@ class VoiceSession extends ChangeNotifier {
     // jusqu'à ce que l'utilisateur parle à nouveau. Le micro ne rouvre
     // qu'après la vraie fin de la voix, et une courte pause.
     await Future<void>.delayed(pauseApresParole);
-    if (!_valide(jeton)) return;
+    if (!courant()) return;
     _ecouter(jeton);
   }
 

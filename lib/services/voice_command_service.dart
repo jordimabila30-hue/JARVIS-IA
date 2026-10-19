@@ -17,10 +17,15 @@ class ReponseVocale {
     this.texte, {
     required this.source,
     this.terminerSession = false,
+    this.interrompue = false,
   });
 
   final String texte;
   final SourceReponse source;
+
+  /// Réponse coupée en route (réseau) : la voix termine les phrases
+  /// complètes déjà reçues, jamais le bout inachevé.
+  final bool interrompue;
 
   /// Vrai quand l'utilisateur prend congé (« Au revoir JARVIS »).
   final bool terminerSession;

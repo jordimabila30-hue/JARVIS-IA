@@ -166,17 +166,34 @@ def ligne_date(now: datetime, decalage_minutes: int | None) -> str:
             f"{MOIS[local.month - 1]} {local.year}, {local:%H:%M} (UTC{signe}{h:02d}:{m:02d}).")
 
 
+def note_interruption(entendu: str) -> str:
+    """Réponse précédente coupée par l'utilisateur (vocal) : il n'en a
+    entendu que [entendu] (le texte enregistré peut être plus long)."""
+    entendu = " ".join(entendu.split())
+    debut = (f"Il n'en a entendu que ceci : « {entendu} »." if entendu
+             else "Il n'en a presque rien entendu.")
+    return ("L'utilisateur t'a interrompu pendant ta réponse précédente. " + debut + " "
+            "Réponds directement à sa nouvelle question, dans le même sujet, sans reprendre "
+            "ni terminer l'explication précédente, sauf s'il te demande de continuer.")
+
+
 def build_system_prompt(ton: Ton, persona: str | None, now: datetime, oral: bool = False,
-                        decalage_minutes: int | None = None) -> str:
+                        decalage_minutes: int | None = None, entendu: str | None = None) -> str:
     prompt = SYSTEM_PROMPT.format(date=ligne_date(now, decalage_minutes), ton=INSTRUCTIONS_TON[ton])
     if persona:
         prompt += f"\nPersona actif : {persona}"
     if oral:
         prompt += "\n\n" + CONSIGNE_ORALE
+    if entendu is not None:
+        prompt += "\n\n" + note_interruption(entendu)
     return prompt
 
 
 # --- Modèles ----------------------------------------------------------------------
+
+class Interruption(BaseModel):
+    entendu: str = Field(default="", max_length=4000)
+
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
@@ -202,6 +219,9 @@ class ChatRequest(BaseModel):
     image: vision.ImageJointe | None = None
     # Échange du mode vocal : réponse formulée pour être dite.
     oral: bool = False
+    # Réponse précédente interrompue par l'utilisateur (vocal) : ce qu'il en
+    # a réellement entendu (continuité, sans second appel).
+    interruption: Interruption | None = None
     # Décalage horaire de l'appareil en minutes (UTC+1 = 60) : « hier »,
     # « cette semaine » calculés en heure locale (date du jour, Gmail).
     fuseau_minutes: int | None = Field(default=None, ge=-840, le=840)
@@ -621,8 +641,10 @@ async def chat_stream(
             if history and history[-1]["role"] == "user" and history[-1]["content"] == question:
                 history = history[:-1]
 
-        systeme = build_system_prompt(body.ton, conversation.get("persona"), now, oral=body.oral,
-                                      decalage_minutes=body.fuseau_minutes)
+        systeme = build_system_prompt(
+            body.ton, conversation.get("persona"), now, oral=body.oral,
+            decalage_minutes=body.fuseau_minutes,
+            entendu=body.interruption.entendu if body.interruption and not new_conversation else None)
         if contextes:
             # Aucun appel au fournisseur sans réponse explicite de
             # l'utilisateur sur l'envoi des messages WhatsApp.

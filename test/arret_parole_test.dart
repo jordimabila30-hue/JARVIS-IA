@@ -1,5 +1,6 @@
-// Arrêt de la parole (manuel) : la voix s'arrête, rien ne reprend seul,
-// « Parler » relance UNE écoute ; la voix dit la version orale du texte.
+// Interruption en un toucher : la voix s'arrête, la génération est arrêtée,
+// l'écoute reprend aussitôt ; lecture pendant la réception (phrases
+// complètes) ; la voix dit la version orale du texte.
 
 import 'dart:async';
 
@@ -69,6 +70,13 @@ class _Voix implements TtsService {
     return (_encours = Completer<ResultatParole>()).future;
   }
 
+  /// Le segment en cours se termine normalement.
+  void finir() {
+    final c = _encours;
+    _encours = null;
+    if (c != null && !c.isCompleted) c.complete(ResultatParole.lue);
+  }
+
   @override
   Future<void> arreter() async {
     arrets++;
@@ -106,11 +114,17 @@ void main() {
   late _Voix voix;
   late VoiceSession session;
   var demandes = 0;
+  final entendus = <String>[];
+  // Fragments envoyés par le « serveur » pendant la réponse.
+  late void Function(String) envoyer;
+  late Completer<void> finReponse;
 
   setUp(() async {
     reco = _Reco();
     voix = _Voix();
     demandes = 0;
+    entendus.clear();
+    finReponse = Completer<void>();
     session = VoiceSession(
       micro: _Micro(),
       reconnaissance: reco,
@@ -122,65 +136,91 @@ void main() {
         peripheriques: _Micros(),
         delaiSauvegarde: Duration.zero,
       ),
-    )..repondeur = (phrase) async {
+    )
+      ..repondeur = (phrase, {surFragment}) async {
         demandes++;
+        envoyer = (f) => surFragment?.call(f);
+        await finReponse.future;
         return const ReponseVocale(
-          'La photosynthèse comprend trois étapes :\n'
-          '1. **Absorption** de la lumière.\n'
-          '2. Production de sucres.',
+          'Un moteur électrique transforme l’énergie. Il comporte un rotor. '
+          'Et un stator fixe.',
           source: SourceReponse.distante,
         );
-      };
+      }
+      ..annulerReponse = entendus.add;
     await session.demarrer();
     await _attendre();
   });
 
-  test('arrêter la parole : silence, rien ne reprend seul, Parler relance', () async {
-    expect(session.etat, VoiceState.listening);
-    expect(reco.ecoutes, 1);
-    reco.phrase!('Explique la photosynthèse');
-    await _attendre(1400); // réflexion visible des réponses (0,6 à 1,2 s)
+  test('lecture pendant la réception : phrases complètes, sans attendre la fin', () async {
+    reco.phrase!('Explique le moteur électrique');
+    await _attendre();
+    expect(session.etat, VoiceState.thinking);
+    envoyer('Un moteur électrique transforme l’énergie. Il comporte un ro');
+    await _attendre();
+    envoyer('tor. Et un st');
+    await _attendre();
+    // Deux phrases complètes : la voix parle avant la fin de la réponse.
     expect(session.etat, VoiceState.speaking);
-    // La voix dit la version orale : aucun symbole, enchaînement parlé.
-    expect(voix.dits.single, isNot(contains(RegExp(r'[*#]|\d\.'))));
-    expect(voix.dits.single, contains('D’abord, absorption de la lumière.'));
-    // L'écrit reste celui de la conversation.
-    expect(session.reponse, contains('**Absorption**'));
+    expect(voix.dits, ['Un moteur électrique transforme l’énergie.']);
+    voix.finir();
+    await _attendre();
+    expect(voix.dits.last, 'Il comporte un rotor.');
+    envoyer('ator fixe.');
+    finReponse.complete();
+    voix.finir();
+    await _attendre();
+    voix.finir();
+    await _attendre(500);
+    expect(voix.dits, [
+      'Un moteur électrique transforme l’énergie.',
+      'Il comporte un rotor.',
+      'Et un stator fixe.',
+    ]);
+    expect(session.etat, VoiceState.listening);
+    expect(demandes, 1);
+  });
+
+  test('un toucher : silence, génération arrêtée, écoute aussitôt', () async {
+    reco.phrase!('Explique le moteur électrique');
+    await _attendre();
+    envoyer('Un moteur électrique transforme l’énergie. Il comporte un rotor. ');
+    await _attendre();
+    expect(session.parle, isTrue);
 
     final arret = session.arreterParole();
-    // État changé AVANT la fin de l'arrêt de la voix : aucune interface ne
-    // peut lire un « parle » périmé.
-    expect(session.etat, VoiceState.idle);
-    expect(session.paroleInterrompue, isTrue);
+    // Transition contrôlée, jamais « parle » après le toucher.
+    expect(session.parle, isFalse);
     await arret;
-    await _attendre(600);
     expect(voix.arrets, 1);
-    expect(session.actif, isTrue); // session ouverte
-    expect(session.paroleInterrompue, isTrue);
-    expect(session.etat, VoiceState.idle);
-    expect(reco.ecoutes, 1); // aucune écoute relancée seule
-    expect(voix.dits, hasLength(1)); // aucune reprise de la voix
+    expect(entendus.single, 'Un moteur électrique transforme l’énergie.');
+    expect(session.etat, VoiceState.listening); // une seule action
+    expect(reco.ecoutes, 2);
+
+    // Fragments et fin tardifs de l'ancienne réponse : jamais dits.
+    envoyer('Et un stator fixe. ');
+    finReponse.complete();
+    voix.finir();
+    await _attendre(500);
+    expect(voix.dits, hasLength(1));
+    expect(reco.ecoutes, 2); // aucune écoute relancée en double
+    expect(demandes, 1);
 
     // Arrêt hors parole : sans effet.
     await session.arreterParole();
     expect(voix.arrets, 1);
-
-    session.parler();
-    await _attendre();
-    expect(session.paroleInterrompue, isFalse);
-    expect(session.etat, VoiceState.listening);
-    expect(reco.ecoutes, 2);
-    expect(demandes, 1); // une seule réponse IA demandée
   });
 
   test('quitter pendant la parole : tout est libéré, rien ne reprend', () async {
-    reco.phrase!('Explique la photosynthèse');
-    await _attendre(1400);
-    expect(session.etat, VoiceState.speaking);
+    reco.phrase!('Explique le moteur électrique');
+    await _attendre();
+    envoyer('Un moteur électrique transforme l’énergie. Il comporte un rotor. ');
+    await _attendre();
+    expect(session.parle, isTrue);
     await session.quitterChatVocal();
-    await _attendre(600);
+    finReponse.complete();
+    await _attendre(500);
     expect(session.actif, isFalse);
-    expect(session.paroleInterrompue, isFalse);
     expect(reco.ecoutes, 1);
   });
 }

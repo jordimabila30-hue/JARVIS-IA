@@ -30,7 +30,17 @@ class DemandeJarvis {
     this.propositionsMessage,
     this.longueurPropose,
     this.image,
+    this.annulation,
+    this.entendu,
   }) : texteComplet = texteComplet ?? texte;
+
+  /// Arrêt demandé par l'utilisateur (interruption vocale) : la requête en
+  /// cours est abandonnée ; le serveur garde le texte déjà généré.
+  final Future<void>? annulation;
+
+  /// La réponse précédente a été interrompue : ce que l'utilisateur en a
+  /// réellement entendu (continuité de la conversation).
+  final String? entendu;
 
   /// Capture jointe à ce message (toujours l'IA, jamais le moteur local).
   final ImageAEnvoyer? image;
@@ -113,6 +123,8 @@ class DemandeJarvis {
     propositionsMessage: propositionsMessage,
     longueurPropose: longueurPropose,
     image: image,
+    annulation: annulation,
+    entendu: entendu,
   );
 }
 

@@ -104,8 +104,7 @@ class _Conversation extends StatelessWidget {
           ],
         ),
         // Bouton contextuel, zone de hauteur fixe : rien ne bouge quand il
-        // apparaît (« Arrêter la parole » pendant la parole, « Parler »
-        // après un arrêt, rien sinon).
+        // apparaît (« Arrêter la parole » pendant la parole, rien sinon).
         SizedBox(height: 52, child: Center(child: _BoutonParole(session: session))),
         // Ce que l'utilisateur a dit.
         AnimatedSize(
@@ -185,8 +184,9 @@ class _Conversation extends StatelessWidget {
   }
 }
 
-/// Arrêter la parole (JARVIS parle) ou Parler (après un arrêt) : un seul
-/// bouton, fondu court, jamais affiché dans un état qui ne lui correspond pas.
+/// « Arrêter la parole » pendant que JARVIS parle : UN toucher coupe la
+/// voix et relance l'écoute (aucun second bouton). Fondu court, jamais
+/// affiché dans un autre état.
 class _BoutonParole extends StatelessWidget {
   const _BoutonParole({required this.session});
 
@@ -194,11 +194,9 @@ class _BoutonParole extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parle = session.actif && session.etat == VoiceState.speaking;
-    final reprendre = session.actif && session.paroleInterrompue;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 150),
-      child: parle
+      child: session.parle
           ? FilledButton.icon(
               key: const ValueKey('arreter'),
               onPressed: session.arreterParole,
@@ -207,19 +205,6 @@ class _BoutonParole extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFD9473F),
                 foregroundColor: Colors.white,
-                minimumSize: const Size(0, 40),
-                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-            )
-          : reprendre
-          ? FilledButton.icon(
-              key: const ValueKey('parler'),
-              onPressed: session.parler,
-              icon: const Icon(Icons.mic_none_rounded, size: 18),
-              label: const Text('Parler'),
-              style: FilledButton.styleFrom(
-                backgroundColor: CouleursJarvis.signal,
-                foregroundColor: CouleursJarvis.ivoire,
                 minimumSize: const Size(0, 40),
                 textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),

@@ -40,7 +40,7 @@ import kotlin.math.sin
  * conversation. Réduire : la session continue (bulle marquée, un toucher
  * la rouvre). Quitter : fin réelle, micro et voix libérés.
  * Bouton contextuel (zone de hauteur fixe) : « Arrêter la parole » pendant
- * que JARVIS parle, « Parler » après un arrêt ; rien sinon.
+ * que JARVIS parle ; un toucher coupe la voix et relance l'écoute.
  */
 class VocalJarvisTouch(
     private val contexte: Context,
@@ -117,16 +117,9 @@ class VocalJarvisTouch(
     fun appliquer(e: Map<*, *>) {
         actif = e["actif"] == true
         val probleme = e["probleme"] as? String
-        val interrompue = actif && e["interrompue"] == true
         val etat = if (actif) e["etat"] as? String ?: "repos" else "coupe"
         symbole.changer(etat)
-        montrerContextuel(
-            when {
-                etat == "parole" -> "arreter"
-                interrompue -> "parler"
-                else -> null
-            }
-        )
+        montrerContextuel(if (etat == "parole") "arreter" else null)
         etatTexte.setTextColor(if (probleme != null) ERREUR else TEXTE)
         etatTexte.text = probleme ?: when (etat) {
             "ecoute" -> "À l’écoute…"
@@ -157,15 +150,12 @@ class VocalJarvisTouch(
             }.start()
             return
         }
-        val arreter = action == "arreter"
-        contextuel.text = if (arreter) "Arrêter la parole" else "Parler"
-        contextuel.contentDescription = contextuel.text
-        contextuel.setCompoundDrawablesRelativeWithIntrinsicBounds(
-            if (arreter) R.drawable.touch_stop else R.drawable.touch_vocal, 0, 0, 0,
-        )
+        contextuel.text = "Arrêter la parole"
+        contextuel.contentDescription = "Arrêter la parole et parler"
+        contextuel.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.touch_stop, 0, 0, 0)
         contextuel.background = GradientDrawable().apply {
             cornerRadius = dp(22).toFloat()
-            setColor(if (arreter) Color.rgb(0xD9, 0x47, 0x3F) else Color.rgb(0x55, 0x59, 0xB8))
+            setColor(Color.rgb(0xD9, 0x47, 0x3F))
         }
         contextuel.visibility = View.VISIBLE
         contextuel.animate().cancel()
@@ -240,10 +230,9 @@ class VocalJarvisTouch(
             setPadding(dp(18), 0, dp(20), 0)
             visibility = View.INVISIBLE
             setOnClickListener {
-                val methode = if (actionContextuelle == "arreter") "vocalArreterParole" else "vocalParler"
-                // Réaction immédiate ; l'état réel suit (Dart).
-                if (methode == "vocalArreterParole") montrerContextuel(null)
-                CanalMiniChat.appeler(methode, null, {}, {})
+                // Réaction immédiate ; l'état réel suit (Dart, « vocal »).
+                montrerContextuel(null)
+                CanalMiniChat.appeler("vocalArreterParole", null, {}, {})
             }
         }
         // Zone fixe : la fenêtre ne change pas de taille quand le bouton

@@ -23,6 +23,7 @@ import '../services/conversations/fournisseur_jarvis.dart';
 import '../services/importation/pieces_jointes_serveur.dart';
 import '../services/conversation/reponses_envoyees.dart';
 import '../services/importation/pont_android_importation.dart';
+import '../services/detecteur_intervention.dart';
 import '../services/jarvis_touch_chat.dart';
 import '../services/jarvis_touch_service.dart';
 import '../services/preferences_pim_service.dart';
@@ -317,6 +318,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     // Une seule conversation : le vocal y ajoute ses échanges et partage
     // son contexte avec l'écrit.
     _session.repondeur = _conversation.repondreVocal;
+    _session.annulerReponse = _conversation.interrompreReponseVocale;
+    if (DetecteurIntervention.disponible) {
+      _session.detecteur ??= DetecteurIntervention();
+    }
     _formesPim.addListener(_surFormePim);
     if (_formesPim.charge) {
       _surFormePim();

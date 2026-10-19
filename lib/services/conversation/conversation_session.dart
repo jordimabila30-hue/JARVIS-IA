@@ -167,6 +167,32 @@ class ConversationSession extends ChangeNotifier {
     return _file = _file.then((_) => _traiter(t, generation));
   }
 
+  // Interruption vocale : génération vocale en cours (annulable) et ce que
+  // l'utilisateur a entendu de la réponse coupée, pour la question suivante
+  // de la même conversation.
+  Completer<void>? _annulationVocale;
+  String? _entendu;
+  String? _entenduConversation;
+
+  /// L'utilisateur a interrompu JARVIS : la génération vocale en cours est
+  /// arrêtée (le serveur garde le texte déjà généré) et [entendu] est
+  /// transmis avec la question suivante (jamais un second appel).
+  void interrompreReponseVocale(String entendu) {
+    final a = _annulationVocale;
+    _annulationVocale = null;
+    if (a != null && !a.isCompleted) a.complete();
+    _entendu = entendu.trim();
+    _entenduConversation = _idCourant;
+  }
+
+  String? _prendreEntendu() {
+    final e = _entendu;
+    final meme = _entenduConversation == _idCourant;
+    _entendu = null;
+    _entenduConversation = null;
+    return meme ? e : null;
+  }
+
   /// Message avec une capture d'écran (JARVIS Touch) : [image] part avec
   /// CE message seulement, après l'appui sur Envoyer ; le fil garde la
   /// référence [capture]. Toujours l'IA (jamais le moteur local).
@@ -820,14 +846,22 @@ class ConversationSession extends ChangeNotifier {
   /// prononcer, ou null si la conversation a été effacée entre-temps.
   ///
   /// Pas de réflexion visible ici : le mode vocal a la sienne.
-  Future<ReponseVocale?> repondreVocal(String phrase) {
+  Future<ReponseVocale?> repondreVocal(
+    String phrase, {
+    void Function(String fragment)? surFragment,
+  }) {
     final t = phrase.trim();
     if (t.isEmpty) return Future.value(null);
     final generation = _generation;
     final resultat = Completer<ReponseVocale?>();
     _file = _file.then((_) async {
       try {
-        final r = await _traiter(t, generation, vocal: true);
+        final r = await _traiter(
+          t,
+          generation,
+          vocal: true,
+          surFragmentVocal: surFragment,
+        );
         resultat.complete(
           r == null
               ? null
@@ -837,6 +871,7 @@ class ConversationSession extends ChangeNotifier {
                   r.interrompue ? '${r.texte} ${r.incident}' : r.texte,
                   source: SourceReponse.locale,
                   terminerSession: r.terminerSession,
+                  interrompue: r.interrompue,
                 ),
         );
       } catch (e) {
@@ -854,6 +889,7 @@ class ConversationSession extends ChangeNotifier {
     bool vocal = false,
     CaptureJointe? capture,
     ImageAEnvoyer? image,
+    void Function(String fragment)? surFragmentVocal,
   }) async {
     if (_ferme || generation != _generation) return null;
     final analyse = _detecteur.analyser(
@@ -902,14 +938,18 @@ class ConversationSession extends ChangeNotifier {
         longueurPropose: _longueursRegardees[_idCourant]?.name,
         propositionsMessage: _dernieresPropositions()?.idServeur,
         image: image,
+        annulation: vocal ? (_annulationVocale = Completer<void>()).future : null,
+        entendu: vocal ? _prendreEntendu() : null,
       ),
       vocal: vocal,
+      surFragmentVocal: surFragmentVocal,
     );
   }
 
   Future<ReponseJarvis?> _repondre(
     DemandeJarvis demande, {
     bool vocal = false,
+    void Function(String fragment)? surFragmentVocal,
   }) async {
     final generation = _generation;
     _enCours++;
@@ -933,6 +973,7 @@ class ConversationSession extends ChangeNotifier {
     void surFragment(String fragment) {
       if (_ferme) return;
       flux.ajouter(fragment);
+      surFragmentVocal?.call(fragment);
       // Fil changé avant le premier fragment : aucune bulle ici, la
       // réponse rejoindra sa conversation à la fin.
       if (idBulle != null || generation != _generation) return;

@@ -68,6 +68,28 @@ async def test_echange_vocal_consigne_orale(env):
     assert "dite à voix haute" not in ecrit["system"]
 
 
+async def test_interruption_vocale_note_dans_la_meme_conversation(env):
+    serveur = ServeurClaude()
+    env.llm = serveur.fournisseur()
+    meta = evenements((await post_chat(env, message="Explique le moteur électrique.", oral=True)).text)[0][1]
+    cid = meta["conversation_id"]
+    connue = env.supa.get_conversation
+
+    async def get_conversation(c, uid):
+        return {"id": c, "title": "Moteur", "persona": None} if c == cid else await connue(c, uid)
+
+    env.supa.get_conversation = get_conversation
+    await post_chat(env, message="Attends, c'est quoi le rotor ?", oral=True, conversation_id=cid,
+                    interruption={"entendu": "Un moteur électrique transforme l'énergie."})
+    second = serveur.requetes[1]["system"]
+    assert "interrompu" in second
+    assert "Un moteur électrique transforme l'énergie." in second
+    assert "sans reprendre" in second
+    # Nouvelle conversation : aucune note (rien à continuer).
+    await post_chat(env, message="Bonjour", interruption={"entendu": "x"})
+    assert "interrompu" not in serveur.requetes[2]["system"]
+
+
 # --- Route du chat -----------------------------------------------------------------
 
 async def test_fournisseur_sans_vision_refuse_avant_tout_appel(env):
