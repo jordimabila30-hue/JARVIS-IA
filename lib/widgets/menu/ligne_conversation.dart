@@ -6,11 +6,13 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/conversations/apercu_conversation.dart';
+import '../../services/apparence/service_fonds.dart';
 import '../../theme/theme_jarvis.dart';
+import '../apparence/feuille_fond_conversation.dart';
 import '../../utils/local_date_time.dart';
 import 'confirmation_suppression.dart';
 
-enum _Action { epingler, supprimer }
+enum _Action { epingler, fond, supprimer }
 
 /// Une conversation dans la liste du menu : titre, aperçu du dernier
 /// message (une ligne), date courte, épingle discrète.
@@ -60,6 +62,7 @@ class LigneConversation extends StatefulWidget {
   static const epingler = 'Épingler la conversation';
   static const desepingler = 'Désépingler la conversation';
   static const supprimer = 'Supprimer la conversation';
+  static const personnaliserFond = 'Personnaliser le fond';
 
   /// Libellés des boutons révélés par le balayage.
   static const boutonEpingler = 'Épingler';
@@ -300,6 +303,13 @@ class _LigneConversationState extends State<LigneConversation>
               : LigneConversation.epingler,
           CouleursJarvis.texteSecondaire,
         ),
+        if (ServiceFonds.of(context, ecouter: false) != null)
+          entree(
+            _Action.fond,
+            Icons.wallpaper_rounded,
+            LigneConversation.personnaliserFond,
+            CouleursJarvis.texteSecondaire,
+          ),
         entree(
           _Action.supprimer,
           Icons.delete_outline_rounded,
@@ -312,6 +322,12 @@ class _LigneConversationState extends State<LigneConversation>
     switch (choix) {
       case _Action.epingler:
         widget.surEpingler();
+      case _Action.fond:
+        ouvrirFondConversation(
+          context,
+          id: widget.conversation.id,
+          titre: widget.conversation.titre,
+        );
       case _Action.supprimer:
         _supprimer();
       case null:

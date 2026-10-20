@@ -6,6 +6,7 @@ import 'pages/authentification/authentification_page.dart';
 import 'pages/ecran_de_lancement.dart';
 import 'services/api_jarvis.dart';
 import 'services/apparence/service_apparence.dart';
+import 'services/apparence/service_fonds.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
 import 'services/integrations/service_gmail.dart';
@@ -69,6 +70,9 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
         luminositeSysteme:
             WidgetsBinding.instance.platformDispatcher.platformBrightness,
       )..charger());
+
+  /// Fonds par conversation et photos de fond (dépôt local seulement).
+  late final _fonds = ServiceFonds(apparence: _apparence)..charger();
   late final _config = widget.config ?? ConfigAuth.compilation();
   late final _auth = widget.auth ?? AuthService(_config.creerRepository());
   late final _api =
@@ -116,6 +120,7 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _fonds.dispose();
     if (widget.apparence == null) _apparence.dispose();
     _auth.removeListener(_surAuth);
     _api.surConsommation = null;
@@ -214,14 +219,17 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
           theme: themeJarvis(palette),
           builder: (context, enfant) => PorteeApparence(
             service: _apparence,
-            child: TransitionApparence(
-              service: _apparence,
-              child: palette.sombre
-                  ? AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: SystemUiOverlayStyle.light,
-                      child: enfant!,
-                    )
-                  : enfant!,
+            child: PorteeFonds(
+              service: _fonds,
+              child: TransitionApparence(
+                service: _apparence,
+                child: palette.sombre
+                    ? AnnotatedRegion<SystemUiOverlayStyle>(
+                        value: SystemUiOverlayStyle.light,
+                        child: enfant!,
+                      )
+                    : enfant!,
+              ),
             ),
           ),
           home: EcranDeLancement(onTermine: _apresLancement),

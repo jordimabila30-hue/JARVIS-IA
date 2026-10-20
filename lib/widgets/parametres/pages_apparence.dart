@@ -1,7 +1,13 @@
 import 'package:flutter/gestures.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
+import '../../models/apparence/fond_photo.dart';
 import '../../models/apparence/preferences_apparence.dart';
+import '../../pages/editeur_fond_page.dart';
+import '../../services/apparence/depot_fonds_photo.dart';
+import '../../services/apparence/service_fonds.dart';
 import '../../services/apparence/service_apparence.dart';
 import '../../theme/motifs_jarvis.dart';
 import '../../theme/styles_jarvis.dart';
@@ -27,6 +33,59 @@ class PageApparence extends StatefulWidget {
 class _PageApparenceState extends State<PageApparence> {
   late final PreferencesApparence _initial = widget.apparence.preferences;
 
+  /// Photos (null hors application : la carte « Ma galerie » est absente).
+  ServiceFonds? _fonds;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_fonds != null) return;
+    _fonds = ServiceFonds.of(context, ecouter: false);
+    // « Revenir » peut rendre la photo d'avant : elle n'est pas nettoyée
+    // tant que la page est ouverte.
+    if (_initial.photo case final p?) _fonds?.proteger(p.id);
+  }
+
+  @override
+  void dispose() {
+    if (_initial.photo case final p?) _fonds?.abandonner(p.id);
+    super.dispose();
+  }
+
+  /// « Ma galerie » : choisir une photo (aucune encore), la remettre comme
+  /// fond (inactive), ou l'ajuster (déjà le fond).
+  Future<void> _galerie() async {
+    final a = widget.apparence;
+    if (a.photo == null) return _nouvellePhoto();
+    if (!a.photoActive) return a.activerPhoto();
+    return _ajusterPhoto();
+  }
+
+  Future<void> _nouvellePhoto() async {
+    final fonds = _fonds;
+    if (fonds == null) return;
+    final octets = await choisirPhotoFond();
+    if (octets == null || !mounted) return;
+    final photo = await ouvrirEditeurFond(
+      context,
+      fonds: fonds,
+      octets: octets,
+    );
+    if (photo != null) await fonds.definirGeneral(photo);
+  }
+
+  Future<void> _ajusterPhoto() async {
+    final fonds = _fonds;
+    final actuelle = widget.apparence.photo;
+    if (fonds == null || actuelle == null) return;
+    final photo = await ouvrirEditeurFond(
+      context,
+      fonds: fonds,
+      existante: actuelle,
+    );
+    if (photo != null) await fonds.definirGeneral(photo);
+  }
+
   @override
   Widget build(BuildContext context) {
     final a = widget.apparence;
@@ -36,7 +95,10 @@ class _PageApparenceState extends State<PageApparence> {
         final styleChange =
             a.mode != _initial.mode || a.style != _initial.style;
         final motifChange =
-            a.motif != _initial.motif || a.intensite != _initial.intensite;
+            a.motif != _initial.motif ||
+            a.intensite != _initial.intensite ||
+            a.photo != _initial.photo ||
+            a.photoActive != (_initial.photoActive && _initial.photo != null);
         final palette = a.palette;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,33 +154,38 @@ class _PageApparenceState extends State<PageApparence> {
                       a.preferences.copyWith(
                         motif: _initial.motif,
                         intensite: _initial.intensite,
+                        photo: _initial.photo,
+                        photoActive: _initial.photoActive,
                       ),
                     )
                   : null,
             ),
-            _Carrousel(
+            CarrouselFonds(
               cle: 'motifs',
-              nombre: MotifJarvis.values.length,
-              choisie: MotifJarvis.values.indexOf(a.motif),
-              carte: (i) {
-                final m = MotifJarvis.values[i];
-                return _CarteChoix(
-                  nom: m.nom,
-                  choisie: a.motif == m,
-                  surChoix: () => a.choisirMotif(m),
-                  apercu: CustomPaint(
-                    painter: _PeintreApercuMotif(m, palette, a.intensite),
-                  ),
-                );
-              },
+              palette: palette,
+              intensite: a.intensite,
+              fond: a.fondGeneral,
+              photo: a.photo,
+              depot: _fonds?.depot,
+              surMotif: a.choisirMotif,
+              surGalerie: _fonds == null ? null : _galerie,
             ),
-            // Intensité : sous les motifs, sans autre page ; masquée sans
-            // motif.
+            // Sous les motifs, sans autre page : l'intensité d'un motif, ou
+            // pour la photo « Ajuster » et « Changer » (l'intensité ne
+            // concerne que les motifs).
             AnimatedSize(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
-              child: a.motif == MotifJarvis.aucun
+              child: a.photoActive
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _ActionsPhoto(
+                        surAjuster: _ajusterPhoto,
+                        surChanger: _nouvellePhoto,
+                      ),
+                    )
+                  : a.motif == MotifJarvis.aucun
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -793,4 +860,188 @@ class _PeintreApercuMotif extends CustomPainter {
       ancien.motif != motif ||
       !identical(ancien.palette, palette) ||
       ancien.intensite != intensite;
+}
+
+/// Carrousel des fonds : tous les motifs, puis « Ma galerie » (photo
+/// personnelle). Sert à l'Apparence (fond général) et au fond d'une
+/// conversation. [fond] : fond choisi (carte marquée) ; [photo] : photo de
+/// la galerie, montrée en miniature ; [surGalerie] null : pas de carte
+/// « Ma galerie ».
+class CarrouselFonds extends StatelessWidget {
+  const CarrouselFonds({
+    super.key,
+    required this.cle,
+    required this.palette,
+    required this.intensite,
+    required this.fond,
+    required this.surMotif,
+    this.photo,
+    this.depot,
+    this.surGalerie,
+  });
+
+  final String cle;
+  final PaletteJarvis palette;
+  final double intensite;
+  final FondChoisi? fond;
+  final FondPhoto? photo;
+  final DepotFondsPhoto? depot;
+  final ValueChanged<MotifJarvis> surMotif;
+  final VoidCallback? surGalerie;
+
+  static const nomGalerie = 'Ma galerie';
+
+  @override
+  Widget build(BuildContext context) {
+    final motifs = MotifJarvis.values;
+    final galerie = surGalerie != null;
+    final f = fond;
+    final choisie = switch (f) {
+      FondPhotoChoisi() => motifs.length,
+      FondMotif(:final motif) => motifs.indexOf(motif),
+      null => -1,
+    };
+    return _Carrousel(
+      cle: cle,
+      nombre: motifs.length + (galerie ? 1 : 0),
+      choisie: choisie.clamp(0, motifs.length),
+      carte: (i) {
+        if (i == motifs.length) {
+          return _CarteChoix(
+            nom: nomGalerie,
+            choisie: f is FondPhotoChoisi,
+            surChoix: surGalerie!,
+            apercu: _ApercuGalerie(
+              photo: f is FondPhotoChoisi ? f.photo : photo,
+              depot: depot,
+            ),
+          );
+        }
+        final m = motifs[i];
+        return _CarteChoix(
+          nom: m.nom,
+          choisie: f is FondMotif && f.motif == m,
+          surChoix: () => surMotif(m),
+          apercu: CustomPaint(
+            painter: _PeintreApercuMotif(m, palette, intensite),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Aperçu de « Ma galerie » : miniature de la photo (décodée petite), ou
+/// une invitation à en choisir une.
+class _ApercuGalerie extends StatefulWidget {
+  const _ApercuGalerie({required this.photo, required this.depot});
+
+  final FondPhoto? photo;
+  final DepotFondsPhoto? depot;
+
+  @override
+  State<_ApercuGalerie> createState() => _ApercuGalerieState();
+}
+
+class _ApercuGalerieState extends State<_ApercuGalerie> {
+  Future<Uint8List?>? _octets;
+  String? _id;
+
+  void _charger() {
+    final id = widget.photo?.id;
+    if (id == _id) return;
+    _id = id;
+    _octets = id == null ? null : widget.depot?.lire(id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _charger();
+    final vide = Container(
+      color: CouleursJarvis.creme,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.add_photo_alternate_outlined,
+            size: 30,
+            color: CouleursJarvis.signal,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choisir une photo',
+            style: TextStyle(
+              fontSize: 13,
+              color: CouleursJarvis.texteSecondaire,
+            ),
+          ),
+        ],
+      ),
+    );
+    final futur = _octets;
+    if (futur == null) return vide;
+    final r = widget.photo!.reglages;
+    return FutureBuilder<Uint8List?>(
+      future: futur,
+      builder: (context, s) {
+        final octets = s.data;
+        if (octets == null) {
+          return s.connectionState == ConnectionState.done
+              ? vide
+              : ColoredBox(color: CouleursJarvis.creme);
+        }
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: CouleursJarvis.ivoire),
+            Opacity(
+              opacity: r.visibilite,
+              child: Image.memory(
+                octets,
+                fit: BoxFit.cover,
+                cacheWidth: 480,
+                gaplessPlayback: true,
+              ),
+            ),
+            ColoredBox(
+              color: Color.fromRGBO(0, 0, 0, r.assombrissement * r.visibilite),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Photo active : « Ajuster la photo » (éditeur) et « Changer de photo ».
+class _ActionsPhoto extends StatelessWidget {
+  const _ActionsPhoto({required this.surAjuster, required this.surChanger});
+
+  final VoidCallback surAjuster;
+  final VoidCallback surChanger;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextButton.styleFrom(
+      foregroundColor: CouleursJarvis.signal,
+      minimumSize: const Size(0, 44),
+    );
+    return Wrap(
+      spacing: 8,
+      children: [
+        TextButton.icon(
+          onPressed: surAjuster,
+          icon: const Icon(Icons.tune_rounded, size: 18),
+          label: const Text('Ajuster la photo'),
+          style: style,
+        ),
+        TextButton.icon(
+          onPressed: surChanger,
+          icon: const Icon(Icons.photo_library_outlined, size: 18),
+          label: const Text('Changer de photo'),
+          style: style,
+        ),
+      ],
+    );
+  }
 }

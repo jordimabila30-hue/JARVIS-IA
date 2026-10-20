@@ -403,10 +403,10 @@ void main() {
         await tester.drag(carrousel(1), const Offset(-300, 0));
         await tester.pumpAndSettle();
       }
-      expect(find.text('Cœur Kuba'), findsOneWidget);
-      await tester.tap(find.text('Cœur Kuba'));
+      expect(find.text(MotifJarvis.values.last.nom), findsOneWidget);
+      await tester.tap(find.text(MotifJarvis.values.last.nom));
       await tester.pumpAndSettle();
-      expect(a.motif, MotifJarvis.coeurKuba);
+      expect(a.motif, MotifJarvis.values.last);
       expect(a.style, StyleVisuel.leopards);
       // Dans l'autre sens.
       await tester.drag(carrousel(1), const Offset(2000, 0));

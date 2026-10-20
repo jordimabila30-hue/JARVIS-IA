@@ -2007,6 +2007,37 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 ### Prochaine étape
 - Relecture / validation des fiches ; phase 2 (IA) seulement après accord.
 
+## 2026-10-20 — Fonds photo (général et par conversation) et deux motifs
+
+### Fait
+- Motifs « Kuba 4 · Velours » et « Kuba 5 · Labyrinthe » (vrais dessins,
+  cases hors écran ignorées) ; tous les anciens gardés.
+- Carte « Ma galerie » en fin de carrousel des motifs : choisir une photo,
+  la réactiver, ou l'ajuster ; photo active → « Ajuster la photo » /
+  « Changer de photo » à la place de l'Intensité (réservée aux motifs).
+- Éditeur plein écran (`pages/editeur_fond_page.dart`) : aperçu à la vraie
+  taille de l'écran (réduit), conversation de démonstration, glisser /
+  pincer / double toucher, visibilité, flou, assombrissement, Annuler /
+  Réinitialiser / Appliquer.
+- Fond par conversation : « Personnaliser le fond » dans le menu d'une
+  conversation (fond général, motif, photo, modifier) ; règle :
+  conversation → général → JARVIS.
+- Stockage local : fichiers du support de l'application (path_provider,
+  ajouté) ou IndexedDB (Web) ; préférences = identifiants et réglages
+  seulement ; photos inutilisées supprimées.
+- Rendu : photo décodée réduite, composée UNE fois (cadrage, flou,
+  assombrissement) puis copiée ; PIM inchangé au-dessus.
+
+### Vérifié
+- Analyse : aucun problème ; tests : 922 / 922 (dont `test/fonds_test.dart`).
+- Captures : fond photo derrière une conversation (bulles lisibles, PIM
+  au-dessus), éditeur, « Ma galerie », nouveaux motifs.
+- S10+ : carte « Ma galerie », sélecteur, éditeur (flou en direct),
+  Appliquer.
+
+### Reste à vérifier
+- S10+ : fond photo sur l'accueil, fond d'une conversation (le téléphone
+  était sans Internet : liste vide), redémarrage.
 
 ## 2026-10-20 — Kelasi, phase 2 étape A : sources, sauvegarde, transition
 

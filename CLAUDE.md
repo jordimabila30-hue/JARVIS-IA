@@ -194,7 +194,7 @@ lib/
 │   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
 │   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota ; Apparence : page unique, mode + carrousels styles / motifs + intensité, pages_apparence.dart ; Chat vocal en sections compactes, aperçu ▶ près de la voix ; grille PIM 2 × 2 centrée ; croix = ferme tout (pop), flèche = un niveau)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
-│   ├── apparence/                    # TransitionApparence (fondu + reconstruction unique), FriseKuba
+│   ├── apparence/                    # TransitionApparence (fondu + reconstruction unique), FriseKuba, rendu_fond_photo (décodage réduit, composition UNE fois), feuille_fond_conversation
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
@@ -216,7 +216,7 @@ lib/
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
 │   ├── conversations/                # multicanal (fournisseurs, tri, recherche, épingles) ; synchro Supabase : dépôt, correspondance local ↔ UUID, liste, file des échanges locaux
 │   ├── preferences_pim_service.dart  # forme principale PIM (enregistrée sur l'appareil)
-│   ├── apparence/                    # ServiceApparence (source de vérité, clé jarvis.apparence, mode Système) + PorteeApparence
+│   ├── apparence/                    # ServiceApparence (source de vérité, clé jarvis.apparence, mode Système) + PorteeApparence ; ServiceFonds (fond par conversation, clé jarvis.fonds_conversations ; import, protection, nettoyage des photos) ; DepotFondsPhoto (fichiers du support de l’app / IndexedDB, jamais réseau)
 │   ├── apprentissage/                # module Apprendre, hors ligne : EspaceApprentissage (créé à la 1re ouverture), interrupteur ModuleApprentissage, catalogue (assets à la demande, cache, aperçu des brouillons hors release), validation du corpus, SeanceLecon (logique pure), sélection (Continuer / Pratiquer / Réviser), ServiceProgression (écritures regroupées, secours, corrompue)
 │   ├── jarvis_touch_service.dart     # JARVIS Touch (Android) : bulle flottante, autorisation, état réel ; natif : android/.../touch/
 │   ├── jarvis_touch_chat.dart        # mini-chat de JARVIS Touch : autre vue de LA conversation (canal jarvis/touch_chat ; moteur Flutter du processus : touch/MoteurJarvis.kt)
@@ -229,7 +229,7 @@ lib/
 │   ├── forme_pim.dart                # sphère, cube, tétraèdre, Réacteur Arc : noms, tirage, durées
 │   ├── message_conversation.dart     # messages (écrits ou vocaux), conversation externe, tons, raccourcis
 │   ├── integrations/                 # EtatGmail (statut, adresse, lecture seule ; jamais de jeton)
-│   ├── apparence/                    # PreferencesApparence (mode, style, motif, intensité ; JSON versionné, lecture tolérante)
+│   ├── apparence/                    # PreferencesApparence (mode, style, motif, intensité ; JSON versionné, lecture tolérante ; photo de « Ma galerie » + photoActive) ; fond_photo.dart : ReglagesPhoto, FondPhoto, FondChoisi (motif | photo)
 │   ├── apprentissage/                # contenus (parcours, unités, leçons, fiches, sources, statut brouillon / valide), 7 exercices (sealed), progression versionnée
 │   ├── utilisation/                  # Utilisation, Jauge, FournisseurIA (réponse de /me/quota, quotas quotidiens)
 │   ├── authentification/            # UtilisateurAuth, ResultatAuth / ErreurAuth
@@ -247,7 +247,7 @@ lib/
     ├── theme_jarvis.dart             # façade CouleursJarvis (suit la palette active), themeJarvis(palette), FondJarvis (+ motif)
     ├── palette_jarvis.dart           # PaletteJarvis (ThemeExtension) : couleurs, fond, identité (frise, ombres pleines, contour, police)
     ├── styles_jarvis.dart            # registre StyleVisuel : JARVIS original + 6 styles importés, chacun clair ET sombre
-    ├── motifs_jarvis.dart            # registre MotifJarvis (aucun, Aurore, Kuba 1-3, Cœur Kuba) + dessin des motifs
+    ├── motifs_jarvis.dart            # registre MotifJarvis (aucun, Aurore, Kuba 1-3, Cœur Kuba, Kuba 4 · Velours, Kuba 5 · Labyrinthe) + dessin des motifs
     └── gabarit_jarvis.dart           # responsive : formats, tailles de texte, taille de la sphère
 ```
 

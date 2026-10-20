@@ -5,10 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../models/apparence/fond_photo.dart';
 import '../services/apparence/service_apparence.dart';
+import '../services/apparence/service_fonds.dart';
 import '../theme/motifs_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/chrono_perf.dart';
+import 'apparence/rendu_fond_photo.dart';
 
 /// Réglages du fond de l'accueil (purement graphiques : le fond est fixe).
 class ReglagesFond {
@@ -53,9 +56,23 @@ class ReglagesFond {
 /// ne fait plus qu'une copie, au lieu de redessiner dégradés, nappes et
 /// courbes floutées.
 class FondJarvisAnime extends StatefulWidget {
-  const FondJarvisAnime({super.key, required this.child, this.zoneParticules});
+  const FondJarvisAnime({
+    super.key,
+    required this.child,
+    this.zoneParticules,
+    this.fond,
+    this.fondConversation,
+  });
 
   final Widget child;
+
+  /// Fond imposé ; null : [fondConversation], sinon le fond général de
+  /// l'Apparence.
+  final FondChoisi? fond;
+
+  /// Fond propre à la conversation affichée (null : aucun). Seul le fond
+  /// est redessiné quand il change, jamais [child].
+  final ValueListenable<FondChoisi?>? fondConversation;
 
   /// Zone des particules, dans le repère de l'écran : halo, lumière et
   /// anneaux s'y centrent. Fournie par le moteur PIM (qui la mesure déjà) ;
@@ -74,6 +91,11 @@ class _FondJarvisAnimeState extends State<FondJarvisAnime> {
   void initState() {
     super.initState();
     widget.zoneParticules?.addListener(_surZone);
+    widget.fondConversation?.addListener(_surFond);
+  }
+
+  void _surFond() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -83,6 +105,10 @@ class _FondJarvisAnimeState extends State<FondJarvisAnime> {
       ancien.zoneParticules?.removeListener(_surZone);
       widget.zoneParticules?.addListener(_surZone);
       _surZone();
+    }
+    if (ancien.fondConversation != widget.fondConversation) {
+      ancien.fondConversation?.removeListener(_surFond);
+      widget.fondConversation?.addListener(_surFond);
     }
   }
 
@@ -117,19 +143,96 @@ class _FondJarvisAnimeState extends State<FondJarvisAnime> {
   @override
   void dispose() {
     widget.zoneParticules?.removeListener(_surZone);
+    widget.fondConversation?.removeListener(_surFond);
     _peintre.liberer();
+    _composee?.dispose();
     super.dispose();
+  }
+
+  // --- Fond photo -----------------------------------------------------------
+  // Composé UNE fois (cadrage, flou, assombrissement) à la taille de la
+  // fenêtre ; refait seulement si la photo, ses réglages ou la fenêtre
+  // changent. La photo d'origine décodée est libérée aussitôt.
+
+  ui.Image? _composee;
+  Object? _clePhoto;
+
+  void _chargerPhoto(FondPhoto photo) {
+    final vue = View.of(context);
+    final densite = vue.devicePixelRatio;
+    final fenetre = vue.physicalSize / densite;
+    final cle = (photo, fenetre, densite);
+    if (cle == _clePhoto) return;
+    _clePhoto = cle;
+    final depot = ServiceFonds.of(context, ecouter: false)?.depot;
+    if (depot == null || fenetre.isEmpty) return;
+    () async {
+      final octets = await depot.lire(photo.id);
+      if (octets == null || !mounted || _clePhoto != cle) return;
+      final source = await decoderFondPhoto(
+        octets,
+        coteMax: vue.physicalSize.longestSide.ceil().clamp(512, 2400),
+      );
+      if (source == null) return;
+      if (!mounted || _clePhoto != cle) {
+        source.dispose();
+        return;
+      }
+      final image = composerFondPhoto(source, fenetre, densite, photo.reglages);
+      source.dispose();
+      final ancienne = _composee;
+      setState(() => _composee = image);
+      // Clarté réellement vue (photo à sa visibilité sur le fond du
+      // thème) : mesurée une fois, pour le texte posé sur le fond.
+      final clarte = await clarteMoyenne(image);
+      if (!mounted || _clePhoto != cle || clarte == null) return;
+      final base = PaletteJarvis.of(context).ivoire.computeLuminance();
+      final v = photo.reglages.visibilite;
+      ServiceFonds.of(context, ecouter: false)?.clarteFondPhoto.value =
+          base * (1 - v) + clarte * v;
+      // L'ancienne image sert encore à l'image affichée : libérée après.
+      SchedulerBinding.instance.addPostFrameCallback(
+        (_) => ancienne?.dispose(),
+      );
+    }();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Style et motif choisis : l'image mémorisée est refaite une fois.
-    final apparence = ServiceApparence.of(context);
-    _peintre.apparence(
-      PaletteJarvis.of(context),
-      apparence?.motif ?? MotifJarvis.aurore,
-      apparence?.intensite ?? intensiteMotifParDefaut,
-    );
+    // Style et fond choisis (celui de la conversation, sinon le fond
+    // général) : l'image mémorisée est refaite une fois.
+    final fond =
+        widget.fond ??
+        widget.fondConversation?.value ??
+        ServiceApparence.of(context)?.fondGeneral ??
+        const FondMotif(MotifJarvis.aurore, intensiteMotifParDefaut);
+    final palette = PaletteJarvis.of(context);
+    switch (fond) {
+      case FondMotif(:final motif, :final intensite):
+        _clePhoto = null;
+        final clarte = ServiceFonds.of(
+          context,
+          ecouter: false,
+        )?.clarteFondPhoto;
+        if (clarte != null && clarte.value != null) {
+          // Plus de photo : le texte reprend les couleurs du thème.
+          SchedulerBinding.instance.addPostFrameCallback(
+            (_) => clarte.value = null,
+          );
+        }
+        _peintre
+          ..apparence(palette, motif, intensite)
+          ..photo(null, 1, 1);
+      case FondPhotoChoisi(:final photo):
+        _chargerPhoto(photo);
+        _peintre
+          ..apparence(palette, MotifJarvis.aucun, 0)
+          ..photo(
+            _composee,
+            photo.reglages.visibilite,
+            View.of(context).devicePixelRatio,
+          );
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -190,6 +293,8 @@ class _CleFond {
     this.palette,
     this.motif,
     this.intensite,
+    this.photo,
+    this.visibilite,
   );
 
   final Size taille;
@@ -199,10 +304,14 @@ class _CleFond {
   final PaletteJarvis palette;
   final MotifJarvis motif;
   final double intensite;
+  final ui.Image? photo;
+  final double visibilite;
 
   @override
   bool operator ==(Object other) =>
       other is _CleFond &&
+      identical(other.photo, photo) &&
+      other.visibilite == visibilite &&
       other.taille == taille &&
       other.densite == densite &&
       other.zone == zone &&
@@ -212,8 +321,17 @@ class _CleFond {
       other.intensite == intensite;
 
   @override
-  int get hashCode =>
-      Object.hash(taille, densite, zone, simplifie, palette, motif, intensite);
+  int get hashCode => Object.hash(
+    taille,
+    densite,
+    zone,
+    simplifie,
+    palette,
+    motif,
+    intensite,
+    photo,
+    visibilite,
+  );
 }
 
 /// Redessine le fond quand un paramètre change.
@@ -264,6 +382,21 @@ class _PeintreFond extends CustomPainter {
     _signal.signaler();
   }
 
+  // Fond photo composé (null : aucun, ou pas encore prêt) et sa visibilité.
+  ui.Image? _photo;
+  double _visibilite = 1, _densitePhoto = 1;
+  void photo(ui.Image? image, double visibilite, double densite) {
+    if (identical(image, _photo) &&
+        visibilite == _visibilite &&
+        densite == _densitePhoto) {
+      return;
+    }
+    _photo = image;
+    _visibilite = visibilite;
+    _densitePhoto = densite;
+    _signal.signaler();
+  }
+
   // Image mémorisée, sa clé, et la clé du dernier dessin direct.
   ui.Image? _image, _precedente;
   _CleFond? _cleImage, _derniereCle;
@@ -275,8 +408,17 @@ class _PeintreFond extends CustomPainter {
     _image = _precedente = null;
   }
 
-  _CleFond _cle(Size size) =>
-      _CleFond(size, _densite, _zone, _simplifie, _palette, _motif, _intensite);
+  _CleFond _cle(Size size) => _CleFond(
+    size,
+    _densite,
+    _zone,
+    _simplifie,
+    _palette,
+    _motif,
+    _intensite,
+    _photo,
+    _visibilite,
+  );
 
   void _dessiner(Canvas canvas, Size size) => peindreFondAccueil(
     canvas,
@@ -286,6 +428,9 @@ class _PeintreFond extends CustomPainter {
     intensite: _intensite,
     zone: _zone,
     simplifie: _simplifie,
+    photo: _photo,
+    visibilite: _visibilite,
+    densitePhoto: _densitePhoto,
   );
 
   @override
@@ -458,8 +603,28 @@ void peindreFondAccueil(
   required double intensite,
   Rect? zone,
   bool simplifie = false,
+  ui.Image? photo,
+  double visibilite = 1,
+  double densitePhoto = 1,
 }) {
   final f = palette.fond;
+  if (photo != null) {
+    // Fond photo : la base du thème, puis la photo composée (cadrage, flou,
+    // assombrissement déjà cuits) à sa visibilité. Aucun motif par-dessus.
+    final tout = Offset.zero & size;
+    canvas.drawRect(
+      tout,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(0, -0.15),
+          radius: 1.0,
+          colors: [f.centre, f.base, f.bord],
+          stops: const [0, 0.45, 1],
+        ).createShader(tout),
+    );
+    peindreFondPhoto(canvas, photo, densitePhoto, visibilite);
+    return;
+  }
   final aurore = motif == MotifJarvis.aurore;
   // « Aurore » : à l'intensité par défaut, exactement le fond d'origine.
   final force = aurore ? intensite / intensiteMotifParDefaut : 0.0;

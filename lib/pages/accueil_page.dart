@@ -38,6 +38,8 @@ import '../utils/chrono_perf.dart';
 import '../widgets/bouton_vocal.dart';
 import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
+import '../models/apparence/fond_photo.dart';
+import '../services/apparence/service_fonds.dart';
 import '../widgets/fond_jarvis_anime.dart';
 import '../widgets/ligne_de_commande.dart';
 import '../widgets/menu_lateral.dart';
@@ -307,9 +309,34 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   late final _partages = widget.partages ?? PontAndroidImportation.reception;
   StreamController<PartageRecu>? _partagesImport;
 
+  /// Fond propre à la conversation affichée (null : fond général). Changé
+  /// seulement quand ce fond change, jamais à chaque message.
+  final _fondConversation = ValueNotifier<FondChoisi?>(null);
+  ServiceFonds? _fonds;
+
+  void _majFond() {
+    final fond = _fonds?.fondDe([
+      _conversation.idServeurCourant,
+      _conversation.idCourant,
+    ]);
+    if (fond != _fondConversation.value) _fondConversation.value = fond;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final fonds = ServiceFonds.of(context, ecouter: false);
+    if (fonds != _fonds) {
+      _fonds?.removeListener(_majFond);
+      _fonds = fonds?..addListener(_majFond);
+      _majFond();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _conversation.addListener(_majFond);
     // Partage arrivé avant l'accueil (lancement à froid, connexion) ou
     // pendant qu'il est affiché.
     _partages.annonces.addListener(_surPartage);
@@ -395,6 +422,9 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     _pimPendantApprendre.dispose();
+    _conversation.removeListener(_majFond);
+    _fonds?.removeListener(_majFond);
+    _fondConversation.dispose();
     _miniChat?.detacher();
     WidgetsBinding.instance.removeObserver(this);
     _conversation.surEchangeEnregistre = null;
@@ -870,8 +900,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
           ScrollConfiguration(
             behavior: const DefilementSansBarre(),
             child: FondJarvisAnime(
-              // Fond fixe, centré sur la zone des particules.
+              // Fond fixe, centré sur la zone des particules ; celui de la
+              // conversation affichée s'il en a un.
               zoneParticules: _pim.zone,
+              fondConversation: _fondConversation,
               child: SafeArea(
                 child: Stack(
                   children: [
@@ -1103,7 +1135,36 @@ class _Accueil extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final clarte = ServiceFonds.of(context, ecouter: false)?.clarteFondPhoto;
+    if (clarte == null) return _textes(context, null);
+    return ValueListenableBuilder<double?>(
+      valueListenable: clarte,
+      builder: (context, c, _) => _textes(context, c),
+    );
+  }
+
+  /// Fond photo trop sombre pour l'encre du thème (ou trop clair pour un
+  /// thème sombre) : texte inversé, avec une ombre douce, toujours lisible.
+  Widget _textes(BuildContext context, double? clarteFond) {
     final g = gabarit;
+    final p = PaletteJarvis.of(context);
+    final inverse =
+        clarteFond != null &&
+        (p.sombre ? clarteFond > 0.55 : clarteFond < 0.42);
+    final clair = inverse ? !p.sombre : p.sombre;
+    final titre = inverse
+        ? (clair ? const Color(0xFFFAF8F2) : const Color(0xFF1E1F26))
+        : null;
+    final ombres = clarteFond == null
+        ? null
+        : [
+            Shadow(
+              color: (clair ? Colors.black : Colors.white).withValues(
+                alpha: 0.45,
+              ),
+              blurRadius: 10,
+            ),
+          ];
     return Padding(
       padding: EdgeInsets.only(top: g.ecartSphereTexte),
       child: Column(
@@ -1115,6 +1176,8 @@ class _Accueil extends StatelessWidget {
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
               fontSize: g.tailleSalutation,
               letterSpacing: -0.3,
+              color: titre,
+              shadows: ombres,
             ),
           ),
           SizedBox(height: g.compact ? 8 : 10),
@@ -1127,7 +1190,9 @@ class _Accueil extends StatelessWidget {
                 fontSize: g.tailleMission,
                 height: 1.5,
                 letterSpacing: 0.1,
-                color: CouleursJarvis.texteSecondaire,
+                color: titre?.withValues(alpha: 0.88) ??
+                    CouleursJarvis.texteSecondaire,
+                shadows: ombres,
               ),
             ),
           ),
