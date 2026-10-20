@@ -190,7 +190,7 @@ lib/
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
 │   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
-│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota ; Général › Apparence › Thèmes / Motifs : pages_apparence.dart)
+│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota ; Apparence : page unique, mode + carrousels styles / motifs + intensité, pages_apparence.dart ; Chat vocal en sections compactes, aperçu ▶ près de la voix ; grille PIM 2 × 2 centrée ; croix = ferme tout (pop), flèche = un niveau)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
 │   ├── apparence/                    # TransitionApparence (fondu + reconstruction unique), FriseKuba
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
@@ -810,7 +810,7 @@ JARVIS Touch, intégration (2026-10-18) :
 - Téléphone USB : lancer avec `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`
   (+ `adb reverse tcp:8000 tcp:8000`), sinon l'appli vise 10.0.2.2.
 
-Apparence (2026-10-19, Paramètres › Général › Apparence › Thèmes / Motifs) :
+Apparence (2026-10-19 ; depuis le 2026-10-20 : Paramètres › Apparence, page unique à carrousels) :
 quatre préférences indépendantes (`PreferencesApparence`) : mode (Clair /
 Sombre / Système), style (`StyleVisuel` : JARVIS original + Congotronics,
 Raphia Kuba, Fleuve, La Sape, Rumba, Léopards, repris de l'application

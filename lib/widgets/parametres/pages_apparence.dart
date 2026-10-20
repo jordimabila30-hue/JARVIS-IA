@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/apparence/preferences_apparence.dart';
@@ -8,253 +9,22 @@ import '../../theme/theme_jarvis.dart';
 import '../apparence/frise_kuba.dart';
 import '../fond_jarvis_anime.dart';
 import 'elements_parametres.dart';
-import 'pages_jarvis_touch.dart';
 
-/// Paramètres › Général › Apparence : deux entrées, Thèmes (couleurs et
-/// style) et Motifs (décoration du fond), deux préférences indépendantes.
-class PageApparence extends StatelessWidget {
-  const PageApparence({
-    super.key,
-    required this.apparence,
-    required this.surThemes,
-    required this.surMotifs,
-  });
-
-  final ServiceApparence apparence;
-  final VoidCallback surThemes, surMotifs;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: apparence,
-      builder: (context, _) => CarteReglages(
-        enfants: [
-          LigneSousPage(
-            icone: Icons.palette_outlined,
-            titre: 'Thèmes',
-            sousTitre: 'Personnaliser les couleurs et le style de JARVIS',
-            statut: apparence.style.nom,
-            surAppui: surThemes,
-          ),
-          LigneSousPage(
-            icone: Icons.texture_rounded,
-            titre: 'Motifs',
-            sousTitre: 'Personnaliser l’arrière-plan de JARVIS',
-            statut: apparence.motif.nom,
-            surAppui: surMotifs,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Ligne « Revenir au précédent » : sa place est toujours réservée (rien ne
-/// bouge sous le doigt pendant qu'on compare les styles) ; elle apparaît en
-/// fondu dès que le choix diffère de celui trouvé à l'ouverture de la page.
-class _Revenir extends StatelessWidget {
-  const _Revenir({required this.visible, required this.surRevenir});
-
-  final bool visible;
-  final VoidCallback surRevenir;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: SizedBox(
-        height: 40,
-        child: AnimatedOpacity(
-          opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: !visible,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_circle_outline_rounded,
-                  size: 17,
-                  color: CouleursJarvis.signal,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Appliqué et enregistré',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: CouleursJarvis.texteSecondaire,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: visible ? surRevenir : null,
-                  icon: const Icon(Icons.undo_rounded, size: 17),
-                  label: const Text('Revenir au précédent'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: CouleursJarvis.signal,
-                    minimumSize: const Size(0, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Titre extends StatelessWidget {
-  const _Titre(this.texte);
-
-  final String texte;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4, bottom: 10),
-    child: Text(
-      texte,
-      style: TextStyle(
-        fontSize: 11.5,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: CouleursJarvis.texteSecondaire,
-      ),
-    ),
-  );
-}
-
-/// Grille responsive : 2 colonnes sur téléphone, 3 au-delà de 520 px.
-class _Grille extends StatelessWidget {
-  const _Grille({required this.nombre, required this.tuile});
-
-  final int nombre;
-  final Widget Function(int i, double largeur) tuile;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        const ecart = 12.0;
-        final colonnes = c.maxWidth >= 520 ? 3 : 2;
-        final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
-        return Wrap(
-          spacing: ecart,
-          runSpacing: ecart,
-          children: [
-            for (var i = 0; i < nombre; i++)
-              SizedBox(width: largeur, child: tuile(i, largeur)),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Contour et coche de l'élément choisi, en fondu.
-class _Cadre extends StatelessWidget {
-  const _Cadre({
-    required this.choisi,
-    required this.surChoix,
-    required this.libelle,
-    required this.child,
-  });
-
-  final bool choisi;
-  final VoidCallback surChoix;
-  final String libelle;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: choisi,
-      label: libelle,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: CouleursJarvis.coque,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            width: choisi ? 2 : 1,
-            color: choisi
-                ? CouleursJarvis.signal
-                : CouleursJarvis.trait.withValues(alpha: 0.8),
-          ),
-          boxShadow: choisi
-              ? [
-                  BoxShadow(
-                    color: CouleursJarvis.signal.withValues(alpha: 0.16),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : const [],
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: surChoix,
-            borderRadius: BorderRadius.circular(17),
-            child: Stack(
-              children: [
-                child,
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: AnimatedScale(
-                    scale: choisi ? 1 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutBack,
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: CouleursJarvis.signal,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: CouleursJarvis.coque,
-                          width: 2,
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.check_rounded,
-                        size: 14,
-                        color: CouleursJarvis.surSignal,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Thèmes
-// ---------------------------------------------------------------------------
-
-/// Thèmes : mode d'affichage (Clair / Sombre / Système) et style visuel,
-/// appliqués tout de suite, enregistrés ; « Revenir au précédent » rend le
-/// choix trouvé à l'ouverture.
-class PageThemes extends StatefulWidget {
-  const PageThemes({super.key, required this.apparence});
+/// Paramètres › Apparence, sur une seule page : mode d'affichage (Clair /
+/// Sombre / Système), styles visuels puis motifs du fond, chacun dans son
+/// carrousel horizontal (sélection directe, accrochage aux cartes), et
+/// l'intensité du motif. Tout s'applique tout de suite et s'enregistre ;
+/// « Revenir » rend le choix trouvé à l'ouverture de la page.
+class PageApparence extends StatefulWidget {
+  const PageApparence({super.key, required this.apparence});
 
   final ServiceApparence apparence;
 
   @override
-  State<PageThemes> createState() => _PageThemesState();
+  State<PageApparence> createState() => _PageApparenceState();
 }
 
-class _PageThemesState extends State<PageThemes> {
+class _PageApparenceState extends State<PageApparence> {
   late final PreferencesApparence _initial = widget.apparence.preferences;
 
   @override
@@ -263,52 +33,111 @@ class _PageThemesState extends State<PageThemes> {
     return ListenableBuilder(
       listenable: a,
       builder: (context, _) {
-        final change = a.mode != _initial.mode || a.style != _initial.style;
+        final styleChange =
+            a.mode != _initial.mode || a.style != _initial.style;
+        final motifChange =
+            a.motif != _initial.motif || a.intensite != _initial.intensite;
+        final palette = a.palette;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Revenir(
-              visible: change,
-              surRevenir: () => a.restaurer(
-                a.preferences.copyWith(
-                  mode: _initial.mode,
-                  style: _initial.style,
-                ),
-              ),
+            const _Titre('Mode d’affichage', revenable: false),
+            _Segments(
+              valeurs: ModeAffichage.values,
+              choisie: a.mode,
+              libelle: (m) => m.libelle,
+              surChoix: a.choisirMode,
             ),
-            const _Titre('MODE D’AFFICHAGE'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final m in ModeAffichage.values)
-                  PastilleReglage(
-                    libelle: m.libelle,
-                    choisie: a.mode == m,
-                    surChoix: () => a.choisirMode(m),
-                  ),
-              ],
+            const SizedBox(height: 28),
+            _Titre(
+              'Styles visuels',
+              revenir: styleChange
+                  ? () => a.restaurer(
+                      a.preferences.copyWith(
+                        mode: _initial.mode,
+                        style: _initial.style,
+                      ),
+                    )
+                  : null,
             ),
-            const SizedBox(height: 8),
-            NoteReglage(
-              a.mode == ModeAffichage.systeme
-                  ? 'Suit le réglage de l’appareil (actuellement : '
-                        '${a.luminositeSysteme == Brightness.dark ? 'sombre' : 'clair'}).'
-                  : 'Le mode s’applique à tous les styles.',
-            ),
-            const SizedBox(height: 26),
-            const _Titre('STYLE VISUEL'),
-            _Grille(
+            _Carrousel(
+              cle: 'styles',
               nombre: StyleVisuel.values.length,
-              tuile: (i, _) {
+              choisie: StyleVisuel.values.indexOf(a.style),
+              carte: (i) {
                 final s = StyleVisuel.values[i];
-                return _CadreStyle(
-                  style: s,
-                  palette: s.palette(a.luminosite),
-                  choisi: a.style == s,
+                return _CarteChoix(
+                  nom: s.nom,
+                  police: s.palette(a.luminosite).identite.policeAffichage,
+                  choisie: a.style == s,
                   surChoix: () => a.choisirStyle(s),
+                  // Mini-interface dessinée pour 220 × 112, agrandie
+                  // d'un bloc pour remplir la carte.
+                  apercu: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: 220,
+                      height: 112,
+                      child: ApercuStyle(palette: s.palette(a.luminosite)),
+                    ),
+                  ),
                 );
               },
+            ),
+            const SizedBox(height: 26),
+            _Titre(
+              'Motifs du fond',
+              revenir: motifChange
+                  ? () => a.restaurer(
+                      a.preferences.copyWith(
+                        motif: _initial.motif,
+                        intensite: _initial.intensite,
+                      ),
+                    )
+                  : null,
+            ),
+            _Carrousel(
+              cle: 'motifs',
+              nombre: MotifJarvis.values.length,
+              choisie: MotifJarvis.values.indexOf(a.motif),
+              carte: (i) {
+                final m = MotifJarvis.values[i];
+                return _CarteChoix(
+                  nom: m.nom,
+                  choisie: a.motif == m,
+                  surChoix: () => a.choisirMotif(m),
+                  apercu: CustomPaint(
+                    painter: _PeintreApercuMotif(m, palette, a.intensite),
+                  ),
+                );
+              },
+            ),
+            // Intensité : sous les motifs, sans autre page ; masquée sans
+            // motif.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: a.motif == MotifJarvis.aucun
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: CurseurReglage(
+                        titre: 'Intensité',
+                        valeurAffichee: '${(a.intensite * 100).round()} %',
+                        valeur: a.intensite,
+                        min: 0,
+                        max: 1,
+                        divisions: 20,
+                        icones: (
+                          Icons.brightness_low_rounded,
+                          Icons.brightness_high_rounded,
+                        ),
+                        surChangement: (v) =>
+                            a.reglerIntensite(v, enregistrer: false),
+                        surFin: (v) => a.reglerIntensite(v),
+                      ),
+                    ),
             ),
           ],
         );
@@ -317,69 +146,487 @@ class _PageThemesState extends State<PageThemes> {
   }
 }
 
-class _CadreStyle extends StatelessWidget {
-  const _CadreStyle({
-    required this.style,
-    required this.palette,
+/// Titre de section ; [revenir] (choix modifié sur cette page) fait
+/// apparaître « Revenir » à droite, sans rien décaler.
+class _Titre extends StatelessWidget {
+  const _Titre(this.texte, {this.revenir, this.revenable = true});
+
+  final String texte;
+  final VoidCallback? revenir;
+
+  /// Faux : aucun « Revenir » pour ce titre (mode d'affichage).
+  final bool revenable;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                texte,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w600,
+                  color: CouleursJarvis.texte,
+                ),
+              ),
+            ),
+          ),
+          if (revenable)
+            AnimatedOpacity(
+              opacity: revenir == null ? 0 : 1,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: revenir == null,
+                child: TextButton.icon(
+                  onPressed: revenir,
+                  icon: const Icon(Icons.undo_rounded, size: 17),
+                  label: const Text('Revenir'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: CouleursJarvis.signal,
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sélecteur segmenté : segments de même largeur, le choisi marqué en
+/// fondu (fond et contour de l'accent, coche).
+class _Segments<T> extends StatelessWidget {
+  const _Segments({
+    required this.valeurs,
+    required this.choisie,
+    required this.libelle,
+    required this.surChoix,
+  });
+
+  final List<T> valeurs;
+  final T choisie;
+  final String Function(T) libelle;
+  final ValueChanged<T> surChoix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: CouleursJarvis.coque.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CouleursJarvis.trait.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        children: [
+          for (final v in valeurs)
+            Expanded(
+              child: _Segment(
+                libelle: libelle(v),
+                choisi: v == choisie,
+                surChoix: () => surChoix(v),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.libelle,
     required this.choisi,
     required this.surChoix,
   });
 
-  final StyleVisuel style;
-  final PaletteJarvis palette;
+  final String libelle;
   final bool choisi;
   final VoidCallback surChoix;
 
   @override
   Widget build(BuildContext context) {
-    return _Cadre(
-      choisi: choisi,
-      surChoix: surChoix,
-      libelle: 'Style ${style.nom}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: SizedBox(
-                height: 104,
-                child: ApercuStyle(palette: palette),
+    return Semantics(
+      button: true,
+      selected: choisi,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: choisi
+              ? CouleursJarvis.signal.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: choisi
+                ? CouleursJarvis.signal.withValues(alpha: 0.55)
+                : Colors.transparent,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: surChoix,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (choisi) ...[
+                        Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: CouleursJarvis.signal,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Flexible(
+                        child: Text(
+                          libelle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: choisi
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: choisi
+                                ? CouleursJarvis.signal
+                                : CouleursJarvis.texte,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  style.nom,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: palette.identite.policeAffichage,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: CouleursJarvis.texte,
+        ),
+      ),
+    );
+  }
+}
+
+/// Carrousel horizontal : sur téléphone une grande carte entière et le
+/// début de la suivante (on devine le glissement) ; sur grand écran autant
+/// de cartes que la largeur le permet. Accrochage aux cartes, glissement au
+/// doigt, à la souris et au pavé tactile ; le défilement vertical de la
+/// page n'est pas gêné (axes différents). Il se place sur la carte choisie
+/// à l'ouverture et la suit si le choix change ailleurs.
+class _Carrousel extends StatefulWidget {
+  const _Carrousel({
+    required this.cle,
+    required this.nombre,
+    required this.choisie,
+    required this.carte,
+  });
+
+  final String cle;
+  final int nombre;
+  final int choisie;
+  final Widget Function(int i) carte;
+
+  /// Écart entre deux cartes.
+  static const ecart = 12.0;
+
+  @override
+  State<_Carrousel> createState() => _CarrouselState();
+}
+
+class _CarrouselState extends State<_Carrousel> {
+  PageController? _controle;
+  double _fraction = 0;
+
+  /// Première carte entièrement visible, suivie pour les flèches.
+  int _page = 0;
+
+  @override
+  void didUpdateWidget(_Carrousel ancien) {
+    super.didUpdateWidget(ancien);
+    final c = _controle;
+    if (widget.choisie != ancien.choisie && c != null && c.hasClients) {
+      // Carte touchée à moitié visible, ou choix fait ailleurs
+      // (« Revenir ») : on montre la carte choisie en entier.
+      final page = c.page ?? 0;
+      final visibles = (1 / _fraction).floor();
+      if (widget.choisie < page.floor() ||
+          widget.choisie >= page.floor() + visibles) {
+        _aller(widget.choisie);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controle?.dispose();
+    super.dispose();
+  }
+
+  void _surDefilement() {
+    final p = (_controle?.page ?? 0).round();
+    if (p != _page && mounted) setState(() => _page = p);
+  }
+
+  void _aller(int page) => _controle?.animateToPage(
+    page.clamp(0, widget.nombre - 1),
+    duration: const Duration(milliseconds: 380),
+    curve: Curves.easeOutCubic,
+  );
+
+  PageController _pour(double fraction) {
+    final ancien = _controle;
+    if (ancien != null && (fraction - _fraction).abs() < 0.001) return ancien;
+    final page = ancien != null && ancien.hasClients
+        ? (ancien.page ?? widget.choisie.toDouble()).round()
+        : widget.choisie;
+    ancien?.dispose();
+    _fraction = fraction;
+    _page = page;
+    return _controle = PageController(
+      viewportFraction: fraction,
+      initialPage: page,
+    )..addListener(_surDefilement);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final largeur = c.maxWidth;
+        final telephone = largeur < 600;
+        // Téléphone : une carte principale (80 %) ; plus large : autant de
+        // cartes d'environ 250 px que possible. Toujours un tiers de la
+        // suivante visible : on devine qu'il y a de quoi glisser.
+        final entieres = telephone ? 1 : (largeur / 250).floor().clamp(1, 6);
+        final carte = telephone
+            ? largeur * 0.8
+            : (largeur - _Carrousel.ecart * entieres) / (entieres + 0.35);
+        final pas = carte + _Carrousel.ecart;
+        final controle = _pour((pas / largeur).clamp(0.1, 1.0));
+        final apercu = (carte * 0.5).clamp(118.0, 168.0);
+        final visibles = (1 / _fraction).floor();
+        final avant = _page > 0;
+        final apres = _page + visibles < widget.nombre;
+        return SizedBox(
+          height: apercu + 42,
+          child: Stack(
+            children: [
+              ScrollConfiguration(
+                // Souris et pavé tactile glissent aussi (Web, Windows).
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: PointerDeviceKind.values.toSet(),
+                  scrollbars: false,
+                ),
+                child: PageView.builder(
+                  key: PageStorageKey('carrousel-${widget.cle}'),
+                  controller: controle,
+                  padEnds: false,
+                  itemCount: widget.nombre,
+                  itemBuilder: (context, i) => Padding(
+                    padding: const EdgeInsets.only(right: _Carrousel.ecart),
+                    child: _HauteurApercu(
+                      hauteur: apercu,
+                      child: widget.carte(i),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  style.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    color: CouleursJarvis.texteSecondaire,
-                  ),
+              ),
+              // Grand écran (souris, clavier) : flèches, seulement du côté
+              // où il reste des cartes.
+              if (!telephone) ...[
+                _Fleche(
+                  visible: avant,
+                  gauche: true,
+                  hauteur: apercu,
+                  surAppui: () => _aller(_page - visibles),
+                ),
+                _Fleche(
+                  visible: apres,
+                  gauche: false,
+                  hauteur: apercu,
+                  surAppui: () => _aller(_page + visibles),
                 ),
               ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Flèche ronde d'un carrousel (grand écran), centrée sur les aperçus.
+class _Fleche extends StatelessWidget {
+  const _Fleche({
+    required this.visible,
+    required this.gauche,
+    required this.hauteur,
+    required this.surAppui,
+  });
+
+  final bool visible;
+  final bool gauche;
+  final double hauteur;
+  final VoidCallback surAppui;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: gauche ? 6 : null,
+      right: gauche ? null : 6,
+      top: hauteur / 2 - 20,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 180),
+        child: IgnorePointer(
+          ignoring: !visible,
+          child: IconButton.filledTonal(
+            tooltip: gauche ? 'Précédents' : 'Suivants',
+            onPressed: surAppui,
+            icon: Icon(
+              gauche ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: CouleursJarvis.coque.withValues(alpha: 0.92),
+              foregroundColor: CouleursJarvis.texte,
+              minimumSize: const Size(40, 40),
+              side: BorderSide(color: CouleursJarvis.trait),
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Transmet la hauteur des aperçus aux cartes du carrousel.
+class _HauteurApercu extends InheritedWidget {
+  const _HauteurApercu({required this.hauteur, required super.child});
+
+  final double hauteur;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_HauteurApercu>()?.hauteur ??
+      140;
+
+  @override
+  bool updateShouldNotify(_HauteurApercu ancien) => ancien.hauteur != hauteur;
+}
+
+/// Carte d'un carrousel : grand aperçu, puis le nom seul. Choisie :
+/// contour de l'accent et coche, en fondu.
+class _CarteChoix extends StatelessWidget {
+  const _CarteChoix({
+    required this.nom,
+    required this.choisie,
+    required this.surChoix,
+    required this.apercu,
+    this.police,
+  });
+
+  final String nom;
+  final bool choisie;
+  final VoidCallback surChoix;
+  final Widget apercu;
+
+  /// Police du nom (celle du style présenté).
+  final String? police;
+
+  @override
+  Widget build(BuildContext context) {
+    final hauteur = _HauteurApercu.of(context);
+    return Semantics(
+      button: true,
+      selected: choisie,
+      label: nom,
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: surChoix,
+          borderRadius: BorderRadius.circular(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                height: hauteur,
+                padding: EdgeInsets.all(choisie ? 3 : 0),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    width: choisie ? 2 : 1,
+                    color: choisie
+                        ? CouleursJarvis.signal
+                        : CouleursJarvis.trait.withValues(alpha: 0.8),
+                  ),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(choisie ? 13 : 17),
+                      child: RepaintBoundary(child: apercu),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: AnimatedScale(
+                        scale: choisie ? 1 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutBack,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: CouleursJarvis.signal,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: CouleursJarvis.coque,
+                              width: 2,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.check_rounded,
+                            size: 14,
+                            color: CouleursJarvis.surSignal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                nom,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: police,
+                  fontSize: 14,
+                  fontWeight: choisie ? FontWeight.w700 : FontWeight.w500,
+                  color: choisie ? CouleursJarvis.signal : CouleursJarvis.texte,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -520,173 +767,7 @@ class _Ligne extends StatelessWidget {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Motifs
-// ---------------------------------------------------------------------------
-
-/// Motifs : décoration du fond (indépendante du style), avec aperçu dans
-/// les couleurs du style affiché, et intensité.
-class PageMotifs extends StatefulWidget {
-  const PageMotifs({super.key, required this.apparence});
-
-  final ServiceApparence apparence;
-
-  @override
-  State<PageMotifs> createState() => _PageMotifsState();
-}
-
-class _PageMotifsState extends State<PageMotifs> {
-  late final PreferencesApparence _initial = widget.apparence.preferences;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = widget.apparence;
-    return ListenableBuilder(
-      listenable: a,
-      builder: (context, _) {
-        final change =
-            a.motif != _initial.motif || a.intensite != _initial.intensite;
-        final palette = a.palette;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Revenir(
-              visible: change,
-              surRevenir: () => a.restaurer(
-                a.preferences.copyWith(
-                  motif: _initial.motif,
-                  intensite: _initial.intensite,
-                ),
-              ),
-            ),
-            const _Titre('MOTIF DU FOND'),
-            _Grille(
-              nombre: MotifJarvis.values.length,
-              tuile: (i, _) {
-                final m = MotifJarvis.values[i];
-                return _CadreMotif(
-                  motif: m,
-                  palette: palette,
-                  intensite: a.intensite,
-                  choisi: a.motif == m,
-                  surChoix: () => a.choisirMotif(m),
-                );
-              },
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: a.motif == MotifJarvis.aucun
-                  ? const SizedBox(width: double.infinity)
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 22),
-                      child: CarteReglages(
-                        enfants: [
-                          CurseurReglage(
-                            titre: 'Intensité du motif',
-                            valeurAffichee: '${(a.intensite * 100).round()} %',
-                            valeur: a.intensite,
-                            min: 0,
-                            max: 1,
-                            divisions: 20,
-                            icones: (
-                              Icons.brightness_low_rounded,
-                              Icons.brightness_high_rounded,
-                            ),
-                            surChangement: (v) =>
-                                a.reglerIntensite(v, enregistrer: false),
-                            surFin: (v) => a.reglerIntensite(v),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 14),
-            const NoteReglage(
-              'Le motif reste derrière les messages, très atténué : il ne '
-              'gêne jamais la lecture. Il ne change pas les couleurs du thème.',
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _CadreMotif extends StatelessWidget {
-  const _CadreMotif({
-    required this.motif,
-    required this.palette,
-    required this.intensite,
-    required this.choisi,
-    required this.surChoix,
-  });
-
-  final MotifJarvis motif;
-  final PaletteJarvis palette;
-  final double intensite;
-  final bool choisi;
-  final VoidCallback surChoix;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Cadre(
-      choisi: choisi,
-      surChoix: surChoix,
-      libelle: 'Motif ${motif.nom}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: SizedBox(
-                height: 96,
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _PeintreApercuMotif(motif, palette, intensite),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  motif.nom,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    color: CouleursJarvis.texte,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  motif.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    color: CouleursJarvis.texteSecondaire,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Aperçu d'un motif : le vrai fond de l'accueil, en réduit. L'intensité
+/// Aperçu d’un motif : le vrai fond de l’accueil, en réduit. L’intensité
 /// est un peu relevée pour que le motif se voie dans une petite tuile.
 class _PeintreApercuMotif extends CustomPainter {
   const _PeintreApercuMotif(this.motif, this.palette, this.intensite);

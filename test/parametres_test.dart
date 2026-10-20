@@ -12,7 +12,9 @@ import 'package:ia_jarvis/services/speech_recognition_service.dart';
 import 'package:ia_jarvis/services/tts_service.dart';
 import 'package:ia_jarvis/services/voice_session.dart';
 import 'package:ia_jarvis/services/voice_settings_service.dart';
+import 'package:ia_jarvis/services/apparence/service_apparence.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
+import 'package:ia_jarvis/widgets/parametres/fenetre_parametres.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
 class _Tts implements TtsService {
@@ -108,9 +110,13 @@ Future<VoiceSettingsService> _ouvrir(WidgetTester tester, Size taille) async {
     niveau: _Niveau(),
     reglages: reglages,
   );
+  final apparence = ServiceApparence(stockage: StockageMemoire());
+  addTearDown(() => PaletteJarvis.active = PaletteJarvis.jarvisClair);
   await tester.pumpWidget(
     MaterialApp(
       theme: themeJarvis(),
+      builder: (context, enfant) =>
+          PorteeApparence(service: apparence, child: enfant!),
       home: AccueilPage(session: session, pim: PimController()),
     ),
   );
@@ -169,7 +175,7 @@ void main() {
     // Tout le panneau défile sans débordement.
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -2000));
     await tester.pump();
-    expect(find.text('Écouter un aperçu'), findsOneWidget);
+    expect(find.byTooltip('Écouter un aperçu'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byTooltip('Retour aux paramètres'));
@@ -198,15 +204,108 @@ void main() {
       ),
       findsOneWidget,
     );
-    // Une seule ligne de quatre tuiles sur grand écran.
+    // Grille 2 × 2, même sur grand écran.
     final hauts = find
         .byType(TuileChoix)
         .evaluate()
         .map((e) => tester.getRect(find.byWidget(e.widget)).top)
         .toSet();
-    expect(hauts, hasLength(1));
+    expect(hauts, hasLength(2));
     expect(find.text('2 200'), findsNothing);
     expect(find.textContaining('Par défaut'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  Future<void> images(WidgetTester tester, [int n = 20]) async {
+    for (var i = 0; i < n; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
+
+  testWidgets('téléphone : Apparence directement depuis la liste', (
+    tester,
+  ) async {
+    await _ouvrir(tester, const Size(390, 844));
+    // Apparence en tête de liste, sans détour par Général.
+    final apparence = tester.getTopLeft(find.text('Apparence')).dy;
+    expect(apparence, lessThan(tester.getTopLeft(find.text('Général')).dy));
+    await tester.tap(find.text('Apparence'));
+    await images(tester);
+    expect(find.text('Mode d’affichage'), findsOneWidget);
+    expect(find.text('Styles visuels'), findsOneWidget);
+    expect(find.text('Motifs du fond'), findsOneWidget);
+    expect(find.text('Voir tout'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('téléphone : la flèche revient d’un niveau, la croix ferme '
+      'tout (accueil intact), le retour d’Android revient d’un niveau', (
+    tester,
+  ) async {
+    await _ouvrir(tester, const Size(390, 844));
+    for (final section in [
+      'Apparence',
+      'Général',
+      'Chat vocal',
+      'Particules PIM',
+      'Confidentialité',
+    ]) {
+      // Flèche : retour à la liste des Paramètres, toujours ouverts.
+      await tester.tap(find.text(section));
+      await images(tester);
+      await tester.tap(find.byTooltip('Retour aux paramètres'));
+      await images(tester);
+      expect(find.byType(FenetreParametres), findsOneWidget, reason: section);
+      expect(find.text('Confidentialité'), findsOneWidget, reason: section);
+    }
+
+    // Retour d'Android dans une section : un niveau seulement.
+    await tester.tap(find.text('Particules PIM'));
+    await images(tester);
+    await tester.binding.handlePopRoute();
+    await images(tester);
+    expect(find.byType(FenetreParametres), findsOneWidget);
+    expect(find.text('FORME DE JARVIS'), findsNothing);
+
+    // Croix depuis une section : tout se ferme d'un coup.
+    await tester.tap(find.text('Chat vocal'));
+    await images(tester);
+    await tester.tap(find.byTooltip('Fermer'));
+    await images(tester, 40);
+    expect(find.byType(FenetreParametres), findsNothing);
+    expect(find.byType(AccueilPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // Indicateur « Enregistré » (sauvegarde à la fermeture) : laissé finir.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('ordinateur : la croix ferme tout depuis une sous-page', (
+    tester,
+  ) async {
+    await _ouvrir(tester, const Size(1366, 768));
+    await tester.tap(find.text('Apparence'));
+    await images(tester);
+    expect(find.text('Styles visuels'), findsOneWidget);
+    await tester.tap(find.byTooltip('Fermer'));
+    await images(tester, 40);
+    expect(find.byType(FenetreParametres), findsNothing);
+    expect(find.byType(AccueilPage), findsOneWidget);
+  });
+
+  testWidgets('Particules PIM : la grille entière est centrée verticalement', (
+    tester,
+  ) async {
+    await _ouvrir(tester, const Size(390, 844));
+    await tester.tap(find.text('Particules PIM'));
+    await images(tester);
+    final tuiles = find.byType(TuileChoix);
+    expect(tuiles, findsNWidgets(4));
+    final haut = tester.getRect(tuiles.first).top;
+    final bas = tester.getRect(tuiles.last).bottom;
+    final milieu = (haut + bas) / 2;
+    // Centre de la grille proche du centre de l'espace sous l'en-tête.
+    expect(milieu, greaterThan(844 * 0.4));
+    expect(milieu, lessThan(844 * 0.62));
     expect(tester.takeException(), isNull);
   });
 }

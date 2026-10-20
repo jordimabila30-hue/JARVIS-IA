@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/api_jarvis.dart';
+import '../../services/apparence/service_apparence.dart';
 import '../../services/authentification/auth_service.dart';
 import '../../services/conversation/consentement_analyse.dart';
 import '../../services/voice_session.dart';
@@ -14,6 +15,7 @@ import '../../services/integrations/service_gmail.dart';
 import '../../services/utilisation/service_utilisation.dart';
 import '../integrations/panneau_gmail.dart';
 import '../integrations/panneau_outils.dart';
+import 'pages_apparence.dart';
 import 'pages_jarvis_touch.dart';
 import '../utilisation/panneau_utilisation.dart';
 import 'elements_parametres.dart';
@@ -25,27 +27,21 @@ import 'panneau_general.dart';
 
 /// Sections du panneau Paramètres.
 enum SectionParametres {
+  apparence('Apparence', Icons.palette_outlined),
   general('Général', Icons.tune_rounded),
-  utilisation('Utilisation', Icons.data_usage_rounded),
-  outils(
-    'Outils',
-    Icons.build_outlined,
-    'Gérer les services connectés à JARVIS',
-  ),
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
+  utilisation('Utilisation', Icons.data_usage_rounded),
+  outils('Outils', Icons.build_outlined),
   confidentialite('Confidentialité', Icons.lock_outline_rounded),
 
   /// Ouverte par la carte du compte, en bas de la navigation.
   compte('Compte', Icons.person_outline_rounded);
 
-  const SectionParametres(this.libelle, this.icone, [this.description]);
+  const SectionParametres(this.libelle, this.icone);
 
   final String libelle;
   final IconData icone;
-
-  /// Sous-titre de l'entrée sur téléphone (Outils seulement).
-  final String? description;
 }
 
 /// Compte affiché en bas de la navigation. Aucune connexion n'existe
@@ -205,7 +201,24 @@ class _FenetreParametresState extends State<FenetreParametres> {
     widget.session.reglages.chargerCapacites();
   }
 
-  void _fermer() => Navigator.of(context).maybePop();
+  bool _fermeture = false;
+
+  /// Croix : ferme TOUS les Paramètres d'un coup et rend l'accueil tel
+  /// quel (conversation intacte), quelle que soit la sous-page ouverte.
+  /// `pop` (et non `maybePop`) : le retour d'un niveau du [PopScope] ne
+  /// s'applique pas ici. Une seule fermeture, même sur double appui.
+  void _fermer() {
+    if (_fermeture) return;
+    _fermeture = true;
+    final route = ModalRoute.of(context);
+    final navigateur = Navigator.of(context);
+    if (route == null || route.isCurrent) {
+      navigateur.pop();
+    } else {
+      // Une liste déroulante est ouverte par-dessus : tout se ferme.
+      navigateur.removeRoute(route);
+    }
+  }
 
   void _choisir(SectionParametres s) => setState(() {
     _section = s;
@@ -501,6 +514,12 @@ class _Navigation extends StatelessWidget {
   /// Téléphone : entrées plus hautes, chevron à droite.
   final bool grand;
 
+  /// Premières sections des groupes de la liste du téléphone.
+  static const _debutsDeGroupe = {
+    SectionParametres.chatVocal,
+    SectionParametres.utilisation,
+  };
+
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
@@ -533,9 +552,25 @@ class _Navigation extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   for (final s in SectionParametres.values)
-                    if (s != SectionParametres.compte)
+                    if (s != SectionParametres.compte) ...[
+                      // Téléphone : trois groupes (apparence, voix et
+                      // particules, compte et données), séparés par un
+                      // espace ; un trait fin entre deux lignes d'un groupe.
+                      if (grand &&
+                          _debutsDeGroupe.contains(s) &&
+                          s != SectionParametres.values.first)
+                        const SizedBox(height: 14)
+                      else if (grand && s != SectionParametres.values.first)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 60),
+                          child: Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: CouleursJarvis.trait.withValues(alpha: 0.45),
+                          ),
+                        ),
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: EdgeInsets.only(bottom: grand ? 0 : 4),
                         child: _EntreeNavigation(
                           section: s,
                           choisie: s == section,
@@ -543,6 +578,7 @@ class _Navigation extends StatelessWidget {
                           surChoix: () => surChoix(s),
                         ),
                       ),
+                    ],
                 ],
               ),
             ),
@@ -594,45 +630,47 @@ class _EntreeNavigation extends StatelessWidget {
           focusColor: CouleursJarvis.signal.withValues(alpha: 0.12),
           hoverColor: CouleursJarvis.coque.withValues(alpha: 0.7),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: grand ? 54 : 44),
+            constraints: BoxConstraints(minHeight: grand ? 56 : 44),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: EdgeInsets.symmetric(horizontal: grand ? 6 : 12),
               child: Row(
                 children: [
-                  Icon(
-                    section.icone,
-                    size: 19,
-                    color: choisie
-                        ? CouleursJarvis.signal
-                        : CouleursJarvis.texteSecondaire,
-                  ),
-                  const SizedBox(width: 12),
+                  if (grand)
+                    // Téléphone : icône dans une pastille douce, toutes
+                    // alignées sur la même colonne.
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: CouleursJarvis.signal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        section.icone,
+                        size: 20,
+                        color: CouleursJarvis.signal,
+                      ),
+                    )
+                  else
+                    Icon(
+                      section.icone,
+                      size: 19,
+                      color: choisie
+                          ? CouleursJarvis.signal
+                          : CouleursJarvis.texteSecondaire,
+                    ),
+                  SizedBox(width: grand ? 16 : 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          section.libelle,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: grand ? 15.5 : 14,
-                            fontWeight: choisie
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: couleur,
-                          ),
-                        ),
-                        if (grand && section.description != null)
-                          Text(
-                            section.description!,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: CouleursJarvis.texteSecondaire,
-                            ),
-                          ),
-                      ],
+                    child: Text(
+                      section.libelle,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: grand ? 16 : 14,
+                        fontWeight: choisie || grand
+                            ? (grand ? FontWeight.w500 : FontWeight.w600)
+                            : FontWeight.w400,
+                        color: couleur,
+                      ),
                     ),
                   ),
                   if (grand)
@@ -804,13 +842,25 @@ class _Contenu extends StatelessWidget {
   final double marge;
   final bool avecTitre;
 
+  /// Apparence : thèmes et motifs sur une seule page.
+  Widget _apparence(BuildContext context) {
+    final a = ServiceApparence.of(context, ecouter: false);
+    if (a == null) {
+      return const NoteReglage('Apparence indisponible dans cette fenêtre.');
+    }
+    return PageApparence(apparence: a);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Outils : colonne plus étroite, centrée dans la place disponible.
     final outils = section == SectionParametres.outils;
     // Page d'un outil : bloc centré aussi verticalement quand il tient
     // dans l'écran (défilement sinon).
-    final centre = outils && outil != null;
+    // Particules PIM : la grille ENTIÈRE est centrée verticalement dans
+    // l'espace sous l'en-tête (défilement si la place manque).
+    final pim = section == SectionParametres.particules;
+    final centre = (outils && outil != null) || pim;
     final marges = EdgeInsets.fromLTRB(
       marge,
       avecTitre ? 34 : 8,
@@ -822,10 +872,10 @@ class _Contenu extends StatelessWidget {
         key: PageStorageKey((section, outil, pageGenerale)),
         padding: marges,
         child: Align(
-          alignment: outils ? Alignment.topCenter : Alignment.topLeft,
+          alignment: outils || pim ? Alignment.topCenter : Alignment.topLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: outils ? 560 : 680,
+              maxWidth: outils || pim ? 560 : 680,
               minHeight: centre
                   ? (c.maxHeight - marges.vertical).clamp(0, double.infinity)
                   : 0,
@@ -886,6 +936,7 @@ class _Contenu extends StatelessWidget {
                     const SizedBox(height: 6),
                   ],
                   switch (section) {
+                    SectionParametres.apparence => _apparence(context),
                     SectionParametres.general => PanneauGeneral(
                       page: pageGenerale,
                       surPage: (p) => surPageGenerale?.call(p),
@@ -905,8 +956,8 @@ class _Contenu extends StatelessWidget {
                     SectionParametres.chatVocal => PanneauChatVocal(
                       session: session,
                     ),
-                    SectionParametres.particules => _FormePrincipale(
-                      formes: formes,
+                    SectionParametres.particules => Expanded(
+                      child: Center(child: _FormePrincipale(formes: formes)),
                     ),
                     SectionParametres.confidentialite => PanneauConfidentialite(
                       consentement: consentement,
@@ -1045,11 +1096,13 @@ class _FormePrincipale extends StatelessWidget {
         final principale = formes.forme;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 10),
+              padding: const EdgeInsets.only(bottom: 14),
               child: Text(
                 'FORME DE JARVIS',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
@@ -1058,21 +1111,19 @@ class _FormePrincipale extends StatelessWidget {
                 ),
               ),
             ),
-            LayoutBuilder(
-              builder: (context, c) {
-                // Quatre tuiles sur une ligne si la place le permet, sinon
-                // deux par ligne.
-                const ecart = 12.0;
-                final colonnes = c.maxWidth >= 480 ? 4 : 2;
-                final largeur =
-                    (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
-                return Wrap(
-                  spacing: ecart,
-                  runSpacing: ecart,
+            // Grille 2 × 2, quelle que soit la largeur : deux rangées de
+            // deux tuiles de même largeur (sans LayoutBuilder : la section
+            // mesure sa hauteur pour centrer la grille).
+            for (var rang = 0; rang < FormePim.values.length; rang += 2) ...[
+              if (rang > 0) const SizedBox(height: 14),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final f in FormePim.values)
-                      SizedBox(
-                        width: largeur,
+                    for (final (k, f)
+                        in FormePim.values.skip(rang).take(2).indexed) ...[
+                      if (k > 0) const SizedBox(width: 14),
+                      Expanded(
                         child: TuileChoix(
                           icone: (couleur) => icone(f, couleur),
                           libelle: f.libelle,
@@ -1080,10 +1131,11 @@ class _FormePrincipale extends StatelessWidget {
                           surChoix: () => formes.choisir(f),
                         ),
                       ),
+                    ],
                   ],
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ],
         );
       },

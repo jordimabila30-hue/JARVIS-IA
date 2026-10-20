@@ -5,15 +5,11 @@ import '../../theme/theme_jarvis.dart';
 import 'elements_parametres.dart';
 
 /// Sous-pages de Paramètres › Général (comme Outils › Gmail) :
-/// JARVIS Touch, puis Capture d’écran ou Personnalisation ; Apparence,
-/// puis Thèmes ou Motifs.
+/// JARVIS Touch, puis Capture d’écran ou Personnalisation.
 enum PageGenerale {
   touch('JARVIS Touch', null),
   capture('Capture d’écran', PageGenerale.touch),
-  personnalisation('Personnalisation', PageGenerale.touch),
-  apparence('Apparence', null),
-  themes('Thèmes', PageGenerale.apparence),
-  motifs('Motifs', PageGenerale.apparence);
+  personnalisation('Personnalisation', PageGenerale.touch);
 
   const PageGenerale(this.libelle, this.parent);
 

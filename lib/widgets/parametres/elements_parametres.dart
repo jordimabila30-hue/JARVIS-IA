@@ -125,7 +125,7 @@ class LigneReglage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: LayoutBuilder(
         builder: (context, c) {
           final texte = TexteReglage(titre: titre, description: description);
@@ -306,7 +306,7 @@ class CurseurReglage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -493,19 +493,19 @@ class TuileChoix extends StatelessWidget {
           onTap: surChoix,
           focusColor: CouleursJarvis.signal.withValues(alpha: 0.12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+            padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(height: 32, child: Center(child: icone(couleur))),
-                const SizedBox(height: 10),
+                SizedBox(height: 36, child: Center(child: icone(couleur))),
+                const SizedBox(height: 12),
                 Text(
                   libelle,
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 14.5,
                     fontWeight: choisie ? FontWeight.w600 : FontWeight.w500,
                     color: couleur,
                   ),

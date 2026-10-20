@@ -30,17 +30,33 @@ class PanneauChatVocal extends StatelessWidget {
           children: [
             CarteReglages(
               titre: 'Voix',
-              enfants: [_profil(r), _langue(r), _voix(r)],
+              enfants: [
+                _profil(r),
+                _langue(r),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _voix(r),
+                    EtatApercuVoix(session: session),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 28),
-            CarteReglages(titre: 'Diction', enfants: _diction(r)),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
+            CarteReglages(titre: 'Expression', enfants: _diction(r)),
+            const SizedBox(height: 20),
             CarteReglages(
               titre: 'Écoute',
-              enfants: [_micro(r), _reponseAuto(r), _interruption(r)],
+              enfants: [_micro(r), _reponseAuto(r)],
             ),
-            const SizedBox(height: 28),
-            CarteApercuVoix(session: session),
+            const SizedBox(height: 20),
+            // Réglages secondaires, repliés : rien n'est perdu, l'écran
+            // reste court.
+            CarteReglages(
+              enfants: [
+                _Repliable(titre: 'Options avancées', enfant: _interruption(r)),
+              ],
+            ),
           ],
         );
       },
@@ -49,27 +65,44 @@ class PanneauChatVocal extends StatelessWidget {
 
   // --- Profil, langue, voix ---------------------------------------------------
 
+  /// Profils en grille régulière (2 colonnes sur téléphone, 4 au-delà).
   Widget _profil(VoiceSettings r) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const TexteReglage(titre: 'Profil vocal'),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in ProfilVocal.predefinis)
-                PastilleReglage(
-                  libelle: p.libelle,
-                  choisie: r.profil == p,
-                  surChoix: () => _service.choisirProfil(p),
-                ),
-              if (r.profil == ProfilVocal.personnalise)
-                const PastilleReglage(libelle: 'Personnalisé', choisie: true),
-            ],
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, c) {
+              const ecart = 8.0;
+              final colonnes = c.maxWidth >= 480 ? 4 : 2;
+              final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+              return Wrap(
+                spacing: ecart,
+                runSpacing: ecart,
+                children: [
+                  for (final p in ProfilVocal.predefinis)
+                    SizedBox(
+                      width: largeur,
+                      child: _Choix(
+                        libelle: p.libelle,
+                        choisi: r.profil == p,
+                        surChoix: () => _service.choisirProfil(p),
+                      ),
+                    ),
+                  if (r.profil == ProfilVocal.personnalise)
+                    SizedBox(
+                      width: largeur,
+                      child: const _Choix(
+                        libelle: 'Personnalisé',
+                        choisi: true,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -99,17 +132,19 @@ class PanneauChatVocal extends StatelessWidget {
     if (voix.isEmpty) {
       return LigneReglage(
         titre: 'Voix',
-        largeurControle: 260,
-        controle: ListeReglage<String?>(
-          libelle: 'Voix',
-          valeur: null,
-          options: [
-            (
-              null,
-              _service.capacitesChargees ? 'Voix du système' : 'Recherche…',
-            ),
-          ],
-          surChoix: null,
+        largeurControle: 320,
+        controle: _avecApercu(
+          ListeReglage<String?>(
+            libelle: 'Voix',
+            valeur: null,
+            options: [
+              (
+                null,
+                _service.capacitesChargees ? 'Voix du système' : 'Recherche…',
+              ),
+            ],
+            surChoix: null,
+          ),
         ),
       );
     }
@@ -124,17 +159,28 @@ class PanneauChatVocal extends StatelessWidget {
     );
     return LigneReglage(
       titre: 'Voix',
-      largeurControle: 260,
-      controle: ListeReglage<String>(
-        libelle: 'Voix',
-        valeur: idVoix(choisie),
-        options: [for (final v in voix) (idVoix(v), libelles[idVoix(v)]!)],
-        surChoix: (id) => _service.choisirVoixDisponible(
-          voix.firstWhere((v) => idVoix(v) == id),
+      largeurControle: 320,
+      controle: _avecApercu(
+        ListeReglage<String>(
+          libelle: 'Voix',
+          valeur: idVoix(choisie),
+          options: [for (final v in voix) (idVoix(v), libelles[idVoix(v)]!)],
+          surChoix: (id) => _service.choisirVoixDisponible(
+            voix.firstWhere((v) => idVoix(v) == id),
+          ),
         ),
       ),
     );
   }
+
+  /// Liste des voix et, juste à côté, l'aperçu vocal.
+  Widget _avecApercu(Widget liste) => Row(
+    children: [
+      Expanded(child: liste),
+      const SizedBox(width: 10),
+      BoutonApercuVoix(session: session),
+    ],
+  );
 
   // --- Vitesse, hauteur, volume -------------------------------------------------
 
@@ -222,49 +268,39 @@ class PanneauChatVocal extends StatelessWidget {
   }
 
   /// Interruption de la parole : réglage commun au vocal principal et à
-  /// JARVIS Touch (une phrase, deux choix).
+  /// JARVIS Touch. « Automatique » n'est pas encore disponible : affiché
+  /// tel quel, jamais choisissable.
   Widget _interruption(VoiceSettings r) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const TexteReglage(
-            titre: 'Interruption de la parole',
-            description: 'Touchez pour interrompre JARVIS.',
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final m in ModeInterruption.values)
-                PastilleReglage(
-                  libelle: m.disponible ? m.libelle : '${m.libelle} · bientôt',
-                  choisie: r.interruption == m,
-                  surChoix: m.disponible
-                      ? () => _service.choisirInterruption(m)
-                      : null,
-                ),
-            ],
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TexteReglage(titre: 'Interruption de la parole'),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final m in ModeInterruption.values)
+              PastilleReglage(
+                libelle: m.disponible ? m.libelle : '${m.libelle} · bientôt',
+                choisie: r.interruption == m,
+                surChoix: m.disponible
+                    ? () => _service.choisirInterruption(m)
+                    : null,
+              ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _reponseAuto(VoiceSettings r) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: MergeSemantics(
         child: Row(
           children: [
-            const Expanded(
-              child: TexteReglage(
-                titre: 'Réponse automatique',
-                description: 'Dès que vous avez fini de parler.',
-              ),
-            ),
+            const Expanded(child: TexteReglage(titre: 'Réponse automatique')),
             const SizedBox(width: 16),
             Switch(
               value: r.reponseAutomatique,
@@ -275,6 +311,150 @@ class PanneauChatVocal extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Bouton de choix d'une grille (profil vocal) : hauteur régulière, nom
+/// centré ; choisi : fond et contour de l'accent, coche.
+class _Choix extends StatelessWidget {
+  const _Choix({required this.libelle, required this.choisi, this.surChoix});
+
+  final String libelle;
+  final bool choisi;
+  final VoidCallback? surChoix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: surChoix != null,
+      selected: choisi,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: choisi
+              ? CouleursJarvis.signal.withValues(alpha: 0.1)
+              : CouleursJarvis.ivoire,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: choisi
+                ? CouleursJarvis.signal.withValues(alpha: 0.55)
+                : CouleursJarvis.trait,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: surChoix,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (choisi) ...[
+                        Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: CouleursJarvis.signal,
+                        ),
+                        const SizedBox(width: 5),
+                      ],
+                      Flexible(
+                        child: Text(
+                          libelle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: choisi
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: choisi
+                                ? CouleursJarvis.signal
+                                : CouleursJarvis.texte,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Section repliable : titre et chevron ; le contenu se déplie en douceur.
+class _Repliable extends StatefulWidget {
+  const _Repliable({required this.titre, required this.enfant});
+
+  final String titre;
+  final Widget enfant;
+
+  @override
+  State<_Repliable> createState() => _RepliableState();
+}
+
+class _RepliableState extends State<_Repliable> {
+  bool _ouvert = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          button: true,
+          expanded: _ouvert,
+          child: InkWell(
+            onTap: () => setState(() => _ouvert = !_ouvert),
+            borderRadius: BorderRadius.circular(10),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 52),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.titre,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w500,
+                        color: CouleursJarvis.texte,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _ouvert ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more_rounded,
+                      color: CouleursJarvis.texteSecondaire,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _ouvert
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 16),
+                  child: widget.enfant,
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
     );
   }
 }

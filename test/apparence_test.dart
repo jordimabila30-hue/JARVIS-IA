@@ -11,8 +11,7 @@ import 'package:ia_jarvis/theme/styles_jarvis.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
 import 'package:ia_jarvis/widgets/apparence/transition_apparence.dart';
 import 'package:ia_jarvis/widgets/fond_jarvis_anime.dart';
-import 'package:ia_jarvis/widgets/parametres/pages_jarvis_touch.dart';
-import 'package:ia_jarvis/widgets/parametres/panneau_general.dart';
+import 'package:ia_jarvis/widgets/parametres/pages_apparence.dart';
 
 /// Contraste WCAG entre deux couleurs opaques.
 double contraste(Color a, Color b) {
@@ -312,14 +311,16 @@ void main() {
     });
   });
 
-  group('Paramètres › Général › Apparence', () {
-    Future<ServiceApparence> ouvrir(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(420, 1600);
+  group('Paramètres › Apparence (page unique, carrousels)', () {
+    Future<ServiceApparence> ouvrir(
+      WidgetTester tester, {
+      Size taille = const Size(390, 844),
+    }) async {
+      tester.view.physicalSize = taille;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final a = ServiceApparence(stockage: StockageMemoire());
       await a.charger();
-      PageGenerale? page;
       await tester.pumpWidget(
         ListenableBuilder(
           listenable: a,
@@ -330,85 +331,117 @@ void main() {
               child: TransitionApparence(service: a, child: enfant!),
             ),
             home: Scaffold(
-              body: StatefulBuilder(
-                builder: (context, setState) => SingleChildScrollView(
-                  child: PanneauGeneral(
-                    page: page,
-                    surPage: (p) => setState(() => page = p),
-                  ),
-                ),
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(18),
+                child: PageApparence(apparence: a),
               ),
             ),
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
       return a;
     }
 
-    testWidgets('Apparence → Thèmes : style et mode appliqués aussitôt, '
-        '« Revenir au précédent »', (tester) async {
+    Finder carrousel(int i) => find.byType(PageView).at(i);
+
+    testWidgets('mode, styles et motifs sur la même page ; sélection '
+        'directe dans les carrousels ; « Revenir »', (tester) async {
       final a = await ouvrir(tester);
-      expect(find.text('Apparence'), findsOneWidget);
-      await tester.tap(find.text('Apparence'));
-      await tester.pumpAndSettle();
-      expect(find.text('Thèmes'), findsOneWidget);
-      expect(find.text('Motifs'), findsOneWidget);
-      await tester.tap(find.text('Thèmes'));
-      await tester.pumpAndSettle();
+      expect(find.text('Mode d’affichage'), findsOneWidget);
+      expect(find.text('Styles visuels'), findsOneWidget);
+      expect(find.text('Motifs du fond'), findsOneWidget);
+      expect(find.byType(PageView), findsNWidgets(2));
+      expect(find.text('Voir tout'), findsNothing);
 
-      for (final s in StyleVisuel.values) {
-        expect(find.text(s.nom), findsOneWidget);
-      }
-      await tester.tap(find.text('La Sape'));
-      await tester.pumpAndSettle();
-      expect(a.style, StyleVisuel.sape);
-      expect(
-        CouleursJarvis.signal,
-        StyleVisuel.sape.palette(Brightness.light).signal,
-      );
+      // Téléphone : une grande carte et le début de la suivante.
+      final premiere = tester.getRect(find.text('JARVIS original'));
+      expect(find.text('Congotronics'), findsOneWidget);
+      expect(tester.getRect(find.text('Congotronics')).left, lessThan(390));
+      expect(premiere.width, greaterThan(0));
 
+      // Toucher la partie visible de la carte suivante (son aperçu).
+      final suivante = tester.getRect(find.bySemanticsLabel('Congotronics'));
+      await tester.tapAt(Offset(suivante.left + 20, suivante.top + 40));
+      await tester.pumpAndSettle();
+      expect(a.style, StyleVisuel.congotronics);
       await tester.tap(find.text('Sombre'));
       await tester.pumpAndSettle();
       expect(a.mode, ModeAffichage.sombre);
-      expect(PaletteJarvis.active.ivoire, const Color(0xFF1A0F1F));
-      final fond = tester.widget<MaterialApp>(find.byType(MaterialApp));
-      expect(fond.theme!.brightness, Brightness.dark);
+      expect(PaletteJarvis.active.ivoire, const Color(0xFF070A12));
 
-      await tester.tap(find.text('Revenir au précédent'));
+      await tester.tap(find.text('Revenir').first);
       await tester.pumpAndSettle();
       expect(a.style, StyleVisuel.jarvis);
       expect(a.mode, ModeAffichage.clair);
-      expect(
-        identical(PaletteJarvis.active, PaletteJarvis.jarvisClair),
-        isTrue,
-      );
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Motifs : choix, intensité, sans motif', (tester) async {
+    testWidgets('glissement horizontal : tous les styles et motifs '
+        'atteignables, sans changer le choix ni faire défiler la page', (
+      tester,
+    ) async {
       final a = await ouvrir(tester);
-      await tester.tap(find.text('Apparence'));
+      final page = tester.state<ScrollableState>(find.byType(Scrollable).first);
+      final vertical = page.position.pixels;
+      // Glisser les styles ne fait jamais bouger les motifs.
+      final motifs = tester.getRect(find.text('Aurore JARVIS'));
+      await tester.fling(carrousel(0), const Offset(-500, 0), 3000);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Motifs'));
-      await tester.pumpAndSettle();
-      for (final m in MotifJarvis.values) {
-        expect(find.text(m.nom), findsOneWidget);
+      expect(tester.getRect(find.text('Aurore JARVIS')), motifs);
+      // Styles : jusqu'au dernier par glissements successifs.
+      for (var i = 0; i < StyleVisuel.values.length; i++) {
+        await tester.drag(carrousel(0), const Offset(-300, 0));
+        await tester.pumpAndSettle();
       }
-      await tester.tap(find.text('Kuba 2 · Tissu'));
+      expect(find.text('Léopards'), findsOneWidget);
+      await tester.tap(find.text('Léopards'));
       await tester.pumpAndSettle();
-      expect(a.motif, MotifJarvis.kubaTissu);
-      expect(find.text('Intensité du motif'), findsOneWidget);
+      expect(a.style, StyleVisuel.leopards);
+      // Motifs : carrousel indépendant (le premier n'a pas bougé).
+      for (var i = 0; i < MotifJarvis.values.length; i++) {
+        await tester.drag(carrousel(1), const Offset(-300, 0));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Cœur Kuba'), findsOneWidget);
+      await tester.tap(find.text('Cœur Kuba'));
+      await tester.pumpAndSettle();
+      expect(a.motif, MotifJarvis.coeurKuba);
+      expect(a.style, StyleVisuel.leopards);
+      // Dans l'autre sens.
+      await tester.drag(carrousel(1), const Offset(2000, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Sans motif'), findsOneWidget);
+      expect(page.position.pixels, vertical);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('intensité sur la page ; masquée sans motif', (tester) async {
+      final a = await ouvrir(tester);
+      expect(find.text('Intensité'), findsOneWidget);
+      await tester.ensureVisible(find.byType(Slider));
+      await tester.pumpAndSettle();
       await tester.drag(find.byType(Slider), const Offset(-400, 0));
       await tester.pumpAndSettle();
       expect(a.intensite, lessThan(0.5));
-
+      // Le carrousel s'ouvre sur le motif choisi (Aurore) : « Sans motif »
+      // est à gauche.
+      await tester.drag(carrousel(1), const Offset(400, 0));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sans motif'));
       await tester.pumpAndSettle();
       expect(a.motif, MotifJarvis.aucun);
-      expect(find.text('Intensité du motif'), findsNothing);
-      // Le motif n'a pas touché au style.
+      expect(find.text('Intensité'), findsNothing);
       expect(a.style, StyleVisuel.jarvis);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('grand écran : plusieurs cartes visibles', (tester) async {
+      await ouvrir(tester, taille: const Size(1100, 1000));
+      for (final s in StyleVisuel.values.take(3)) {
+        final r = tester.getRect(find.text(s.nom));
+        expect(r.right, lessThan(1100), reason: s.nom);
+      }
       expect(tester.takeException(), isNull);
     });
   });

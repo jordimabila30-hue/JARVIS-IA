@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ia_jarvis/services/api_jarvis.dart';
+import 'package:ia_jarvis/services/apparence/service_apparence.dart';
 import 'package:ia_jarvis/services/integrations/service_gmail.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/services/microphone_service.dart';
@@ -139,12 +140,24 @@ void main() {
     ]);
     await _charger('MaterialIcons', ['$_polices\\materialicons-regular.otf']);
     await _charger('Exo2', ['assets/polices/Exo2.ttf']);
+    await _charger('Baloo2', ['assets/polices/Baloo2.ttf']);
   });
 
-  for (final (section, taille, nom) in const [
-    (SectionParametres.chatVocal, Size(1100, 1500), 'chat_vocal'),
-    (SectionParametres.particules, Size(1100, 700), 'particules'),
-    (SectionParametres.particules, Size(390, 844), 'particules_telephone'),
+  // Téléphone : format réel du Galaxy S10+ (412 × 869 points).
+  for (final (section, taille, nom, ouvrir) in const [
+    (SectionParametres.chatVocal, Size(1100, 1500), 'chat_vocal', false),
+    (SectionParametres.particules, Size(1100, 700), 'particules', false),
+    (SectionParametres.apparence, Size(1100, 800), 'apparence', false),
+    (
+      SectionParametres.particules,
+      Size(390, 844),
+      'particules_telephone',
+      true,
+    ),
+    (SectionParametres.apparence, Size(412, 869), 'liste_s10', false),
+    (SectionParametres.apparence, Size(412, 869), 'apparence_s10', true),
+    (SectionParametres.chatVocal, Size(412, 869), 'chat_vocal_s10', true),
+    (SectionParametres.particules, Size(412, 869), 'particules_s10', true),
   ]) {
     testWidgets(nom, (tester) async {
       tester.view.physicalSize = taille * 2;
@@ -165,6 +178,7 @@ void main() {
         reglages: reglages,
       );
       await reglages.chargerCapacites();
+      final apparence = ServiceApparence(stockage: StockageMemoire());
       final cle = GlobalKey();
       await tester.pumpWidget(
         RepaintBoundary(
@@ -179,8 +193,11 @@ void main() {
                 session: session,
                 formes: PreferencesPimService(stockage: StockageMemoire()),
                 sectionInitiale: section,
+                ouvrirSection: ouvrir,
               ),
             ),
+            builder: (context, enfant) =>
+                PorteeApparence(service: apparence, child: enfant!),
           ),
         ),
       );
@@ -210,14 +227,49 @@ void main() {
   // un utilisateur : Outils, puis Gmail, puis « Gérer la connexion ».
   for (final (taille, nom, reponse, parcours) in [
     (const Size(412, 869), 'outils_telephone', _connecte, const ['Outils']),
-    (const Size(412, 869), 'gmail_connecte_telephone', _connecte, const ['Outils', 'Gmail']),
-    (const Size(412, 869), 'gmail_gerer_telephone', _connecte, const ['Outils', 'Gmail', 'Gérer la connexion']),
-    (const Size(412, 869), 'gmail_deconnecte_telephone', _deconnecte, const ['Outils', 'Gmail']),
-    (const Size(360, 640), 'gmail_connecte_petit', _connecte, const ['Outils', 'Gmail']),
+    (
+      const Size(412, 869),
+      'gmail_connecte_telephone',
+      _connecte,
+      const ['Outils', 'Gmail'],
+    ),
+    (
+      const Size(412, 869),
+      'gmail_gerer_telephone',
+      _connecte,
+      const ['Outils', 'Gmail', 'Gérer la connexion'],
+    ),
+    (
+      const Size(412, 869),
+      'gmail_deconnecte_telephone',
+      _deconnecte,
+      const ['Outils', 'Gmail'],
+    ),
+    (
+      const Size(360, 640),
+      'gmail_connecte_petit',
+      _connecte,
+      const ['Outils', 'Gmail'],
+    ),
     (const Size(1280, 800), 'outils_ordinateur', _connecte, const <String>[]),
-    (const Size(1280, 800), 'gmail_connecte_ordinateur', _connecte, const ['Gmail']),
-    (const Size(1280, 800), 'gmail_deconnecte_ordinateur', _deconnecte, const ['Gmail']),
-    (const Size(1280, 800), 'gmail_gerer_ordinateur', _connecte, const ['Gmail', 'Gérer la connexion']),
+    (
+      const Size(1280, 800),
+      'gmail_connecte_ordinateur',
+      _connecte,
+      const ['Gmail'],
+    ),
+    (
+      const Size(1280, 800),
+      'gmail_deconnecte_ordinateur',
+      _deconnecte,
+      const ['Gmail'],
+    ),
+    (
+      const Size(1280, 800),
+      'gmail_gerer_ordinateur',
+      _connecte,
+      const ['Gmail', 'Gérer la connexion'],
+    ),
   ]) {
     testWidgets(nom, (tester) async {
       tester.view.physicalSize = taille * 2;
@@ -241,8 +293,13 @@ void main() {
       final api = ApiJarvis(
         adresse: Uri.parse('http://test'),
         jeton: () async => 'jeton',
-        client: MockClient((_) async => http.Response(jsonEncode(reponse), 200,
-            headers: {'content-type': 'application/json; charset=utf-8'})),
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode(reponse),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
       );
       final gmail = ServiceGmail(api, ouvrir: (_) async => true);
       await tester.runAsync(() => gmail.actualiser());
@@ -270,9 +327,12 @@ void main() {
         for (var i = 0; i < 30; i++) {
           await tester.pump(const Duration(milliseconds: 16));
         }
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pump();
       }
+
       await attendre();
       for (final etape in parcours) {
         await tester.tap(find.text(etape).last);

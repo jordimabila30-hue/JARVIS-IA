@@ -1922,3 +1922,33 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 ### Reste pour la phase 2
 - Juger la pertinence sur le CONTENU (le lien ICAM ↔ inscription n'est qu'une hypothèse prudente) ; « important » au sens de l'utilisateur (aujourd'hui : libellé Gmail et extraits).
 - Cas « plusieurs professeurs » non rencontré dans la vraie boîte (vérifié par les tests seulement).
+
+## 2026-10-20 — Refonte UI/UX des Paramètres
+
+### Fait
+- Paramètres › Apparence en accès direct (plus de détour par Général) ;
+  liste du téléphone repensée : 3 groupes, icônes en pastilles alignées,
+  lignes de 56 px, aucune description, compte en bas.
+- Apparence sur une seule page : mode (sélecteur segmenté), carrousel des
+  styles et carrousel des motifs (PageView, accrochage, carte suivante
+  visible, sélection directe, glissement souris / pavé tactile, flèches sur
+  grand écran), intensité sous les motifs, « Revenir » sans décalage.
+- Chat vocal compact : Voix (profils en grille, langue, voix + aperçu ▶),
+  Expression, Écoute, Options avancées repliées (interruption ;
+  « Automatique · bientôt » non choisissable).
+- Particules PIM : grille 2 × 2 centrée verticalement (défilement si la
+  place manque), tuiles agrandies.
+- Navigation : la croix ferme tous les Paramètres d'un coup (`pop`, plus
+  `maybePop` intercepté par le retour d'un niveau) ; flèche et retour
+  d'Android : un niveau.
+
+### Vérifié
+- `dart analyze` : aucun problème ; tests : 866 / 866 (nouveaux : accès
+  direct, flèche / croix / retour Android sur 5 sections, croix sur
+  ordinateur, centrage PIM, carrousels indépendants, intensité, grand
+  écran).
+- Galaxy S10+ : liste, Apparence (glissement, choix, préférences
+  restaurées), croix → accueil.
+
+### Prochaine étape
+- Vérifier au doigt la page Chat vocal et le mode paysage sur le S10+.

@@ -452,7 +452,7 @@ void main() {
     await _images(tester, 30);
     expect(_ouvert(tester), isFalse);
     expect(find.byType(FenetreParametres), findsOneWidget);
-    for (final s in ['Général', 'Chat vocal', 'Particules PIM']) {
+    for (final s in ['Apparence', 'Général', 'Chat vocal', 'Particules PIM']) {
       expect(find.text(s), findsWidgets);
     }
     await tester.tap(find.text('Particules PIM'));

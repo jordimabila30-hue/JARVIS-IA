@@ -5,7 +5,7 @@
 // Pour chaque style, en clair puis en sombre : la vraie page d'accueil
 // (fond, particules, barre) avec une conversation (réponse, conversation
 // collée, choix du ton). Puis chaque motif sur l'accueil vide, et les pages
-// Thèmes et Motifs des Paramètres.
+// Apparence des Paramètres (page unique, carrousels).
 
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -23,8 +23,7 @@ import 'package:ia_jarvis/theme/motifs_jarvis.dart';
 import 'package:ia_jarvis/theme/styles_jarvis.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
 import 'package:ia_jarvis/widgets/apparence/transition_apparence.dart';
-import 'package:ia_jarvis/widgets/parametres/pages_jarvis_touch.dart';
-import 'package:ia_jarvis/widgets/parametres/panneau_general.dart';
+import 'package:ia_jarvis/widgets/parametres/pages_apparence.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
 import '../test/outils/ecriture.dart';
@@ -178,17 +177,14 @@ void main() {
     }
   }
 
-  for (final (page, nom) in [
-    (PageGenerale.themes, 'themes'),
-    (PageGenerale.motifs, 'motifs'),
-  ]) {
+  {
+    const nom = 'apparence';
     for (final (style, mode) in [
       (StyleVisuel.jarvis, ModeAffichage.clair),
       (StyleVisuel.sape, ModeAffichage.sombre),
     ]) {
       testWidgets('page $nom ${style.name} ${mode.name}', (tester) async {
         telephone(tester);
-        tester.view.physicalSize = const Size(390, 1500) * 2;
         final a = await apparence(
           PreferencesApparence(
             style: style,
@@ -204,7 +200,7 @@ void main() {
               body: SafeArea(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(18),
-                  child: PanneauGeneral(page: page),
+                  child: PageApparence(apparence: a),
                 ),
               ),
             ),
