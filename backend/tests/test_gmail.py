@@ -332,5 +332,5 @@ async def test_les_outils_lisent_toujours_la_boite_du_compte_authentifie(env):
 
 
 def test_consigne_interdit_de_recopier_les_codes_et_secrets():
-    assert "Ne recopie JAMAIS un code de vérification" in CONSIGNE_GMAIL
+    assert "Ne recopie jamais un code" in CONSIGNE_GMAIL
     assert "mot de passe" in CONSIGNE_GMAIL and "lien de connexion" in CONSIGNE_GMAIL

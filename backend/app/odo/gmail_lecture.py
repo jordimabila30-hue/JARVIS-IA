@@ -45,6 +45,26 @@ _TRANSFERT = re.compile(r"-{2,}\s*(?:forwarded message|message transféré|weite
                         r"mensaje reenviado)\s*-{2,}", re.I)
 
 
+# Signature (« -- », « Envoyé de mon iPhone ») et lignes sans information
+# (confidentialité, environnement, désabonnement) : retirées du texte nouveau.
+_SIGNATURE = re.compile(r"^\s*--\s*$|^\s*(?:envoyé de mon|sent from my|von meinem)\b", re.I)
+_LIGNE_INUTILE = re.compile(
+    r"confidentiel|destinés? exclusivement|reçu (?:ce message |ce courriel )?par erreur|if you (?:have )?received "
+    r"this|intended (?:solely|only) for|pensez à l'environnement|before printing|think before you print|"
+    r"se désabonner|désinscri|unsubscribe|abmelden", re.I)
+
+
+def alleger(texte: str) -> str:
+    """Texte nouveau sans signature ni mentions automatiques (le sens reste)."""
+    lignes = []
+    for l in (texte or "").splitlines():
+        if _SIGNATURE.match(l):
+            break
+        if not _LIGNE_INUTILE.search(l):
+            lignes.append(l)
+    return "\n".join(lignes).strip()
+
+
 def decouper(texte: str) -> tuple[str, str, str]:
     """(nouveau, cité, transféré) d'un corps d'e-mail."""
     lignes = (texte or "").splitlines()
@@ -147,9 +167,10 @@ def reperes(texte: str, *, avec_phrases: bool = True) -> list[str]:
 
 # --- Mise en forme pour le modèle ------------------------------------------------------------
 
-def bloc_email(e: Email, maximum: int, decalage_minutes: int | None, rang: str = "") -> str:
+def bloc_email(e: Email, maximum: int, decalage_minutes: int | None, rang: str = "",
+               cite_deja_donne: bool = False) -> str:
     nouveau, cite, transfere = decouper(e.texte)
-    nouveau, transfere = masquer_secrets(nouveau), masquer_secrets(transfere)
+    nouveau, transfere = masquer_secrets(alleger(nouveau)), masquer_secrets(alleger(transfere))
     lignes = [f"{rang}id={e.id} fil={e.fil}",
               f"De : {e.de}" + (" [expéditeur automatique]" if expediteur_automatique(e.de) else ""),
               f"À : {e.a}", f"Date : {date_locale(e.date, decalage_minutes)}",
@@ -164,7 +185,10 @@ def bloc_email(e: Email, maximum: int, decalage_minutes: int | None, rang: str =
     if transfere:
         reste = max(maximum - len(nouveau), maximum // 2)
         lignes += ["", "[Message transféré : son contenu vient d'un autre expéditeur]", transfere[:reste]]
-    if cite:
+    if cite and cite_deja_donne:
+        # Le message cité fait partie de ce dossier : inutile de le redonner.
+        lignes += ["", "[Cite un message précédent de cette discussion, déjà donné plus haut]"]
+    elif cite:
         extrait = masquer_secrets(" ".join(cite.split()))[:CITE_MAX]
         lignes += ["", "[Texte cité d'un message plus ancien : PAS une nouvelle information] " + extrait
                    + ("…" if len(cite) > CITE_MAX else "")]
@@ -185,7 +209,8 @@ def dossier(emails: list[Email], maximum: int, decalage_minutes: int | None) -> 
     for i, e in enumerate(ordre, 1):
         rang = f"Message {i}/{n}" + (" (le plus récent)" if i == n and n > 1 else
                                      " (le plus ancien)" if i == 1 and n > 1 else "") + " · "
-        blocs.append(bloc_email(e, maximum, decalage_minutes, rang))
+        meme_fil = any(x.fil == e.fil for x in ordre[:i - 1])
+        blocs.append(bloc_email(e, maximum, decalage_minutes, rang, cite_deja_donne=meme_fil))
     return "\n\n---\n\n".join(blocs)
 
 
