@@ -1952,3 +1952,32 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 
 ### Prochaine étape
 - Vérifier au doigt la page Chat vocal et le mode paysage sur le S10+.
+
+## 2026-10-20 — Gmail, phase 2 sur 3 : compréhension approfondie des e-mails
+
+### Audit (avant)
+- Texte cité des anciens messages mêlé au nouveau (« Le … a écrit : », « > ») : une ancienne information pouvait passer pour nouvelle ; fils pleins de citations répétées.
+- Dates brutes dans le fuseau de l'EXPÉDITEUR (vu en réel : « 02 h 03 heure PDT ») ; `gmail_preparer_resume` dans l'ordre choisi par le modèle.
+- Consigne muette sur : reçu ≠ accepté, réserve, refus poli, obligation ≠ suggestion, correction / report, pièces jointes non lues, importance hors libellé Gmail.
+- E-mails LUS non mémorisés pour les questions de suivi.
+
+### Fait
+- `app/odo/gmail_lecture.py` (sans IA, Free = Pro) : texte nouveau / cité / transféré (FR, EN, DE, ES, Outlook, « > »), dates dans l'heure de l'utilisateur, ordre chronologique sans doublon (« le plus récent »), repères multilingues présentés comme indices, pièces jointes « contenu NON lu », expéditeur automatique.
+- `gmail_lire_message`, `gmail_lire_fil`, `gmail_preparer_resume` branchés dessus ; recherche : libellé Gmail nommé comme tel + repères de l'extrait.
+- Consigne de compréhension (fait / déduction / inconnu en phrases naturelles, sans étiquettes ; date non écrite jamais ajoutée ; relecture par id pour les suivis ; langue de l'utilisateur).
+- Mémoire du chat : e-mails LUS (métadonnées, 6, 1 h) redonnés aux questions suivantes.
+- Doc : GMAIL.md § Compréhension approfondie + limites du masquage.
+
+### Tests
+- Backend : **613 réussis, 1 ignoré** (`test_gmail_comprehension.py` : dossier transmis pour 18 scénarios fictifs, citations, transfert, dates, ordre, repères multilingues, suivi Free / Pro simulés, isolation).
+- Évaluation RÉELLE GroqCloud (`tests/evaluation_gmail.py`, corpus fictif `scenarios_gmail.py`, 17 scénarios notés + 1 déterministe) :
+  - avant (phase 1) : 16/17 (heures dans le fuseau de l'expéditeur) ;
+  - après, 1re consigne : 15/17 (étiquettes « Faits / Interprétation », date « 16 octobre » ajoutée) → consigne corrigée ;
+  - après, consigne corrigée : **17/17**.
+- Coût : 1 224 → 1 765 tokens par appel en moyenne (+44 %, surtout la consigne) ; latence 1,48 → 1,68 s ; aucun appel IA ajouté.
+- Claude : non essayé (payant, accord requis). Aucun vrai e-mail utilisé. Production 8000 inchangée, aucune instance temporaire en marche.
+
+### Prochaine étape
+- Évaluation Claude autorisée par l'utilisateur, mais IMPOSSIBLE : le compte API Anthropic a atteint la limite d'utilisation fixée par son propriétaire (« You have reached your specified API usage limits », retour le 2026-11-01 00:00 UTC). 3 appels refusés, rien consommé, évaluation arrêtée. Conséquence : en production, les comptes Pro (Claude) reçoivent une erreur « service indisponible » jusqu'à cette date.
+- Relancer `evaluation_gmail.py --fournisseur anthropic` après le 1er novembre (ou après relèvement de la limite) ; essai réel S10+ sur la boîte de l'utilisateur avec son accord.
+- Phase 3 : résumés et réduction des tokens (la consigne Gmail est la première cible).

@@ -159,6 +159,26 @@ Objectif : comprendre des demandes naturelles, imprécises ou indirectes (« Ils
 
 **Limites connues** : Gmail n'est pas une recherche sémantique (les reformulations viennent du modèle) ; la pertinence se juge sur l'objet, l'expéditeur et l'extrait (le corps n'est lu qu'à la demande) ; « important » au sens de l'utilisateur = phase 2.
 
+## Compréhension approfondie (phase 2 sur 3, 2026-10-20)
+
+But : comprendre ce que les e-mails SIGNIFIENT (refus indirect, reçu ≠ accepté, réserve, obligation ≠ suggestion, report, correction, situation dispersée sur plusieurs e-mails), à l'identique en Free (GroqCloud) et en Pro (Claude), sans appel IA supplémentaire.
+
+| Qui | Quoi |
+|---|---|
+| ODO, déterministe (`app/odo/gmail_lecture.py`) | texte NOUVEAU séparé du texte CITÉ (« Le … a écrit : », « On … wrote: », « Am … schrieb … : », « > », « -----Original Message----- », « De : … Envoyé : ») : le cité est réduit et marqué « pas une nouvelle information » ; message transféré étiqueté ; date dans l'heure LOCALE de l'utilisateur ; plusieurs e-mails (fil, `gmail_preparer_resume`) en ordre chronologique, sans doublon, le plus récent indiqué ; repères multilingues (FR, EN, DE, ES) : demande, échéance, simple possibilité, réserve / condition, issue négative, réception, changement, expéditeur automatique (présentés comme INDICES à vérifier) ; pièces jointes « présentes, contenu NON lu » |
+| Modèle (consigne `CONSIGNE_GMAIL`) | lit le texte ; fait / déduction / inconnu ; reçu ≠ accepté ; réserve ≠ validation ; refus poli ; demande ≠ possibilité ; situation d'ensemble ; une information plus récente ne remplace l'ancienne que pour la MÊME chose ; importance selon la demande, l'échéance, le changement et le contexte (pas le seul libellé Gmail), expliquée en une phrase ; réponse dans la langue de l'utilisateur ; naturelle, à l'essentiel |
+| Mémoire du chat (`ServiceODO.memoriser` / `rappel`) | e-mails LUS (id, fil, expéditeur, date, objet ; 6 au plus, 1 h, jamais le texte) redonnés à la question suivante : « donc c'est accepté ? » → relecture par l'id plutôt que souvenir |
+
+Tests : `tests/test_gmail_comprehension.py` (dossier transmis au modèle pour 18 scénarios fictifs, `tests/scenarios_gmail.py`) ; évaluation réelle `tests/evaluation_gmail.py` (corpus fictif, critères explicites, avant / après, débit borné).
+
+### Limites du masquage (honnêtes)
+
+Le masquage est fait par motifs (`gmail_confidentialite.py`) : codes ANNONCÉS (« code », « OTP », « vérification »…) ou seuls sur leur ligne, mots de passe annoncés, liens de connexion / jetons, cartes (Luhn), IBAN. Il ne peut PAS reconnaître :
+- un secret sans mot qui l'annonce, au milieu d'une phrase (« utilisez 8F3K-29QZ demain ») ;
+- un code dans une image ou une pièce jointe (jamais lues de toute façon) ;
+- des données personnelles ordinaires (adresse postale, téléphone, date de naissance) : elles restent visibles par le fournisseur IA, comme le reste du texte nécessaire à la compréhension.
+La consigne interdit en plus au modèle de recopier codes, mots de passe et liens de connexion.
+
 ## Décision Google OAuth (2026-10-19)
 
 **Constat** : un compte Gmail absent de la liste des utilisateurs test a pu se connecter à JARVIS avec la configuration Google actuelle (application passée en production chez Google, **non vérifiée**).

@@ -207,7 +207,7 @@ async def test_recherche_par_expediteur_date_objet_et_aucun_resultat(env):
     env.faux.messages = {"m1aaaa": message("m1aaaa"), "m2bbbb": message("m2bbbb", objet="Réunion")}
     r = await outil.executer({"max": 1}, ctx())
     assert "2 message(s) consulté(s)" in r.contenu and "id=m1aaaa" in r.contenu and "Prof Martin" in r.contenu
-    assert "non lu, important" in r.contenu and "m2bbbb" not in r.contenu
+    assert "non lu, libellé Gmail « important »" in r.contenu and "m2bbbb" not in r.contenu
     # Valeurs du modèle jamais interprétées comme des opérateurs Gmail.
     c = Criteres.depuis_arguments({"expediteurs": ['x} OR from:pirate {'], "termes": ['a" OR "b']},
                                   datetime(2026, 10, 19, tzinfo=timezone.utc), 0)
@@ -220,7 +220,7 @@ async def test_lecture_message_html_pieces_jointes_jamais_telechargees(env):
                                           pieces=["bulletin.pdf"])
     r = await GmailLireMessage(ClientGmail(env.google)).executer({"id": "m1aaaa"}, ctx())
     assert "Rendez-vous lundi" in r.contenu and "x()" not in r.contenu
-    assert "Pièces jointes (non ouvertes) : bulletin.pdf" in r.contenu
+    assert "Pièces jointes (présentes, contenu NON lu) : bulletin.pdf" in r.contenu
     assert not any("attachments" in str(q.url) for q in env.faux.gmail)
 
 

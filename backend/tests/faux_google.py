@@ -21,14 +21,14 @@ def b64(texte: str) -> str:
 
 def message(id_, *, de="Prof Martin <martin@ecole.fr>", objet="Inscription", date="Sat, 18 Oct 2026 09:00:00 +0200",
             texte="Votre inscription est confirmée pour le 3 novembre.", html=None, fil=None, non_lu=True,
-            pieces=()) -> dict:
+            pieces=(), important=True) -> dict:
     parts = [{"mimeType": "text/plain", "body": {"data": b64(texte)}}] if html is None else \
         [{"mimeType": "text/html", "body": {"data": b64(html)}}]
     parts += [{"mimeType": "application/pdf", "filename": p, "body": {"attachmentId": "att1", "size": 900_000}}
               for p in pieces]
     return {
         "id": id_, "threadId": fil or f"fil{id_}", "snippet": texte[:80],
-        "labelIds": ["INBOX", *(["UNREAD"] if non_lu else []), "IMPORTANT"],
+        "labelIds": ["INBOX", *(["UNREAD"] if non_lu else []), *(["IMPORTANT"] if important else [])],
         "payload": {"mimeType": "multipart/mixed", "headers": [
             {"name": "From", "value": de}, {"name": "To", "value": "pepper@gmail.com"},
             {"name": "Subject", "value": objet}, {"name": "Date", "value": date}], "parts": parts},

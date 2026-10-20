@@ -723,6 +723,13 @@ secrets masqués avant le fournisseur IA (`odo/gmail_confidentialite.py`) ;
 dernière recherche du chat 1 h dans Redis (`ServiceODO.memoriser` /
 `rappel`, métadonnées seulement). Décision OAuth : option A (actuelle,
 non vérifiée) puis C (vérification Google), voir GMAIL.md.
+Compréhension approfondie (phase 2, doc GMAIL.md) : `odo/gmail_lecture.py`
+(texte nouveau / cité / transféré, dates locales, ordre chronologique,
+repères multilingues = indices, pièces jointes non lues) ; consigne :
+fait / déduction / inconnu sans étiquettes, reçu ≠ accepté, réserve,
+obligation ≠ suggestion ; e-mails LUS mémorisés pour les suivis.
+Évaluation réelle : `tests/evaluation_gmail.py` (corpus fictif
+`tests/scenarios_gmail.py`, `--renoter` sans appel).
 
 JARVIS Touch › « Capturer » (phases 3A / 3A.1, natif seulement,
 `android/.../touch/capture/`) : capture d'une image puis éditeur plein écran
