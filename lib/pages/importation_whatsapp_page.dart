@@ -561,7 +561,7 @@ class _ImportationWhatsAppPageState extends State<ImportationWhatsAppPage> {
         child: Scaffold(
           backgroundColor: CouleursJarvis.ivoire,
           body: DecoratedBox(
-            decoration: const BoxDecoration(gradient: degradeFondJarvis),
+            decoration: BoxDecoration(gradient: degradeFondJarvis),
             child: SizedBox.expand(
               child: SafeArea(
                 bottom: false,
@@ -684,7 +684,7 @@ class _Entete extends StatelessWidget {
         Expanded(
           child: Semantics(
             header: true,
-            child: const Text(
+            child: Text(
               ImportationWhatsAppPage.titre,
               style: TextStyle(
                 fontFamily: policeAffichage,

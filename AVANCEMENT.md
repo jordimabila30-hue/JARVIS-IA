@@ -1856,3 +1856,46 @@ Appareil : Samsung Galaxy S10+ (SM-G975F, Android 12), `flutter run --profile` (
 
 ### Prochaine étape
 - Après 01:00 : relancer l'instance 8002 (GroqCloud) et les 6 essais guidés ; Claude seulement avec accord.
+
+## 2026-10-20 — Apparence : thèmes et motifs de l'application « Jarvis » d'une amie
+
+### Fait
+- Audit de `Jarvis_projet_complet.zip` (application web Capacitor, tout dans
+  `www/index.html`) : 6 thèmes en variables CSS (`data-jt`, `localStorage
+  jarvis:theme`), motifs kuba (`kgrid`, `kband`, tissu `kubaFill` de
+  `love.html`, orbe « Cœur Kuba »), contours 2 px + ombres pleines décalées,
+  police Baloo 2 (OFL). Rien d'autre de l'application n'est repris.
+- Architecture : `PaletteJarvis` (ThemeExtension), registre `StyleVisuel`
+  (JARVIS original + Congotronics, Raphia Kuba, Fleuve, La Sape, Rumba,
+  Léopards ; jetons exacts pour la variante d'origine, autre variante créée),
+  registre `MotifJarvis` (Sans motif, Aurore JARVIS, Kuba 1 · Losanges,
+  Kuba 2 · Tissu, Kuba 3 · Frises, Cœur Kuba), `ServiceApparence`
+  (préférences JSON versionnées, clé `jarvis.apparence`, lecture tolérante,
+  mode Système), `TransitionApparence` (fondu 320 ms, reconstruction unique).
+  `CouleursJarvis` devient une façade de la palette active (≈ 230 `const`
+  retirés automatiquement, aucune autre modification de comportement).
+- Paramètres : « Apparence » quitte la liste principale →
+  Général › Apparence › Thèmes (Clair / Sombre / Système + 7 styles avec
+  aperçus) / Motifs (aperçus réels, intensité, « Revenir au précédent » à
+  place réservée).
+- Bulles et cartes : contour marqué, ombre pleine décalée, frise kuba
+  (styles importés) ; JARVIS original inchangé au pixel près (captures
+  avant / après identiques hors horodatage).
+- PIM : non touché (demande explicite), ni couleurs ni algorithmes.
+- Icône de l'application (lanceur Android + adaptative, iOS, Web, Windows)
+  = icône de l'application fournie ; l'intérieur de l'application garde la
+  perle JARVIS (logo du menu : plus de requête 404 vers `jarvis.png`).
+- Corrigé au passage : outil `capture_conversation_test` (attend la fin de
+  l'écriture progressive), dépréciation `axisAlignment`, remarques
+  d'analyse des tests.
+
+### Vérifié
+- `dart analyze lib test tool` : aucun problème. Tests : suite complète
+  (dont `test/apparence_test.dart`, 17 tests, contrastes des 14 palettes).
+- Galaxy S10+ (flutter run), Windows (flutter run), Web (port 3000) :
+  changement de style et de mode, restauration au redémarrage, icône.
+- iOS : non compilé (pas d'environnement macOS) ; icônes générées seulement.
+
+### Prochaine étape
+- Valider à l'usage la lisibilité de PIM (couleurs d'origine) sur les fonds
+  sombres ; option future si souhaité : teinte PIM par style.

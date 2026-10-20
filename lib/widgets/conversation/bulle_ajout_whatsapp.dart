@@ -93,7 +93,7 @@ class BulleAjoutWhatsApp extends StatelessWidget {
                       Text(
                         '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} '
                         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           color: CouleursJarvis.texteSecondaire,
                         ),
@@ -107,7 +107,7 @@ class BulleAjoutWhatsApp extends StatelessWidget {
                   tooltip: 'Options',
                   padding: EdgeInsets.zero,
                   iconSize: 18,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.more_horiz_rounded,
                     color: CouleursJarvis.texteSecondaire,
                   ),
@@ -132,7 +132,7 @@ class BulleAjoutWhatsApp extends StatelessWidget {
                         m.corrige
                             ? 'Ajouté à la main · corrigé'
                             : 'Ajouté à la main',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
                           color: CouleursJarvis.texteSecondaire,
                         ),

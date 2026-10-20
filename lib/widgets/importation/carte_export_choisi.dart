@@ -134,7 +134,7 @@ class CarteExportChoisi extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     height: 1.3,
@@ -148,7 +148,7 @@ class CarteExportChoisi extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   color: CouleursJarvis.texteSecondaire,
                 ),
@@ -298,7 +298,7 @@ class ActionFiltrer extends StatelessWidget {
         ),
         if (surFiltrer == null) ...[
           const SizedBox(height: 6),
-          const Text(
+          Text(
             CarteExportChoisi.filtrageAVenir,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -364,7 +364,7 @@ class _Lecture extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     CarteExportChoisi.lecture,
                     style: TextStyle(
                       fontSize: 14.5,
@@ -375,7 +375,7 @@ class _Lecture extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     etape.libelle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       color: CouleursJarvis.texteSecondaire,
                     ),
@@ -404,7 +404,7 @@ class _Pret extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const vert = Color(0xFF2E8B57);
+    final vert = CouleursJarvis.lisible(const Color(0xFF2E8B57));
     return Center(
       child: Semantics(
         liveRegion: true,
@@ -415,7 +415,7 @@ class _Pret extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: vert.withValues(alpha: 0.2)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.check_circle_rounded, size: 20, color: vert),
@@ -426,7 +426,7 @@ class _Pret extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF256F47),
+                    color: CouleursJarvis.lisible(const Color(0xFF256F47)),
                   ),
                 ),
               ),

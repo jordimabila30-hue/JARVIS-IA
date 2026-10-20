@@ -37,7 +37,7 @@ class BoutonAuth extends StatelessWidget {
       child: chargement
           ? Semantics(
               label: 'Chargement',
-              child: const SizedBox.square(
+              child: SizedBox.square(
                 dimension: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.2,
@@ -93,10 +93,7 @@ class LigneLienAuth extends StatelessWidget {
       children: [
         Text(
           question,
-          style: const TextStyle(
-            fontSize: 14,
-            color: CouleursJarvis.texteSecondaire,
-          ),
+          style: TextStyle(fontSize: 14, color: CouleursJarvis.texteSecondaire),
         ),
         LienAuth(libelle: lien, surAppui: surAppui),
       ],
@@ -139,7 +136,7 @@ class BoutonAccesDeveloppement extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Mode développement : accueil sans connexion, aucune session '
           'ouverte. Désactivé en production.',
           textAlign: TextAlign.center,

@@ -54,7 +54,7 @@ class _ReponseProposeeState extends State<ReponseProposee> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           ReponseProposee.titre,
           style: TextStyle(
             fontSize: 13,
@@ -72,7 +72,7 @@ class _ReponseProposeeState extends State<ReponseProposee> {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: CouleursJarvis.voile.withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: CouleursJarvis.violet.withValues(alpha: 0.28),

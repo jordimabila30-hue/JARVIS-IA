@@ -18,7 +18,7 @@ class SignatureJarvis extends StatelessWidget {
   static const texte = 'JARVIS';
 
   /// Bleu-violet doux, plus léger que le signal plein.
-  static const couleur = Color(0xFF6E71C4);
+  static Color get couleur => PaletteJarvis.active.signature;
 
   @override
   Widget build(BuildContext context) {

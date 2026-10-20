@@ -83,7 +83,7 @@ class CalendrierWhatsApp extends StatelessWidget {
                 child: Center(
                   child: Text(
                     j,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                       color: CouleursJarvis.texteSecondaire,
@@ -140,7 +140,7 @@ class _ChoixAnnee extends StatelessWidget {
     final annees = selection.index.annees;
     final texte = Text(
       libelle,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: policeAffichage,
         fontSize: 15.5,
         fontWeight: FontWeight.w600,
@@ -188,7 +188,7 @@ class _ChoixAnnee extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Flexible(child: texte),
-            const Icon(
+            Icon(
               Icons.arrow_drop_down_rounded,
               color: CouleursJarvis.texteSecondaire,
             ),

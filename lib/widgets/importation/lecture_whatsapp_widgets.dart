@@ -47,7 +47,7 @@ class ChoixDansArchive extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             titre,
             style: TextStyle(
               fontSize: 15.5,
@@ -66,7 +66,7 @@ class ChoixDansArchive extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                leading: const Icon(
+                leading: Icon(
                   Icons.description_outlined,
                   color: CouleursJarvis.signal,
                 ),
@@ -74,19 +74,16 @@ class ChoixDansArchive extends StatelessWidget {
                   e.nom,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    color: CouleursJarvis.texte,
-                  ),
+                  style: TextStyle(fontSize: 14.5, color: CouleursJarvis.texte),
                 ),
                 subtitle: Text(
                   tailleLisible(e.taille),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     color: CouleursJarvis.texteSecondaire,
                   ),
                 ),
-                trailing: const Icon(
+                trailing: Icon(
                   Icons.chevron_right_rounded,
                   color: CouleursJarvis.texteSecondaire,
                 ),

@@ -74,7 +74,7 @@ class _FiltrageWhatsAppPageState extends State<FiltrageWhatsAppPage> {
           const SizedBox(height: 8),
           Text(
             avis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -97,7 +97,7 @@ class _FiltrageWhatsAppPageState extends State<FiltrageWhatsAppPage> {
         child: Scaffold(
           backgroundColor: CouleursJarvis.ivoire,
           body: DecoratedBox(
-            decoration: const BoxDecoration(gradient: degradeFondJarvis),
+            decoration: BoxDecoration(gradient: degradeFondJarvis),
             child: SizedBox.expand(
               child: SafeArea(
                 bottom: false,
@@ -397,7 +397,7 @@ class _Entete extends StatelessWidget {
             children: [
               Semantics(
                 header: true,
-                child: const Text(
+                child: Text(
                   FiltrageWhatsAppPage.titre,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -416,7 +416,7 @@ class _Entete extends StatelessWidget {
                 'message${nombre > 1 ? 's' : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   color: CouleursJarvis.texteSecondaire,
                   fontFeatures: [FontFeature.tabularFigures()],

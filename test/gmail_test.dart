@@ -20,9 +20,9 @@ import 'package:ia_jarvis/widgets/integrations/panneau_outils.dart';
 Map<String, dynamic> etat(String statut, {bool configure = true, String? email, String? le}) => {
   'statut': statut,
   'configure': configure,
-  if (email != null) 'email': email,
+  'email': ?email,
   if (email != null) 'portee': 'lecture_seule',
-  if (le != null) 'connecte_le': le,
+  'connecte_le': ?le,
 };
 
 /// Faux serveur des routes Gmail : l'état change quand [connecter] est appelé.

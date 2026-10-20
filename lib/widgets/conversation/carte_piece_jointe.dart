@@ -72,7 +72,7 @@ class PieceJointeEnAttente extends StatelessWidget {
                         piece.titre,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           height: 1.25,
@@ -84,7 +84,7 @@ class PieceJointeEnAttente extends StatelessWidget {
                         libelleNombrePieceJointe(piece),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           height: 1.25,
                           color: CouleursJarvis.texteSecondaire,
@@ -96,7 +96,7 @@ class PieceJointeEnAttente extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 if (enCours)
-                  const Tooltip(
+                  Tooltip(
                     message: enregistrement,
                     child: SizedBox.square(
                       dimension: 36,
@@ -178,10 +178,7 @@ class _CartePieceJointeEnvoyeeState extends State<CartePieceJointeEnvoyee> {
             SnackBar(
               content: Text(
                 '$e',
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  color: CouleursJarvis.ivoire,
-                ),
+                style: TextStyle(fontSize: 13.5, color: CouleursJarvis.ivoire),
               ),
               behavior: SnackBarBehavior.floating,
               backgroundColor: CouleursJarvis.texte.withValues(alpha: 0.92),
@@ -251,7 +248,7 @@ class _CartePieceJointeEnvoyeeState extends State<CartePieceJointeEnvoyee> {
                     const SizedBox(height: 2),
                     Text(
                       details,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         height: 1.3,
                         color: CouleursJarvis.texteSecondaire,
@@ -268,7 +265,7 @@ class _CartePieceJointeEnvoyeeState extends State<CartePieceJointeEnvoyee> {
             child: TextButton.icon(
               onPressed: _chargement ? null : _voir,
               icon: _chargement
-                  ? const SizedBox.square(
+                  ? SizedBox.square(
                       dimension: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,

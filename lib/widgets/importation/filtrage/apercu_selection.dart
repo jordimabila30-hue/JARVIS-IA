@@ -189,7 +189,7 @@ class _ApercuSelectionState extends State<ApercuSelection> {
           child: Text(
             ApercuSelection.aucunMessage,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -466,7 +466,7 @@ class EnteteApercu extends StatelessWidget {
       children: [
         Text(
           quoi(s),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
             color: CouleursJarvis.texteSecondaire,

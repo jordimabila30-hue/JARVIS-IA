@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'pages/accueil_page.dart';
 import 'pages/authentification/authentification_page.dart';
 import 'pages/ecran_de_lancement.dart';
 import 'services/api_jarvis.dart';
+import 'services/apparence/service_apparence.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
 import 'services/integrations/service_gmail.dart';
 import 'services/utilisation/service_utilisation.dart';
 import 'theme/theme_jarvis.dart';
 import 'utils/chrono_perf.dart';
+import 'widgets/apparence/transition_apparence.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +27,13 @@ Future<void> main() async {
     debugPrint('[JARVIS] Supabase indisponible : $e');
     config = ConfigAuth(accesDeveloppement: config.accesDeveloppement);
   }
-  runApp(JarvisApp(config: config));
+  // Apparence lue avant le premier écran : aucun éclair de l'ancien style.
+  final apparence = ServiceApparence(
+    luminositeSysteme:
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+  );
+  await apparence.charger();
+  runApp(JarvisApp(config: config, apparence: apparence));
 }
 
 /// Parcours : écran de lancement → vérification de la session → accueil
@@ -33,7 +42,16 @@ Future<void> main() async {
 /// oublié » : choix du nouveau mot de passe. Déconnexion (ou session
 /// révoquée) : retour à la connexion.
 class JarvisApp extends StatefulWidget {
-  const JarvisApp({super.key, this.config, this.auth, this.api});
+  const JarvisApp({
+    super.key,
+    this.config,
+    this.auth,
+    this.api,
+    this.apparence,
+  });
+
+  /// Préférences d'apparence (thème, motif). Null : créées et lues ici.
+  final ServiceApparence? apparence;
 
   /// Injectables pour les tests ; lus de la compilation sinon.
   final ConfigAuth? config;
@@ -44,7 +62,13 @@ class JarvisApp extends StatefulWidget {
   State<JarvisApp> createState() => _JarvisAppState();
 }
 
-class _JarvisAppState extends State<JarvisApp> {
+class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
+  late final _apparence =
+      widget.apparence ??
+      (ServiceApparence(
+        luminositeSysteme:
+            WidgetsBinding.instance.platformDispatcher.platformBrightness,
+      )..charger());
   late final _config = widget.config ?? ConfigAuth.compilation();
   late final _auth = widget.auth ?? AuthService(_config.creerRepository());
   late final _api =
@@ -77,12 +101,22 @@ class _JarvisAppState extends State<JarvisApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _auth.addListener(_surAuth);
     _api.surConsommation = _utilisation.signalerConsommation;
   }
 
+  /// Mode « Système » : suit le clair / sombre du système d'exploitation.
+  @override
+  void didChangePlatformBrightness() {
+    _apparence.luminositeSysteme =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (widget.apparence == null) _apparence.dispose();
     _auth.removeListener(_surAuth);
     _api.surConsommation = null;
     _utilisation.dispose();
@@ -167,12 +201,32 @@ class _JarvisAppState extends State<JarvisApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'JARVIS',
-      navigatorKey: _navigateur,
-      debugShowCheckedModeBanner: false,
-      theme: themeJarvis(),
-      home: EcranDeLancement(onTermine: _apresLancement),
+    // Style et mode : le thème suit la palette affichée ; tout l'arbre
+    // atteint le service (Paramètres › Général › Apparence, fonds).
+    return ListenableBuilder(
+      listenable: _apparence,
+      builder: (context, _) {
+        final palette = _apparence.palette;
+        return MaterialApp(
+          title: 'JARVIS',
+          navigatorKey: _navigateur,
+          debugShowCheckedModeBanner: false,
+          theme: themeJarvis(palette),
+          builder: (context, enfant) => PorteeApparence(
+            service: _apparence,
+            child: TransitionApparence(
+              service: _apparence,
+              child: palette.sombre
+                  ? AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle.light,
+                      child: enfant!,
+                    )
+                  : enfant!,
+            ),
+          ),
+          home: EcranDeLancement(onTermine: _apresLancement),
+        );
+      },
     );
   }
 }

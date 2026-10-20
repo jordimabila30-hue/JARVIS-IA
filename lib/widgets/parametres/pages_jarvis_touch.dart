@@ -5,11 +5,15 @@ import '../../theme/theme_jarvis.dart';
 import 'elements_parametres.dart';
 
 /// Sous-pages de Paramètres › Général (comme Outils › Gmail) :
-/// JARVIS Touch, puis Capture d'écran ou Personnalisation.
+/// JARVIS Touch, puis Capture d’écran ou Personnalisation ; Apparence,
+/// puis Thèmes ou Motifs.
 enum PageGenerale {
   touch('JARVIS Touch', null),
   capture('Capture d’écran', PageGenerale.touch),
-  personnalisation('Personnalisation', PageGenerale.touch);
+  personnalisation('Personnalisation', PageGenerale.touch),
+  apparence('Apparence', null),
+  themes('Thèmes', PageGenerale.apparence),
+  motifs('Motifs', PageGenerale.apparence);
 
   const PageGenerale(this.libelle, this.parent);
 
@@ -62,7 +66,7 @@ class LigneSousPage extends StatelessWidget {
                 children: [
                   Text(
                     titre,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w600,
                       color: CouleursJarvis.texte,
@@ -71,7 +75,7 @@ class LigneSousPage extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     sousTitre,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       color: CouleursJarvis.texteSecondaire,
                     ),
@@ -83,14 +87,14 @@ class LigneSousPage extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 statut!,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   color: CouleursJarvis.texteSecondaire,
                 ),
               ),
             ],
             const SizedBox(width: 4),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -103,7 +107,11 @@ class LigneSousPage extends StatelessWidget {
 
 /// Général › JARVIS Touch : l'interrupteur existant, puis les sous-pages.
 class PageJarvisTouch extends StatelessWidget {
-  const PageJarvisTouch({super.key, required this.touch, required this.surPage});
+  const PageJarvisTouch({
+    super.key,
+    required this.touch,
+    required this.surPage,
+  });
 
   final JarvisTouchService touch;
   final ValueChanged<PageGenerale> surPage;
@@ -120,12 +128,13 @@ class PageJarvisTouch extends StatelessWidget {
             enfants: [
               LigneReglage(
                 titre: 'Activer JARVIS Touch',
-                description: 'La bulle reste au-dessus des autres applications.',
+                description:
+                    'La bulle reste au-dessus des autres applications.',
                 largeurControle: 60,
                 controle: Align(
                   alignment: Alignment.centerRight,
                   child: t.occupe
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.all(12),
                           child: SizedBox.square(
                             dimension: 22,

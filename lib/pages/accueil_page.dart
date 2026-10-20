@@ -714,10 +714,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
           SnackBar(
             content: Text(
               '$raison ${AccueilPage.pieceJointeGardee}',
-              style: const TextStyle(
-                fontSize: 13.5,
-                color: CouleursJarvis.ivoire,
-              ),
+              style: TextStyle(fontSize: 13.5, color: CouleursJarvis.ivoire),
             ),
             behavior: SnackBarBehavior.floating,
             // Au-dessus de la barre : « Envoyer » reste accessible pour
@@ -898,7 +895,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
                                   opacity: animation,
                                   child: SizeTransition(
                                     sizeFactor: animation,
-                                    axisAlignment: -1,
+                                    alignment: Alignment.topLeft,
                                     // SizeTransition aligne à gauche : on recentre.
                                     child: Center(child: enfant),
                                   ),
@@ -1143,7 +1140,7 @@ class _BoutonRetourChat extends StatelessWidget {
         focusColor: CouleursJarvis.signal.withValues(alpha: 0.1),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 14),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1216,7 +1213,7 @@ class _BoutonQuitter extends StatelessWidget {
                 const SizedBox(width: 12),
                 // Écran très étroit : le libellé se raccourcit plutôt que de
                 // déborder.
-                const Flexible(
+                Flexible(
                   child: Text(
                     'Quitter le mode vocal',
                     maxLines: 1,

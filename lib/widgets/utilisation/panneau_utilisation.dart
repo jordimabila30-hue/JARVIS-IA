@@ -195,7 +195,7 @@ class _EnTete extends StatelessWidget {
               color: CouleursJarvis.violetPoudre,
               borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.data_usage_rounded,
               color: CouleursJarvis.signal,
               size: 22,
@@ -211,7 +211,7 @@ class _EnTete extends StatelessWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text(
+                    Text(
                       'Utilisation',
                       style: TextStyle(
                         fontSize: 16,
@@ -227,7 +227,7 @@ class _EnTete extends StatelessWidget {
                   utilisation == null
                       ? '—'
                       : texteFournisseur(utilisation!.offre),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     color: CouleursJarvis.texteSecondaire,
                   ),
@@ -260,7 +260,7 @@ class _Pastille extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         child: Text(
           texte,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: CouleursJarvis.signal,
@@ -319,7 +319,7 @@ class _NoteDiscrete extends StatelessWidget {
         Expanded(
           child: Text(
             texte,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               color: CouleursJarvis.texteSecondaire,
             ),

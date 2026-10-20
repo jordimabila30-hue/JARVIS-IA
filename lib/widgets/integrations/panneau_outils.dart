@@ -41,23 +41,29 @@ class _PanneauOutilsState extends State<PanneauOutils> {
 
   @override
   Widget build(BuildContext context) {
-    return CarteReglages(enfants: [
-      for (final outil in OutilJarvis.values)
-        switch (outil) {
-          OutilJarvis.gmail => ListenableBuilder(
-            listenable: widget.gmail ?? const _Fixe(),
-            builder: (context, _) {
-              final (libelle, couleur) = statutGmail(widget.gmail);
-              return _LigneOutil(
-                outil: outil,
-                logo: const LogoGmail(),
-                statut: StatutOutil(libelle: libelle, couleur: couleur, attente: widget.gmail?.enAttente ?? false),
-                surAppui: () => widget.surChoix(outil),
-              );
-            },
-          ),
-        },
-    ]);
+    return CarteReglages(
+      enfants: [
+        for (final outil in OutilJarvis.values)
+          switch (outil) {
+            OutilJarvis.gmail => ListenableBuilder(
+              listenable: widget.gmail ?? const _Fixe(),
+              builder: (context, _) {
+                final (libelle, couleur) = statutGmail(widget.gmail);
+                return _LigneOutil(
+                  outil: outil,
+                  logo: const LogoGmail(),
+                  statut: StatutOutil(
+                    libelle: libelle,
+                    couleur: couleur,
+                    attente: widget.gmail?.enAttente ?? false,
+                  ),
+                  surAppui: () => widget.surChoix(outil),
+                );
+              },
+            ),
+          },
+      ],
+    );
   }
 }
 
@@ -71,7 +77,12 @@ class _Fixe implements Listenable {
 }
 
 class _LigneOutil extends StatelessWidget {
-  const _LigneOutil({required this.outil, required this.logo, required this.statut, required this.surAppui});
+  const _LigneOutil({
+    required this.outil,
+    required this.logo,
+    required this.statut,
+    required this.surAppui,
+  });
 
   final OutilJarvis outil;
   final Widget logo;
@@ -80,38 +91,62 @@ class _LigneOutil extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-        button: true,
-        child: InkWell(
-          onTap: surAppui,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(children: [
-              logo,
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(outil.nom,
-                      style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600, color: CouleursJarvis.texte)),
+    button: true,
+    child: InkWell(
+      onTap: surAppui,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            logo,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    outil.nom,
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w600,
+                      color: CouleursJarvis.texte,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(outil.description,
-                      style: const TextStyle(fontSize: 12.5, color: CouleursJarvis.texteSecondaire)),
-                ]),
+                  Text(
+                    outil.description,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: CouleursJarvis.texteSecondaire,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: CouleursJarvis.creme.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: CouleursJarvis.trait.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: CouleursJarvis.creme.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: CouleursJarvis.trait.withValues(alpha: 0.6),
                 ),
-                child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: statut),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right_rounded, color: CouleursJarvis.texteSecondaire),
-            ]),
-          ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: statut,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: CouleursJarvis.texteSecondaire,
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }

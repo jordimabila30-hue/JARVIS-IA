@@ -36,7 +36,7 @@ class ChoixFichiersRecus extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             titre,
             style: TextStyle(
               fontSize: 15.5,
@@ -45,7 +45,7 @@ class ChoixFichiersRecus extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             consigne,
             style: TextStyle(
               fontSize: 13.5,
@@ -63,7 +63,7 @@ class ChoixFichiersRecus extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                leading: const Icon(
+                leading: Icon(
                   Icons.insert_drive_file_outlined,
                   color: CouleursJarvis.signal,
                 ),
@@ -72,21 +72,18 @@ class ChoixFichiersRecus extends StatelessWidget {
                   f.nom,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    color: CouleursJarvis.texte,
-                  ),
+                  style: TextStyle(fontSize: 14.5, color: CouleursJarvis.texte),
                 ),
                 subtitle: f.tailleOctets == null
                     ? null
                     : Text(
                         tailleLisible(f.tailleOctets!),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
                           color: CouleursJarvis.texteSecondaire,
                         ),
                       ),
-                trailing: const Icon(
+                trailing: Icon(
                   Icons.chevron_right_rounded,
                   color: CouleursJarvis.texteSecondaire,
                 ),

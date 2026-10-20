@@ -96,7 +96,7 @@ class _JoindreWhatsAppPageState extends State<JoindreWhatsAppPage> {
         child: Scaffold(
           backgroundColor: CouleursJarvis.ivoire,
           body: DecoratedBox(
-            decoration: const BoxDecoration(gradient: degradeFondJarvis),
+            decoration: BoxDecoration(gradient: degradeFondJarvis),
             child: SizedBox.expand(
               child: SafeArea(
                 child: Column(
@@ -158,7 +158,7 @@ class _JoindreWhatsAppPageState extends State<JoindreWhatsAppPage> {
                             ),
                             if (_moi == null) ...[
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 JoindreWhatsAppPage.choisirIdentite,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
@@ -222,7 +222,7 @@ class _Entete extends StatelessWidget {
         Expanded(
           child: Semantics(
             header: true,
-            child: const Text(
+            child: Text(
               JoindreWhatsAppPage.titre,
               style: TextStyle(
                 fontFamily: policeAffichage,
@@ -281,7 +281,7 @@ class _CarteResume extends StatelessWidget {
                   nom,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: policeAffichage,
                     fontSize: 20,
                     fontWeight: FontWeight.w500,
@@ -330,7 +330,7 @@ class _Ligne extends StatelessWidget {
         Expanded(
           child: Text(
             texte,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               height: 1.35,
               color: CouleursJarvis.texte,
@@ -361,7 +361,7 @@ class _ChoixMoi extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           JoindreWhatsAppPage.vousEtes,
           style: TextStyle(
             fontSize: 13,

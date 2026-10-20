@@ -39,9 +39,9 @@ class _CarteConversationExterneState extends State<CarteConversationExterne> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.62),
+        color: CouleursJarvis.voile.withValues(alpha: 0.62),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+        border: Border.all(color: CouleursJarvis.voile.withValues(alpha: 0.9)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,7 +56,7 @@ class _CarteConversationExterneState extends State<CarteConversationExterne> {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     'Afficher les ${lignes.length} messages',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
                       color: CouleursJarvis.signal,

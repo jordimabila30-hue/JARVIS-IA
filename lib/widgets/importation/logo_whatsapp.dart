@@ -13,7 +13,7 @@ class LogoWhatsApp extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox.square(
     dimension: taille,
     child: SvgPicture.asset(
-      SourceConversation.whatsapp.logo,
+      SourceConversation.whatsapp.logo!,
       fit: BoxFit.contain,
       semanticsLabel: 'WhatsApp',
     ),

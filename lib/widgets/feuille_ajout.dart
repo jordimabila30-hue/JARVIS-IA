@@ -38,7 +38,7 @@ class FeuilleAjout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: CouleursJarvis.coque,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: CouleursJarvis.trait)),
@@ -73,7 +73,7 @@ class FeuilleAjout extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               titre,
@@ -184,7 +184,7 @@ class _Choix extends StatelessWidget {
                         children: [
                           Text(
                             titre,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
                               color: CouleursJarvis.texte,
@@ -194,7 +194,7 @@ class _Choix extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               detail,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 color: CouleursJarvis.texteSecondaire,
                               ),
@@ -205,7 +205,7 @@ class _Choix extends StatelessWidget {
                     ),
                     ?suite,
                     if (fleche)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(left: 8, right: 2),
                         child: Icon(
                           Icons.chevron_right_rounded,
@@ -334,7 +334,7 @@ class _LigneImportGlissanteState extends State<LigneImportGlissante>
               key: const Key('action-ajouter-message'),
               tooltip: LigneImportGlissante.action,
               onPressed: action,
-              icon: const Icon(
+              icon: Icon(
                 Icons.add_comment_outlined,
                 size: 20,
                 color: CouleursJarvis.signal,
@@ -413,7 +413,7 @@ class _LigneImportGlissanteState extends State<LigneImportGlissante>
                                             Icons.add_comment_outlined,
                                             size: 18,
                                             color: _arme
-                                                ? Colors.white
+                                                ? CouleursJarvis.surSignal
                                                 : CouleursJarvis.signal,
                                           ),
                                           const SizedBox(width: 6),
@@ -426,7 +426,7 @@ class _LigneImportGlissanteState extends State<LigneImportGlissante>
                                                 height: 1.2,
                                                 fontWeight: FontWeight.w600,
                                                 color: _arme
-                                                    ? Colors.white
+                                                    ? CouleursJarvis.surSignal
                                                     : CouleursJarvis.signal,
                                               ),
                                             ),

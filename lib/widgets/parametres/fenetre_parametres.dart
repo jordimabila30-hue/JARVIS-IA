@@ -34,7 +34,6 @@ enum SectionParametres {
   ),
   chatVocal('Chat vocal', Icons.graphic_eq_rounded),
   particules('Particules PIM', Icons.blur_on_rounded),
-  apparence('Apparence', Icons.palette_outlined),
   confidentialite('Confidentialité', Icons.lock_outline_rounded),
 
   /// Ouverte par la carte du compte, en bas de la navigation.
@@ -516,7 +515,7 @@ class _Navigation extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (!grand)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(left: 12, bottom: 22),
                 child: Text(
                   'JARVIS',
@@ -628,7 +627,7 @@ class _EntreeNavigation extends StatelessWidget {
                           Text(
                             section.description!,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               color: CouleursJarvis.texteSecondaire,
                             ),
@@ -637,7 +636,7 @@ class _EntreeNavigation extends StatelessWidget {
                     ),
                   ),
                   if (grand)
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
                       color: CouleursJarvis.texteSecondaire,
                     ),
@@ -717,7 +716,7 @@ class _CarteUtilisateur extends StatelessWidget {
                   ),
                   child: Text(
                     initiale,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: CouleursJarvis.signal,
@@ -733,7 +732,7 @@ class _CarteUtilisateur extends StatelessWidget {
                       Text(
                         nom,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w500,
                           color: CouleursJarvis.texte,
@@ -742,7 +741,7 @@ class _CarteUtilisateur extends StatelessWidget {
                       Text(
                         offre,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: CouleursJarvis.texteSecondaire,
                         ),
@@ -750,7 +749,7 @@ class _CarteUtilisateur extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 20,
                   color: CouleursJarvis.texteSecondaire,
@@ -837,7 +836,7 @@ class _Contenu extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (avecTitre) ...[
-                    const Text(
+                    Text(
                       'Paramètres',
                       style: TextStyle(
                         fontFamily: policeAffichage,
@@ -868,7 +867,7 @@ class _Contenu extends StatelessWidget {
                                   ? pageGenerale?.libelle
                                   : null) ??
                               section.libelle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             color: CouleursJarvis.texteSecondaire,
                           ),
@@ -917,7 +916,6 @@ class _Contenu extends StatelessWidget {
                       api: api,
                       surConnexion: surConnexion,
                     ),
-                    _ => _SectionAVenir(section: section),
                   },
                 ],
               ),
@@ -1007,7 +1005,7 @@ class _EnregistreState extends State<_Enregistre> {
     return AnimatedOpacity(
       opacity: _visible ? 1 : 0,
       duration: const Duration(milliseconds: 250),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.check_rounded, size: 15, color: CouleursJarvis.signal),
@@ -1018,88 +1016,6 @@ class _EnregistreState extends State<_Enregistre> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Sections pas encore réglables : informations réelles et sobres, sans
-/// option fictive.
-class _SectionAVenir extends StatelessWidget {
-  const _SectionAVenir({required this.section});
-
-  final SectionParametres section;
-
-  @override
-  Widget build(BuildContext context) {
-    final (
-      String description,
-      List<(String, String)> infos,
-    ) = switch (section) {
-      SectionParametres.general => (
-        'Les réglages généraux arriveront ici.',
-        [('Langue de l’interface', 'Français'), ('Version', '1.0.0')],
-      ),
-      SectionParametres.apparence => (
-        'D’autres thèmes pourront être proposés.',
-        [('Thème', 'Ivoire'), ('Couleur signature', 'Bleu-violet')],
-      ),
-      SectionParametres.confidentialite ||
-      SectionParametres.utilisation ||
-      SectionParametres.outils ||
-      SectionParametres.chatVocal ||
-      SectionParametres.particules ||
-      SectionParametres.compte => ('', const []),
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: CouleursJarvis.violet.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Bientôt',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: CouleursJarvis.signal,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Text(
-          description,
-          style: const TextStyle(
-            fontSize: 14,
-            height: 1.5,
-            color: CouleursJarvis.texteSecondaire,
-          ),
-        ),
-        const SizedBox(height: 22),
-        CarteReglages(
-          enfants: [
-            for (final (titre, valeur) in infos)
-              LigneReglage(
-                titre: titre,
-                largeurControle: 180,
-                controle: Text(
-                  valeur,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: CouleursJarvis.texteSecondaire,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
     );
   }
 }
@@ -1130,7 +1046,7 @@ class _FormePrincipale extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 4, bottom: 10),
               child: Text(
                 'FORME DE JARVIS',

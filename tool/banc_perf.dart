@@ -282,7 +282,7 @@ class _BancState extends State<_Banc> {
           ),
         );
       case 'vide':
-        page = const Scaffold(backgroundColor: CouleursJarvis.ivoirePrincipal);
+        page = Scaffold(backgroundColor: CouleursJarvis.ivoirePrincipal);
       default:
         page = AccueilPage(pim: _pim);
     }

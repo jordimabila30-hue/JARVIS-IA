@@ -1,96 +1,155 @@
 import 'package:flutter/material.dart';
 
-/// Palette de JARVIS : fond ivoire chaud nuancé de lavande, encre
-/// graphite, bleu-violet « signal » pour ce qui attend une action.
+import '../services/apparence/service_apparence.dart';
+import 'motifs_jarvis.dart';
+import 'palette_jarvis.dart';
+
+export 'palette_jarvis.dart';
+
+/// Couleurs de JARVIS, lues dans la palette affichée
+/// ([PaletteJarvis.active], changée par `ServiceApparence`). Les noms
+/// d'origine sont gardés : en JARVIS original clair, les valeurs sont
+/// exactement celles d'avant. Dans un widget, `PaletteJarvis.of(context)`
+/// donne la même palette.
 class CouleursJarvis {
   CouleursJarvis._();
 
+  static PaletteJarvis get _p => PaletteJarvis.active;
+
   /// Fond : ivoire clair au centre, beige chaud vers les bords.
-  static const ivoire = Color(0xFFFAF8F2);
-  static const ivoirePrincipal = Color(0xFFF8F4EC);
-  static const creme = Color(0xFFF3EEE4);
-  static const beigeChaud = Color(0xFFEFE7DC);
-  static const sable = Color(0xFFEBE3D6);
+  static Color get ivoire => _p.ivoire;
+  static Color get ivoirePrincipal => _p.ivoirePrincipal;
+  static Color get creme => _p.creme;
+  static Color get beigeChaud => _p.beigeChaud;
+  static Color get sable => _p.sable;
 
   /// Nuances lavande, toujours très diluées dans le fond.
-  static const violetPoudre = Color(0xFFE8E1F2);
-  static const lavande = Color(0xFFDDD5EF);
+  static Color get violetPoudre => _p.violetPoudre;
+  static Color get lavande => _p.lavande;
 
   /// Panneaux (verre laiteux) et traits fins.
-  static const coque = Color(0xFFFFFDF9);
-  static const trait = Color(0xFFDCD3C4);
+  static Color get coque => _p.coque;
+  static Color get trait => _p.trait;
+
+  /// Voile « verre » (blanc en clair, panneau en sombre).
+  static Color get voile => _p.voile;
 
   /// Bleu-violet signature, légèrement désaturé (premium, pas criard).
-  static const signal = Color(0xFF5559B8);
-  static const violet = Color(0xFF8C7AD2);
+  static Color get signal => _p.signal;
+
+  /// Texte et icônes posés sur [signal].
+  static Color get surSignal => _p.surSignal;
+  static Color get violet => _p.violet;
 
   /// Orange chaud des jauges d'utilisation au-delà du seuil critique.
-  static const critique = Color(0xFFD9822B);
+  static Color get critique => _p.critique;
 
-  static const texte = Color(0xFF272932);
+  static Color get texte => _p.texte;
 
   /// Texte secondaire : gris chaud, contraste ≈ 4,6:1 sur l'ivoire.
-  static const texteSecondaire = Color(0xFF6F6A72);
+  static Color get texteSecondaire => _p.texteSecondaire;
+
+  static Color get erreur => _p.erreur;
+  static Color get succes => _p.succes;
+
+  /// Base des ombres (avec une faible opacité).
+  static Color get ombre => _p.ombre;
+
+  /// Dégradés de la bulle de l'utilisateur et du menu latéral ; fonds des
+  /// champs (repos, survol, appui).
+  static List<Color> get bulleUtilisateur => _p.bulleUtilisateur;
+  static List<Color> get panneauMenu => _p.panneauMenu;
+  static List<Color> get champ => _p.champ;
+
+  /// Ivoire fixe, pour le contenu des surfaces toujours sombres (capsule
+  /// vocale) : ne suit pas le thème.
+  static const ivoireFixe = Color(0xFFFAF8F2);
+
+  /// Couleur d'origine pensée pour un fond clair (rouge d'erreur, vert de
+  /// réussite, couleurs d'auteurs…) : inchangée en clair, éclaircie en
+  /// sombre pour rester lisible.
+  static Color lisible(Color clair) =>
+      _p.sombre ? Color.lerp(clair, const Color(0xFFFFFFFF), 0.38)! : clair;
 }
 
-/// Police d'affichage (salutation, titres). Le texte courant reste en
+/// Police d'affichage (salutation, titres) du style affiché : Exo 2 pour
+/// JARVIS, Baloo 2 pour les styles importés. Le texte courant reste en
 /// police système, plus lisible en petite taille.
-const policeAffichage = 'Exo2';
+String get policeAffichage => PaletteJarvis.active.identite.policeAffichage;
 
 /// Dégradé de fond de JARVIS : doux, chaud, jamais blanc pur.
-const degradeFondJarvis = LinearGradient(
+LinearGradient get degradeFondJarvis => degradeFond(PaletteJarvis.active);
+
+LinearGradient degradeFond(PaletteJarvis p) => LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
-  colors: [CouleursJarvis.ivoire, CouleursJarvis.creme, CouleursJarvis.sable],
-  stops: [0, 0.62, 1],
+  colors: [p.ivoire, p.creme, p.sable],
+  stops: const [0, 0.62, 1],
 );
 
-ThemeData themeJarvis() {
-  const schema = ColorScheme.light(
-    primary: CouleursJarvis.signal,
-    onPrimary: CouleursJarvis.ivoire,
-    secondary: CouleursJarvis.violet,
-    surface: CouleursJarvis.coque,
-    onSurface: CouleursJarvis.texte,
-    outline: CouleursJarvis.trait,
-  );
+ThemeData themeJarvis([PaletteJarvis? palette]) {
+  final p = palette ?? PaletteJarvis.active;
+  final schema = p.sombre
+      ? ColorScheme.dark(
+          primary: p.signal,
+          onPrimary: p.surSignal,
+          secondary: p.violet,
+          surface: p.coque,
+          onSurface: p.texte,
+          outline: p.trait,
+          error: p.erreur,
+          inverseSurface: p.texte,
+          onInverseSurface: p.ivoire,
+        )
+      : ColorScheme.light(
+          primary: p.signal,
+          onPrimary: p.surSignal,
+          secondary: p.violet,
+          surface: p.coque,
+          onSurface: p.texte,
+          outline: p.trait,
+        );
+  final police = p.identite.policeAffichage;
   return ThemeData(
+    brightness: p.luminosite,
     colorScheme: schema,
-    scaffoldBackgroundColor: CouleursJarvis.ivoire,
-    textTheme: const TextTheme(
+    scaffoldBackgroundColor: p.ivoire,
+    extensions: [p],
+    textTheme: TextTheme(
       displaySmall: TextStyle(
-        fontFamily: policeAffichage,
+        fontFamily: police,
         fontSize: 40,
         fontWeight: FontWeight.w300,
         height: 1.1,
-        color: CouleursJarvis.texte,
+        color: p.texte,
       ),
       titleMedium: TextStyle(
-        fontFamily: policeAffichage,
+        fontFamily: police,
         fontSize: 17,
         fontWeight: FontWeight.w600,
-        color: CouleursJarvis.texte,
+        color: p.texte,
       ),
-      bodyLarge: TextStyle(fontSize: 16, color: CouleursJarvis.texte),
+      bodyLarge: TextStyle(fontSize: 16, color: p.texte),
       bodyMedium: TextStyle(
         fontSize: 14,
         height: 1.45,
-        color: CouleursJarvis.texteSecondaire,
+        color: p.texteSecondaire,
       ),
     ),
-    tooltipTheme: const TooltipThemeData(
+    tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
-        color: CouleursJarvis.texte,
-        borderRadius: BorderRadius.all(Radius.circular(6)),
+        color: p.texte,
+        borderRadius: const BorderRadius.all(Radius.circular(6)),
       ),
-      textStyle: TextStyle(color: CouleursJarvis.ivoire, fontSize: 12),
+      textStyle: TextStyle(color: p.ivoire, fontSize: 12),
     ),
   );
 }
 
 /// Fond de page de JARVIS : centre légèrement plus clair, bords un peu
-/// plus chauds. Écarts de teinte très faibles et dégradés larges : pas de
-/// contraste agressif (Flutter trame les dégradés, ce qui évite les bandes).
+/// plus chauds, puis le motif choisi (Paramètres › Général › Apparence ›
+/// Motifs ; « Aurore » appartient au fond de l'accueil). Écarts de teinte
+/// très faibles et dégradés larges : pas de contraste agressif.
 class FondJarvis extends StatelessWidget {
   const FondJarvis({super.key, required this.child});
 
@@ -98,19 +157,64 @@ class FondJarvis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = PaletteJarvis.of(context);
+    final apparence = ServiceApparence.of(context);
+    final motif = apparence?.motif ?? MotifJarvis.aurore;
+    Widget contenu = child;
+    if (motif != MotifJarvis.aucun && motif != MotifJarvis.aurore) {
+      contenu = CustomPaint(
+        isComplex: true,
+        painter: PeintreMotif(motif, p, apparence!.intensite),
+        child: child,
+      );
+    }
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: degradeFondJarvis),
+      decoration: BoxDecoration(gradient: degradeFond(p)),
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: Alignment(0, -0.15),
+            center: const Alignment(0, -0.15),
             radius: 1.25,
-            colors: [Color(0x80FFFDF8), Color(0x00FFFDF8), Color(0x14C9B79C)],
-            stops: [0, 0.6, 1],
+            colors: p.sombre
+                ? [
+                    p.fond.centre.withValues(alpha: 0.6),
+                    p.fond.centre.withValues(alpha: 0),
+                    p.fond.bord.withValues(alpha: 0.4),
+                  ]
+                : const [
+                    Color(0x80FFFDF8),
+                    Color(0x00FFFDF8),
+                    Color(0x14C9B79C),
+                  ],
+            stops: const [0, 0.6, 1],
           ),
         ),
-        child: child,
+        child: contenu,
       ),
     );
   }
+}
+
+/// Peint un motif géométrique (registre `MotifJarvis`) sur toute la zone.
+class PeintreMotif extends CustomPainter {
+  const PeintreMotif(this.motif, this.palette, this.intensite);
+
+  final MotifJarvis motif;
+  final PaletteJarvis palette;
+  final double intensite;
+
+  @override
+  void paint(Canvas canvas, Size size) => dessinerMotifGeometrique(
+    canvas,
+    Offset.zero & size,
+    motif,
+    palette,
+    intensite,
+  );
+
+  @override
+  bool shouldRepaint(PeintreMotif ancien) =>
+      ancien.motif != motif ||
+      !identical(ancien.palette, palette) ||
+      ancien.intensite != intensite;
 }

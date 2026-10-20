@@ -29,7 +29,7 @@ class _EcranDeLancementState extends State<EcranDeLancement>
   // À garder synchronisé avec `version` dans pubspec.yaml.
   static const _version = 'v1.0.0';
 
-  static const _bleu = CouleursJarvis.signal;
+  static Color get _bleu => CouleursJarvis.signal;
   static const _dureeMs = 3200;
 
   /// Déroulé principal, joué une seule fois.
@@ -154,7 +154,7 @@ class _EcranDeLancementState extends State<EcranDeLancement>
                           bottom: 24,
                           child: Opacity(
                             opacity: _etape(0.70, 0.85) * 0.35,
-                            child: const Text(
+                            child: Text(
                               _version,
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -302,7 +302,7 @@ class _AnneauxHud extends CustomPainter {
     required this.intensite,
   });
 
-  static const _bleu = CouleursJarvis.signal;
+  static Color get _bleu => CouleursJarvis.signal;
   static const _tour = 2 * math.pi;
   static const _haut = -math.pi / 2;
 

@@ -190,8 +190,9 @@ lib/
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
 │   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
-│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota)
+│   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota ; Général › Apparence › Thèmes / Motifs : pages_apparence.dart)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
+│   ├── apparence/                    # TransitionApparence (fondu + reconstruction unique), FriseKuba
 │   └── authentification/            # logo, en-tête, conteneur, champ, boutons, bandeau, brouillon des saisies
 ├── services/
 │   ├── voice_session.dart            # boucle écoute → réflexion → parole (répond via la conversation partagée), lecture vocale en mode écrit
@@ -213,6 +214,7 @@ lib/
 │   ├── importation/                  # réception (vérification, format, pont Android, dépôt) ; lecture : copie locale, ZIP, analyseur, identité « Moi »
 │   ├── conversations/                # multicanal (fournisseurs, tri, recherche, épingles) ; synchro Supabase : dépôt, correspondance local ↔ UUID, liste, file des échanges locaux
 │   ├── preferences_pim_service.dart  # forme principale PIM (enregistrée sur l'appareil)
+│   ├── apparence/                    # ServiceApparence (source de vérité, clé jarvis.apparence, mode Système) + PorteeApparence
 │   ├── jarvis_touch_service.dart     # JARVIS Touch (Android) : bulle flottante, autorisation, état réel ; natif : android/.../touch/
 │   ├── jarvis_touch_chat.dart        # mini-chat de JARVIS Touch : autre vue de LA conversation (canal jarvis/touch_chat ; moteur Flutter du processus : touch/MoteurJarvis.kt)
 │   │                                 # « Analyser l'écran » (phase 3A) : 100 % natif, android/.../touch/capture/ (voir plus bas)
@@ -224,6 +226,7 @@ lib/
 │   ├── forme_pim.dart                # sphère, cube, tétraèdre, Réacteur Arc : noms, tirage, durées
 │   ├── message_conversation.dart     # messages (écrits ou vocaux), conversation externe, tons, raccourcis
 │   ├── integrations/                 # EtatGmail (statut, adresse, lecture seule ; jamais de jeton)
+│   ├── apparence/                    # PreferencesApparence (mode, style, motif, intensité ; JSON versionné, lecture tolérante)
 │   ├── utilisation/                  # Utilisation, Jauge, FournisseurIA (réponse de /me/quota, quotas quotidiens)
 │   ├── authentification/            # UtilisateurAuth, ResultatAuth / ErreurAuth
 │   ├── importation/                  # FichierExportWhatsApp (fichier reçu) ; ConversationWhatsApp, MessageWhatsApp (conversation lue)
@@ -237,7 +240,10 @@ lib/
 │   ├── noms_locales.dart             # « fr-CA » → « Français (Canada) », nom de langue, de région
 │   └── noms_voix.dart                # « Microsoft Denise Online (Natural)… » → « Denise · Naturelle »
 └── theme/
-    ├── theme_jarvis.dart             # palette ivoire / graphite / bleu-violet (+ critique orange) + FondJarvis
+    ├── theme_jarvis.dart             # façade CouleursJarvis (suit la palette active), themeJarvis(palette), FondJarvis (+ motif)
+    ├── palette_jarvis.dart           # PaletteJarvis (ThemeExtension) : couleurs, fond, identité (frise, ombres pleines, contour, police)
+    ├── styles_jarvis.dart            # registre StyleVisuel : JARVIS original + 6 styles importés, chacun clair ET sombre
+    ├── motifs_jarvis.dart            # registre MotifJarvis (aucun, Aurore, Kuba 1-3, Cœur Kuba) + dessin des motifs
     └── gabarit_jarvis.dart           # responsive : formats, tailles de texte, taille de la sphère
 ```
 
@@ -803,6 +809,27 @@ JARVIS Touch, intégration (2026-10-18) :
   `ModeInterruption.automatique.disponible = false` tant que non validée.
 - Téléphone USB : lancer avec `--dart-define=JARVIS_API_URL=http://127.0.0.1:8000`
   (+ `adb reverse tcp:8000 tcp:8000`), sinon l'appli vise 10.0.2.2.
+
+Apparence (2026-10-19, Paramètres › Général › Apparence › Thèmes / Motifs) :
+quatre préférences indépendantes (`PreferencesApparence`) : mode (Clair /
+Sombre / Système), style (`StyleVisuel` : JARVIS original + Congotronics,
+Raphia Kuba, Fleuve, La Sape, Rumba, Léopards, repris de l'application
+« Jarvis » d'une amie : jetons CSS exacts pour la variante d'origine, autre
+variante créée), motif (`MotifJarvis`), intensité. Défaut = JARVIS clair +
+Aurore 50 % = apparence d'avant, à l'identique. `ServiceApparence` (une
+instance, lue avant `runApp`, clé `jarvis.apparence`, JSON versionné, valeur
+inconnue → défaut) publie `PaletteJarvis.active` ; `CouleursJarvis.*` est une
+FAÇADE qui la lit (plus de `const` avec ces couleurs) ; dans un widget :
+`PaletteJarvis.of(context)` (ThemeExtension). Changement de palette :
+`TransitionApparence` = fondu 320 ms + reconstruction / repeinture unique de
+tout l'arbre (aucun état perdu). Motif : seul le fond dépend du service
+(`FondJarvisAnime` : image mémorisée refaite une fois ; `FondJarvis`).
+Personnalité des styles importés (`IdentiteVisuelle`) : contour 2 px, ombre
+pleine décalée (bulle, carte), frise kuba (`FriseKuba`) en haut des cartes de
+JARVIS, police Baloo 2 (OFL) pour les titres. PIM : NON touché (ni couleurs
+ni algorithmes, demande explicite). Couleur pensée pour le clair (rouge,
+vert, auteurs) : `CouleursJarvis.lisible`. Tests : `test/apparence_test.dart`
+(contrastes des 14 palettes compris).
 
 ---
 

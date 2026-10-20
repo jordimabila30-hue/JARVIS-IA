@@ -107,7 +107,7 @@ class PeriodePersonnalisee extends StatelessWidget {
     final s = selection;
     final p = s.periode;
     if (p == null) {
-      return const Text(
+      return Text(
         aucunMessageDate,
         style: TextStyle(fontSize: 13, color: CouleursJarvis.texteSecondaire),
       );
@@ -162,18 +162,18 @@ class PeriodePersonnalisee extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline_rounded,
                   size: 16,
-                  color: Color(0xFFB3261E),
+                  color: CouleursJarvis.erreur,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     erreur,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      color: Color(0xFFB3261E),
+                      color: CouleursJarvis.erreur,
                     ),
                   ),
                 ),
@@ -195,7 +195,7 @@ class PeriodePersonnalisee extends StatelessWidget {
                 ? toucherSecond
                 : toucherJour,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -205,7 +205,7 @@ class PeriodePersonnalisee extends StatelessWidget {
             Text(
               r,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: CouleursJarvis.signal,
@@ -250,7 +250,7 @@ class _Borne extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 44),
           child: Text(
             libelle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: CouleursJarvis.texteSecondaire,
@@ -337,7 +337,7 @@ class _RouesHeureState extends State<_RouesHeure> {
             Center(
               child: Text(
                 _deux(i),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 22,
                   color: CouleursJarvis.texte,
                   fontFeatures: [FontFeature.tabularFigures()],
@@ -361,7 +361,7 @@ class _RouesHeureState extends State<_RouesHeure> {
             Text(
               'Heure de ${widget.titre.toLowerCase()}',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: policeAffichage,
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
@@ -373,7 +373,7 @@ class _RouesHeureState extends State<_RouesHeure> {
               child: Row(
                 children: [
                   _roue(24, _heure, (v) => _heure = v),
-                  const Text(
+                  Text(
                     ':',
                     style: TextStyle(fontSize: 22, color: CouleursJarvis.texte),
                   ),
@@ -449,7 +449,7 @@ class _SaisieHeureState extends State<_SaisieHeure> {
           LengthLimitingTextInputFormatter(2),
         ],
         onSubmitted: (_) => _valider(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 22,
           color: CouleursJarvis.texte,
           fontFeatures: [FontFeature.tabularFigures()],
@@ -470,7 +470,7 @@ class _SaisieHeureState extends State<_SaisieHeure> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       title: Text(
         'Heure de ${widget.titre.toLowerCase()}',
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: policeAffichage,
           fontSize: 18,
           fontWeight: FontWeight.w600,
@@ -495,7 +495,7 @@ class _SaisieHeureState extends State<_SaisieHeure> {
             const SizedBox(height: 8),
             Text(
               _erreur!,
-              style: const TextStyle(fontSize: 12.5, color: Color(0xFFB3261E)),
+              style: TextStyle(fontSize: 12.5, color: CouleursJarvis.erreur),
             ),
           ],
         ],

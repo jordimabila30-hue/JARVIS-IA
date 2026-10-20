@@ -260,7 +260,7 @@ class _BoutonVocalState extends State<BoutonVocal>
                       Icons.arrow_upward_rounded,
                       key: const ValueKey('envoi'),
                       size: diametre * 0.6,
-                      color: CouleursJarvis.ivoire,
+                      color: CouleursJarvis.ivoireFixe,
                     )
                   : _parole
                   ? _Onde(key: const ValueKey('onde'), t: t, taille: diametre)
@@ -268,7 +268,7 @@ class _BoutonVocalState extends State<BoutonVocal>
                       Icons.graphic_eq_rounded,
                       key: const ValueKey('voix'),
                       size: diametre * 0.58,
-                      color: CouleursJarvis.ivoire,
+                      color: CouleursJarvis.ivoireFixe,
                     ),
             ),
           ),
@@ -299,7 +299,7 @@ class _Onde extends StatelessWidget {
                     0.3 * (0.5 + 0.5 * math.sin(t * 4 * math.pi + i * 1.3))),
             margin: EdgeInsets.symmetric(horizontal: taille * 0.035),
             decoration: BoxDecoration(
-              color: CouleursJarvis.ivoire,
+              color: CouleursJarvis.ivoireFixe,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

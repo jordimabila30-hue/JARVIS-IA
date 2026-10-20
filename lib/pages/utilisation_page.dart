@@ -9,10 +9,12 @@ import '../widgets/utilisation/jauge_utilisation.dart';
 import '../widgets/utilisation/panneau_utilisation.dart';
 
 /// Ouvre la page détaillée par-dessus l'écran courant (Paramètres).
-Future<void> ouvrirPageUtilisation(BuildContext context, ServiceUtilisation service) =>
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => UtilisationPage(service: service)),
-    );
+Future<void> ouvrirPageUtilisation(
+  BuildContext context,
+  ServiceUtilisation service,
+) => Navigator.of(context).push(
+  MaterialPageRoute<void>(builder: (_) => UtilisationPage(service: service)),
+);
 
 /// Détail de l'utilisation : offre et fournisseur, consommation du jour,
 /// restants et prochaine remise à zéro (quotas quotidiens seulement).
@@ -67,7 +69,11 @@ class _UtilisationPageState extends State<UtilisationPage> {
                           child: Center(
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 720),
-                              child: _Contenu(utilisation: u, maintenant: maintenant, service: widget.service),
+                              child: _Contenu(
+                                utilisation: u,
+                                maintenant: maintenant,
+                                service: widget.service,
+                              ),
                             ),
                           ),
                         ),
@@ -100,7 +106,7 @@ class _Barre extends StatelessWidget {
             color: CouleursJarvis.texte,
           ),
           const SizedBox(width: 4),
-          const Expanded(
+          Expanded(
             child: Text(
               'Utilisation',
               style: TextStyle(
@@ -118,7 +124,11 @@ class _Barre extends StatelessWidget {
 }
 
 class _Contenu extends StatelessWidget {
-  const _Contenu({required this.utilisation, required this.maintenant, required this.service});
+  const _Contenu({
+    required this.utilisation,
+    required this.maintenant,
+    required this.service,
+  });
 
   /// null : pas encore lue (structure affichée avec « — »).
   final Utilisation? utilisation;
@@ -156,7 +166,10 @@ class _Contenu extends StatelessWidget {
                 note: u.fournisseurDifferent ? texteFournisseurActif(u) : null,
               ),
             if (u?.exception == true)
-              const _Ligne('Limites quotidiennes', 'personnelles (exception de votre compte)'),
+              const _Ligne(
+                'Limites quotidiennes',
+                'personnelles (exception de votre compte)',
+              ),
             if (u?.seuilCritique != null)
               _Ligne('Seuil d’alerte des jauges', '${u!.seuilCritique} %'),
           ],
@@ -186,7 +199,9 @@ class _Contenu extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         NoteReglage(
-          (u == null && service.erreur != null ? texteIndisponible(service.erreur) : null) ??
+          (u == null && service.erreur != null
+                  ? texteIndisponible(service.erreur)
+                  : null) ??
               texteDonneesAnciennes(service, maintenant) ??
               'Valeurs calculées par le serveur JARVIS d’après votre abonnement, actualisées automatiquement.',
         ),
@@ -214,10 +229,20 @@ class _Ligne extends StatelessWidget {
             spacing: 16,
             runSpacing: 4,
             children: [
-              Text(libelle, style: const TextStyle(fontSize: 14, color: CouleursJarvis.texteSecondaire)),
+              Text(
+                libelle,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: CouleursJarvis.texteSecondaire,
+                ),
+              ),
               Text(
                 valeur,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: CouleursJarvis.texte),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: CouleursJarvis.texte,
+                ),
               ),
             ],
           ),

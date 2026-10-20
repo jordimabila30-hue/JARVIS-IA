@@ -190,7 +190,7 @@ class _PanneauCompteState extends State<PanneauCompte> {
                                 setState(() => _nomEnregistre = false);
                               }
                             },
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               color: CouleursJarvis.texte,
                             ),
@@ -201,7 +201,7 @@ class _PanneauCompteState extends State<PanneauCompte> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 20),
                           child: c.enCours
-                              ? const SizedBox.square(
+                              ? SizedBox.square(
                                   dimension: 40,
                                   child: Padding(
                                     padding: EdgeInsets.all(11),
@@ -257,9 +257,13 @@ class _PanneauCompteState extends State<PanneauCompte> {
                 icon: const Icon(Icons.logout_rounded, size: 18),
                 label: const Text(PanneauCompte.deconnexion),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFB0444F),
+                  foregroundColor: CouleursJarvis.lisible(
+                    const Color(0xFFB0444F),
+                  ),
                   side: BorderSide(
-                    color: const Color(0xFFB0444F).withValues(alpha: 0.35),
+                    color: CouleursJarvis.lisible(
+                      const Color(0xFFB0444F),
+                    ).withValues(alpha: 0.35),
                   ),
                   minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -289,12 +293,12 @@ class _PanneauCompteState extends State<PanneauCompte> {
       ),
       SuccesApi() => (
         Icons.error_outline_rounded,
-        const Color(0xFFB0444F),
+        CouleursJarvis.lisible(const Color(0xFFB0444F)),
         PanneauCompte.serveurDifferent,
       ),
       EchecApi(:final type, :final detail) => (
         Icons.cloud_off_rounded,
-        const Color(0xFFB0444F),
+        CouleursJarvis.lisible(const Color(0xFFB0444F)),
         detail == null ? type.message : '${type.message} ($detail)',
       ),
     };
@@ -408,7 +412,7 @@ class _EnTeteCompte extends StatelessWidget {
           backgroundColor: CouleursJarvis.signal.withValues(alpha: 0.14),
           child: Text(
             nom.isEmpty ? '?' : nom.characters.first.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: CouleursJarvis.signal,
@@ -424,7 +428,7 @@ class _EnTeteCompte extends StatelessWidget {
                 nom,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
                   color: CouleursJarvis.texte,
@@ -435,7 +439,7 @@ class _EnTeteCompte extends StatelessWidget {
                 email,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   color: CouleursJarvis.texteSecondaire,
                 ),
@@ -452,7 +456,7 @@ class _EnTeteCompte extends StatelessWidget {
             ),
             child: Text(
               o == OffreCompte.pro ? 'Pro' : 'Gratuit',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: CouleursJarvis.signal,
@@ -480,7 +484,7 @@ class _Info extends StatelessWidget {
           Expanded(
             child: Text(
               titre,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w500,
                 color: CouleursJarvis.texte,
@@ -493,7 +497,7 @@ class _Info extends StatelessWidget {
               valeur,
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13.5,
                 color: CouleursJarvis.texteSecondaire,
               ),

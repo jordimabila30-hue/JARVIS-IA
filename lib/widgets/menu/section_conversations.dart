@@ -38,7 +38,7 @@ class SectionConversations extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(left: 12, bottom: 8),
           child: Text(
             titre,
@@ -120,7 +120,7 @@ class _RechercheState extends State<_Recherche> {
         controller: _controleur,
         onChanged: (v) => _recherche.value = v,
         textInputAction: TextInputAction.search,
-        style: const TextStyle(fontSize: 13.5, color: CouleursJarvis.texte),
+        style: TextStyle(fontSize: 13.5, color: CouleursJarvis.texte),
         cursorColor: CouleursJarvis.signal,
         decoration: InputDecoration(
           hintText: 'Rechercher une conversation',
@@ -128,7 +128,7 @@ class _RechercheState extends State<_Recherche> {
             fontSize: 13.5,
             color: CouleursJarvis.texteSecondaire.withValues(alpha: 0.8),
           ),
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search_rounded,
             size: 18,
             color: CouleursJarvis.texteSecondaire,
@@ -417,7 +417,7 @@ class _Avertissement extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 1),
                 child: Icon(
                   Icons.cloud_off_rounded,
@@ -429,7 +429,7 @@ class _Avertissement extends StatelessWidget {
               Expanded(
                 child: Text(
                   texte,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
                     color: CouleursJarvis.texteSecondaire,
@@ -459,10 +459,7 @@ class _Vide extends StatelessWidget {
         child: Text(
           texte,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 13,
-            color: CouleursJarvis.texteSecondaire,
-          ),
+          style: TextStyle(fontSize: 13, color: CouleursJarvis.texteSecondaire),
         ),
       ),
     );

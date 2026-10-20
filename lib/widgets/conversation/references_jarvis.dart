@@ -44,7 +44,7 @@ class _ReferencesJarvisState extends State<ReferencesJarvis> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (refs.isNotEmpty) ...[
-          const Row(
+          Row(
             children: [
               LogoWhatsApp(taille: 13),
               SizedBox(width: 6),
@@ -87,7 +87,7 @@ class _ReferencesJarvisState extends State<ReferencesJarvis> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 1, right: 6),
                 child: Icon(
                   Icons.info_outline_rounded,
@@ -98,7 +98,7 @@ class _ReferencesJarvisState extends State<ReferencesJarvis> {
               Expanded(
                 child: Text(
                   note,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     height: 1.4,
                     color: CouleursJarvis.texteSecondaire,
@@ -173,7 +173,7 @@ class CarteReference extends StatelessWidget {
                           children: [
                             TextSpan(
                               text: r.estMoi ? '$auteur (vous)' : auteur,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: CouleursJarvis.texte,
                               ),
@@ -191,7 +191,7 @@ class CarteReference extends StatelessWidget {
                             : r.dateAffichee,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           height: 1.3,
                           color: CouleursJarvis.texteSecondaire,
@@ -202,7 +202,7 @@ class CarteReference extends StatelessWidget {
                         '« ${r.extrait} »',
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13.5,
                           height: 1.4,
                           color: CouleursJarvis.texte,
@@ -212,7 +212,7 @@ class CarteReference extends StatelessWidget {
                   ),
                 ),
                 if (surAppui != null)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(left: 4, top: 2),
                     child: Icon(
                       Icons.chevron_right_rounded,

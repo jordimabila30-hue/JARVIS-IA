@@ -152,13 +152,13 @@ class DispositionAuteurs {
   final _couleurs = <String, Color>{};
 
   // Tons doux, lisibles sur l'ivoire, dans la famille de JARVIS.
-  static const _palette = [
+  static List<Color> get _palette => [
     CouleursJarvis.signal,
-    Color(0xFF8A63B8),
-    Color(0xFF3F7E8C),
-    Color(0xFFA9606F),
-    Color(0xFF6E7F3A),
-    Color(0xFFA8743A),
+    CouleursJarvis.lisible(const Color(0xFF8A63B8)),
+    CouleursJarvis.lisible(const Color(0xFF3F7E8C)),
+    CouleursJarvis.lisible(const Color(0xFFA9606F)),
+    CouleursJarvis.lisible(const Color(0xFF6E7F3A)),
+    CouleursJarvis.lisible(const Color(0xFFA8743A)),
   ];
 
   CoteBulle cote(String? auteur) {
@@ -199,7 +199,7 @@ class SeparateurJour extends StatelessWidget {
           child: Text(
             libelle(jour),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.2,
@@ -255,10 +255,10 @@ class _Bulle extends StatelessWidget {
               decoration: BoxDecoration(
                 // Même lavande que les messages écrits dans le chat JARVIS.
                 gradient: droite
-                    ? const LinearGradient(
+                    ? LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xE8ECE8FB), Color(0xDDE2E7FA)],
+                        colors: CouleursJarvis.bulleUtilisateur,
                       )
                     : null,
                 color: droite ? null : CouleursJarvis.coque,
@@ -270,7 +270,7 @@ class _Bulle extends StatelessWidget {
                 ),
                 border: Border.all(
                   color: droite
-                      ? Colors.white.withValues(alpha: 0.75)
+                      ? CouleursJarvis.voile.withValues(alpha: 0.75)
                       : CouleursJarvis.trait.withValues(alpha: 0.6),
                 ),
                 boxShadow: const [
@@ -326,7 +326,7 @@ class _Heure extends StatelessWidget {
       final d? => HeureMessage(d),
       null => Text(
         message.dateBrute,
-        style: const TextStyle(fontSize: 11, color: HeureMessage.couleur),
+        style: TextStyle(fontSize: 11, color: HeureMessage.couleur),
       ),
     };
     if (!message.ajoute) return heure;
@@ -334,7 +334,7 @@ class _Heure extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           'ajouté à la main',
           style: TextStyle(
             fontSize: 10.5,
@@ -343,7 +343,7 @@ class _Heure extends StatelessWidget {
           ),
         ),
         if (message.date != null || message.dateBrute.isNotEmpty) ...[
-          const Text(
+          Text(
             ' · ',
             style: TextStyle(fontSize: 11, color: HeureMessage.couleur),
           ),
@@ -366,7 +366,7 @@ class BulleApercu extends StatelessWidget {
     required this.cote,
     required this.debutSuite,
     this.auteur,
-    this.couleurAuteur = CouleursJarvis.signal,
+    this.couleurAuteur,
   });
 
   static const mediaNonImporte = 'Média non importé';
@@ -378,7 +378,7 @@ class BulleApercu extends StatelessWidget {
 
   /// Nom affiché en tête de bulle (null : pas utile).
   final String? auteur;
-  final Color couleurAuteur;
+  final Color? couleurAuteur;
 
   @override
   Widget build(BuildContext context) {
@@ -391,7 +391,7 @@ class BulleApercu extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             height: 1.4,
             color: CouleursJarvis.texteSecondaire,
@@ -426,7 +426,7 @@ class BulleApercu extends StatelessWidget {
       cote: cote,
       debutSuite: debutSuite,
       auteur: auteur,
-      couleurAuteur: couleurAuteur,
+      couleurAuteur: couleurAuteur ?? CouleursJarvis.signal,
       compacte:
           m.type == TypeMessageWhatsApp.supprime ||
           (m.type == TypeMessageWhatsApp.media && legende.isEmpty),
@@ -456,14 +456,14 @@ class BulleMediasGroupes extends StatelessWidget {
     required this.cote,
     required this.debutSuite,
     this.auteur,
-    this.couleurAuteur = CouleursJarvis.signal,
+    this.couleurAuteur,
   });
 
   final List<MessageWhatsApp> medias;
   final CoteBulle cote;
   final bool debutSuite;
   final String? auteur;
-  final Color couleurAuteur;
+  final Color? couleurAuteur;
 
   static String libelle(int n) => '${nombreEnFrancais(n)} médias non importés';
 
@@ -482,7 +482,7 @@ class BulleMediasGroupes extends StatelessWidget {
       cote: cote,
       debutSuite: debutSuite,
       auteur: auteur,
-      couleurAuteur: couleurAuteur,
+      couleurAuteur: couleurAuteur ?? CouleursJarvis.signal,
       compacte: true,
       child: _Ligne(
         icone: Icons.perm_media_outlined,
@@ -491,7 +491,7 @@ class BulleMediasGroupes extends StatelessWidget {
             ? null
             : Text(
                 heures,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   height: 1.2,
                   letterSpacing: 0.4,
@@ -528,7 +528,7 @@ class _Ligne extends StatelessWidget {
             Flexible(
               child: Text(
                 texte,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontStyle: FontStyle.italic,
                   color: CouleursJarvis.texteSecondaire,
@@ -551,11 +551,8 @@ class _TexteAvecHeure extends StatelessWidget {
   final String texte;
   final Widget heure;
 
-  static const _style = TextStyle(
-    fontSize: 14.5,
-    height: 1.4,
-    color: CouleursJarvis.texte,
-  );
+  static TextStyle get _style =>
+      TextStyle(fontSize: 14.5, height: 1.4, color: CouleursJarvis.texte);
 
   @override
   Widget build(BuildContext context) {

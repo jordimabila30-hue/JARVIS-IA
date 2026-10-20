@@ -83,7 +83,7 @@ class GenerationIncomplete extends StatelessWidget {
     };
     return Row(
       children: [
-        const Icon(
+        Icon(
           Icons.hourglass_bottom_rounded,
           size: 16,
           color: CouleursJarvis.texteSecondaire,
@@ -100,7 +100,7 @@ class GenerationIncomplete extends StatelessWidget {
                 TextSpan(text: ' · $detail'),
               ],
             ),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -149,10 +149,7 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
     // barre (vu sur le S10+ : bulle à moitié cachée après un Long).
     if ((avant == null) != (widget.propositions.choisie == null)) {
       unawaited(
-        Future<void>.delayed(
-          const Duration(milliseconds: 260),
-          _rendreVisible,
-        ),
+        Future<void>.delayed(const Duration(milliseconds: 260), _rendreVisible),
       );
     }
     if (avant != null && widget.propositions.choisie == null) {
@@ -235,7 +232,8 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
           ),
         );
       }
-      if (DateTime.now().difference(debut) < const Duration(milliseconds: 400)) {
+      if (DateTime.now().difference(debut) <
+          const Duration(milliseconds: 400)) {
         WidgetsBinding.instance.scheduleFrame();
         _garderEnPlace(haut, debut);
       }
@@ -284,11 +282,7 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
       children: [
         Row(
           children: [
-            const Icon(
-              Icons.forum_outlined,
-              size: 14,
-              color: CouleursJarvis.violet,
-            ),
+            Icon(Icons.forum_outlined, size: 14, color: CouleursJarvis.violet),
             const SizedBox(width: 6),
             Text(p.mode.titre, style: _styleTitre),
           ],
@@ -351,7 +345,7 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               '${p.incomplets.join(', ')} : propositions incomplètes, non affichées.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 color: CouleursJarvis.texteSecondaire,
               ),
@@ -361,7 +355,7 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
     );
   }
 
-  static const _styleTitre = TextStyle(
+  static TextStyle get _styleTitre => TextStyle(
     fontSize: 12,
     letterSpacing: 0.3,
     color: CouleursJarvis.texteSecondaire,
@@ -420,7 +414,7 @@ class BulleReponseChoisie extends StatelessWidget {
                     if (contact != null)
                       Text(
                         'Vous → $contact',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11.5,
                           color: CouleursJarvis.texteSecondaire,
                         ),
@@ -441,7 +435,7 @@ class BulleReponseChoisie extends StatelessWidget {
                 tooltip: 'Options',
                 padding: EdgeInsets.zero,
                 iconSize: 18,
-                icon: const Icon(
+                icon: Icon(
                   Icons.more_horiz_rounded,
                   color: CouleursJarvis.texteSecondaire,
                 ),
@@ -466,7 +460,7 @@ class BulleReponseChoisie extends StatelessWidget {
                       date == null
                           ? 'Déclarée envoyée'
                           : 'Déclarée envoyée le ${_date(date)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         color: CouleursJarvis.texteSecondaire,
                       ),
@@ -705,7 +699,7 @@ class _CartePropositionState extends State<CarteProposition>
                 children: [
                   TextSpan(
                     text: '${widget.numero}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
                       color: CouleursJarvis.violet,
                     ),
@@ -715,7 +709,7 @@ class _CartePropositionState extends State<CarteProposition>
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 height: 1.3,
                 color: CouleursJarvis.texteSecondaire,
@@ -778,7 +772,7 @@ class _CartePropositionState extends State<CarteProposition>
                   style: _styleBouton,
                 ),
               if (_enregistrement)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                   child: SizedBox.square(
                     dimension: 14,
@@ -789,7 +783,7 @@ class _CartePropositionState extends State<CarteProposition>
                   ),
                 ),
               if (_echec)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                   child: Text(
                     'Non enregistrée, réessayez',
@@ -835,7 +829,7 @@ class _CartePropositionState extends State<CarteProposition>
     );
   }
 
-  static final _styleBouton = TextButton.styleFrom(
+  static ButtonStyle get _styleBouton => TextButton.styleFrom(
     foregroundColor: CouleursJarvis.signal,
     minimumSize: const Size(0, 36),
     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -850,7 +844,7 @@ class _Envoyee extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Tooltip(
+    return Tooltip(
       message: 'Vous avez indiqué l’avoir envoyée (non vérifié dans WhatsApp)',
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 6, vertical: 9),

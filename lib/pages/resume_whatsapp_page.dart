@@ -154,7 +154,7 @@ class _CadreMessages extends StatelessWidget {
     return Scaffold(
       backgroundColor: CouleursJarvis.ivoire,
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: degradeFondJarvis),
+        decoration: BoxDecoration(gradient: degradeFondJarvis),
         child: SizedBox.expand(
           child: SafeArea(
             bottom: false,
@@ -384,7 +384,7 @@ class _MessageVisePageState extends State<_MessageVise> {
               Text(
                 '${ResumeWhatsAppPage.chargementImpossible} $erreur',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: CouleursJarvis.texteSecondaire),
+                style: TextStyle(color: CouleursJarvis.texteSecondaire),
               ),
               const SizedBox(height: 12),
               TextButton(onPressed: _ouvrir, child: const Text('Réessayer')),
@@ -472,7 +472,7 @@ class _ResumeWhatsAppPageState extends State<ResumeWhatsAppPage> {
     return Scaffold(
       backgroundColor: CouleursJarvis.ivoire,
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: degradeFondJarvis),
+        decoration: BoxDecoration(gradient: degradeFondJarvis),
         child: SizedBox.expand(
           child: SafeArea(
             bottom: false,
@@ -572,7 +572,7 @@ class _Entete extends StatelessWidget {
                           titre,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             color: CouleursJarvis.texteSecondaire,
                           ),
@@ -586,7 +586,7 @@ class _Entete extends StatelessWidget {
                   nom,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: policeAffichage,
                     fontSize: 21,
                     fontWeight: FontWeight.w500,
@@ -597,7 +597,7 @@ class _Entete extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   ampleur,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     color: CouleursJarvis.texte,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -607,7 +607,7 @@ class _Entete extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     secondaire,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       color: CouleursJarvis.texteSecondaire,
                     ),

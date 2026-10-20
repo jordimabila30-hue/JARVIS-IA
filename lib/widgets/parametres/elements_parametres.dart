@@ -22,7 +22,7 @@ class CarteReglages extends StatelessWidget {
             padding: const EdgeInsets.only(left: 4, bottom: 10),
             child: Text(
               titre!.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1.2,
@@ -76,7 +76,7 @@ class TexteReglage extends StatelessWidget {
       children: [
         Text(
           titre,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14.5,
             fontWeight: FontWeight.w500,
             color: CouleursJarvis.texte,
@@ -86,7 +86,7 @@ class TexteReglage extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             description!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.4,
               color: CouleursJarvis.texteSecondaire,
@@ -173,7 +173,7 @@ class NoteReglage extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 1),
           child: Icon(
             Icons.info_outline,
@@ -185,7 +185,7 @@ class NoteReglage extends StatelessWidget {
         Expanded(
           child: Text(
             texte,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               height: 1.45,
               color: CouleursJarvis.texteSecondaire,
@@ -239,7 +239,7 @@ class ListeReglage<T> extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             dropdownColor: CouleursJarvis.coque,
             focusColor: CouleursJarvis.signal.withValues(alpha: 0.08),
-            icon: const Icon(
+            icon: Icon(
               Icons.expand_more,
               color: CouleursJarvis.texteSecondaire,
             ),
@@ -285,6 +285,7 @@ class CurseurReglage extends StatelessWidget {
     required this.divisions,
     required this.surChangement,
     this.icones,
+    this.surFin,
     this.description,
   });
 
@@ -295,6 +296,9 @@ class CurseurReglage extends StatelessWidget {
   final double min, max;
   final int divisions;
   final ValueChanged<double>? surChangement;
+
+  /// Fin du geste (valeur à enregistrer) ; null : rien de plus.
+  final ValueChanged<double>? surFin;
 
   /// Icônes du minimum et du maximum.
   final (IconData, IconData)? icones;
@@ -324,7 +328,7 @@ class CurseurReglage extends StatelessWidget {
                 ),
                 child: Text(
                   valeurAffichee,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: CouleursJarvis.signal,
@@ -362,6 +366,7 @@ class CurseurReglage extends StatelessWidget {
                     semanticFormatterCallback: (_) =>
                         '$titre : $valeurAffichee',
                     onChanged: surChangement,
+                    onChangeEnd: surFin,
                   ),
                 ),
               ),
@@ -420,11 +425,7 @@ class PastilleReglage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (choisie) ...[
-                    const Icon(
-                      Icons.check,
-                      size: 16,
-                      color: CouleursJarvis.signal,
-                    ),
+                    Icon(Icons.check, size: 16, color: CouleursJarvis.signal),
                     const SizedBox(width: 6),
                   ],
                   // Écran étroit : le libellé passe à la ligne plutôt que

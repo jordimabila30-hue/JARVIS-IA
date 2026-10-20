@@ -384,10 +384,10 @@ class _Panneau extends StatelessWidget {
           label: 'Menu',
           child: DecoratedBox(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFFBF9F4), Color(0xFFF6F2FA)],
+                colors: CouleursJarvis.panneauMenu,
               ),
               borderRadius: const BorderRadius.horizontal(
                 right: Radius.circular(24),
@@ -460,7 +460,7 @@ class _Panneau extends StatelessWidget {
                       ),
                       if (conversation != null) ...[
                         const SizedBox(height: 22),
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(left: 12, bottom: 6),
                           child: Text(
                             'EN COURS',
@@ -593,7 +593,7 @@ class _Entree extends StatelessWidget {
                       libelle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14.5,
                         color: CouleursJarvis.texte,
                       ),

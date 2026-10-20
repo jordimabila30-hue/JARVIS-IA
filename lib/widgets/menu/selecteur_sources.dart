@@ -19,14 +19,15 @@ class LogoSource extends StatelessWidget {
     final logo = source.logo;
     return SizedBox.square(
       dimension: taille,
-      child: logo.endsWith('.svg')
+      child: logo == null
+          // Logo JARVIS pas encore fourni : la perle JARVIS.
+          ? PerleJarvis(taille: taille)
+          : logo.endsWith('.svg')
           ? SvgPicture.asset(logo, fit: BoxFit.contain)
           : Image.asset(
               logo,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
-              // Logo JARVIS pas encore déposé dans assets/logos/ : la perle
-              // JARVIS en attendant.
               errorBuilder: (_, _, _) => PerleJarvis(taille: taille),
             ),
     );

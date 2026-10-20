@@ -63,7 +63,7 @@ class CarteImporterWhatsApp extends StatelessWidget {
         children: [
           const Center(child: _LogoAureole()),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             titre,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -77,7 +77,7 @@ class CarteImporterWhatsApp extends StatelessWidget {
           Text(
             sousTitre,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               height: 1.4,
               color: CouleursJarvis.texteSecondaire,
@@ -133,11 +133,11 @@ class _LogoAureole extends StatelessWidget {
             decoration: BoxDecoration(
               color: CouleursJarvis.coque,
               borderRadius: BorderRadius.circular(22),
-              boxShadow: const [
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x225559B8),
+                  color: CouleursJarvis.signal.withAlpha(0x22),
                   blurRadius: 20,
-                  offset: Offset(0, 6),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -169,7 +169,7 @@ class BoutonPrincipalImport extends StatelessWidget {
     return FilledButton.icon(
       onPressed: surAppui,
       icon: enCours
-          ? const SizedBox.square(
+          ? SizedBox.square(
               dimension: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
@@ -225,14 +225,14 @@ class CarteParcourir extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: CouleursJarvis.violetPoudre.withValues(alpha: 0.6),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.folder_open_outlined,
                   size: 22,
                   color: CouleursJarvis.signal,
                 ),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -255,7 +255,7 @@ class CarteParcourir extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 color: CouleursJarvis.texteSecondaire,
               ),
@@ -305,7 +305,7 @@ Future<void> afficherCommentImporter(
     backgroundColor: Colors.transparent,
     barrierColor: CouleursJarvis.texte.withValues(alpha: 0.16),
     builder: (context) => Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: CouleursJarvis.coque,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -330,7 +330,7 @@ Future<void> afficherCommentImporter(
             ),
           ),
           const SizedBox(height: 18),
-          const Row(
+          Row(
             children: [
               LogoWhatsApp(taille: 22),
               SizedBox(width: 10),
@@ -359,7 +359,7 @@ Future<void> afficherCommentImporter(
                   ),
                   child: Text(
                     '${i + 1}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: CouleursJarvis.signal,
@@ -372,7 +372,7 @@ Future<void> afficherCommentImporter(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       etapes[i],
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14.5,
                         height: 1.4,
                         color: CouleursJarvis.texte,

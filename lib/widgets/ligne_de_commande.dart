@@ -236,7 +236,7 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
         ?..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: const Text(
+            content: Text(
               LigneDeCommande.pressePapiersVide,
               style: TextStyle(fontSize: 13.5, color: CouleursJarvis.ivoire),
             ),
@@ -615,14 +615,14 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
     return MenuAnchor(
       alignmentOffset: const Offset(0, 8),
       style: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(CouleursJarvis.coque),
+        backgroundColor: WidgetStatePropertyAll(CouleursJarvis.coque),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(6),
         shadowColor: const WidgetStatePropertyAll(Color(0x403A3350)),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: CouleursJarvis.trait),
+            side: BorderSide(color: CouleursJarvis.trait),
           ),
         ),
         padding: const WidgetStatePropertyAll(
@@ -678,16 +678,14 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
                 Size.square(MesuresBarre.tailleBoutonPlus),
               ),
               padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-              foregroundColor: const WidgetStatePropertyAll(
-                CouleursJarvis.texte,
-              ),
+              foregroundColor: WidgetStatePropertyAll(CouleursJarvis.texte),
               backgroundColor: WidgetStateProperty.resolveWith(
                 (s) => s.contains(WidgetState.pressed)
-                    ? const Color(0xFFE6DED0)
+                    ? CouleursJarvis.champ[2]
                     : s.contains(WidgetState.hovered) ||
                           s.contains(WidgetState.focused)
-                    ? const Color(0xFFEDE6DA)
-                    : const Color(0xFFF4EFE6),
+                    ? CouleursJarvis.champ[1]
+                    : CouleursJarvis.champ[0],
               ),
               overlayColor: WidgetStatePropertyAll(
                 CouleursJarvis.texte.withValues(alpha: 0.04),

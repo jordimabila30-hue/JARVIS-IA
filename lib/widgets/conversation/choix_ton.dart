@@ -18,7 +18,7 @@ class ChoixTon extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           titre,
           style: TextStyle(
             fontSize: 13,
@@ -81,11 +81,7 @@ class _Capsule extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (choisi) ...[
-                    const Icon(
-                      Icons.check,
-                      size: 15,
-                      color: CouleursJarvis.signal,
-                    ),
+                    Icon(Icons.check, size: 15, color: CouleursJarvis.signal),
                     const SizedBox(width: 5),
                   ],
                   Text(

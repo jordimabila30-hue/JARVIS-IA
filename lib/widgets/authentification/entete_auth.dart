@@ -49,7 +49,7 @@ class EnteteAuth extends StatelessWidget {
         Text(
           sousTitre,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             height: 1.45,
             color: CouleursJarvis.texteSecondaire,

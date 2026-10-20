@@ -21,6 +21,7 @@ class BulleUtilisateur extends StatelessWidget {
   Widget build(BuildContext context) {
     final conversation = message.conversation;
     final piece = message.pieceJointe;
+    final p = PaletteJarvis.of(context);
     return Align(
       alignment: Alignment.centerRight,
       child: LayoutBuilder(
@@ -34,10 +35,10 @@ class BulleUtilisateur extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 14, 8),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xE8ECE8FB), Color(0xDDE2E7FA)],
+                colors: p.bulleUtilisateur,
               ),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
@@ -45,13 +46,21 @@ class BulleUtilisateur extends StatelessWidget {
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(6),
               ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0D3A3350),
-                  blurRadius: 14,
-                  offset: Offset(0, 4),
-                ),
+              // Styles importés : contour marqué et ombre pleine décalée
+              // (« box-shadow: 4px 4px 0 » de la source).
+              border: Border.all(
+                color: p.bordBulle,
+                width: p.identite.marquee ? p.identite.contour : 1,
+              ),
+              boxShadow: [
+                if (p.identite.ombreBulle case final ombre?)
+                  BoxShadow(color: ombre, offset: const Offset(4, 4))
+                else
+                  BoxShadow(
+                    color: p.ombre.withAlpha(0x0D),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
               ],
             ),
             // Contenu aligné à gauche ; l'heure, en dessous, à droite.
@@ -136,7 +145,7 @@ class _MentionCapture extends StatelessWidget {
   const _MentionCapture();
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       Icon(Icons.screenshot_outlined, size: 16, color: CouleursJarvis.signal),

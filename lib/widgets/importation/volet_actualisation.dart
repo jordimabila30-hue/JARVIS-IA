@@ -382,7 +382,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
       child: Container(
         key: const Key('volet-actualisation'),
         constraints: BoxConstraints(maxHeight: hauteur * 0.88),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: CouleursJarvis.coque,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           border: Border(top: BorderSide(color: CouleursJarvis.trait)),
@@ -421,13 +421,13 @@ class _VoletActualisationState extends State<VoletActualisation> {
                           c?.contact ?? 'Choisissez la conversation',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: CouleursJarvis.texte,
                           ),
                         ),
-                        const Text(
+                        Text(
                           VoletActualisation.sousTitre,
                           style: TextStyle(
                             fontSize: 12.5,
@@ -440,7 +440,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
                 ],
               ),
               if (_chargement)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(18),
                   child: Center(
                     child: CircularProgressIndicator(
@@ -468,7 +468,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
                         onSelected: (_) => _choisir(x),
                         selectedColor: CouleursJarvis.lavande,
                         backgroundColor: CouleursJarvis.coque,
-                        side: const BorderSide(color: CouleursJarvis.lavande),
+                        side: BorderSide(color: CouleursJarvis.lavande),
                       ),
                   ],
                 ),
@@ -503,10 +503,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
                 Text(
                   e,
                   key: const Key('erreur-actualisation'),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFFB3261E),
-                  ),
+                  style: TextStyle(fontSize: 13, color: CouleursJarvis.erreur),
                 ),
               ],
               const SizedBox(height: 12),
@@ -536,11 +533,11 @@ class _VoletActualisationState extends State<VoletActualisation> {
                       backgroundColor: CouleursJarvis.signal,
                     ),
                     child: _envoi
-                        ? const SizedBox.square(
+                        ? SizedBox.square(
                             dimension: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: CouleursJarvis.surSignal,
                             ),
                           )
                         : const Text('Ajouter'),
@@ -645,7 +642,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
           if (e.sens == SensMessage.envoye)
             Text(
               'De : ${c.moi} (vous)',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 color: CouleursJarvis.texteSecondaire,
               ),
@@ -654,7 +651,7 @@ class _VoletActualisationState extends State<VoletActualisation> {
             Text(
               'De : ${autres.single}',
               key: Key('auteur-$i'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 color: CouleursJarvis.texteSecondaire,
               ),
@@ -851,7 +848,7 @@ class _Titre extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     texte,
-    style: const TextStyle(
+    style: TextStyle(
       fontSize: 12.5,
       letterSpacing: 0.3,
       fontWeight: FontWeight.w600,

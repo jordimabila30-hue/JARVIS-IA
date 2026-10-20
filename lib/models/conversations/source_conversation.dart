@@ -5,7 +5,9 @@
 /// `assets/logos/`, et son fournisseur de conversations ; le panneau n'a
 /// rien d'autre à connaître.
 enum SourceConversation {
-  jarvis('JARVIS', 'assets/logos/jarvis.png'),
+  // Pas de logo dans l'application : la perle JARVIS (aucune requête vers
+  // un fichier absent). L'icône de l'application est un autre sujet.
+  jarvis('JARVIS', null),
   whatsapp('WhatsApp', 'assets/logos/whatsapp.svg'),
   gmail('Gmail', 'assets/logos/gmail.svg'),
   messenger('Messenger', 'assets/logos/messenger.svg'),
@@ -16,6 +18,6 @@ enum SourceConversation {
   /// Nom affiché sous le logo.
   final String libelle;
 
-  /// Logo local (SVG officiel, ou image du logo JARVIS).
-  final String logo;
+  /// Logo local (SVG officiel, ou image du logo JARVIS) ; null : perle JARVIS.
+  final String? logo;
 }

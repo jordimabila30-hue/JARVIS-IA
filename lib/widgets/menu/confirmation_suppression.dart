@@ -37,7 +37,7 @@ class _Confirmation extends StatelessWidget {
       titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
       contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
       actionsPadding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      title: const Text(
+      title: Text(
         titre,
         style: TextStyle(
           fontSize: 17,
@@ -45,7 +45,7 @@ class _Confirmation extends StatelessWidget {
           color: CouleursJarvis.texte,
         ),
       ),
-      content: const Text(
+      content: Text(
         description,
         style: TextStyle(
           fontSize: 14,

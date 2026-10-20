@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/theme_jarvis.dart';
 import '../../utils/local_date_time.dart';
 
 /// Heure d'un message (« 13:08 »), très discrète : petite, lavande grisée,
@@ -10,13 +11,13 @@ class HeureMessage extends StatelessWidget {
   final DateTime heure;
 
   /// Gris doux nuancé de lavande, peu contrasté sur l'ivoire et le pastel.
-  static const couleur = Color(0xFF9A94AE);
+  static Color get couleur => PaletteJarvis.active.heure;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       heureCourte(heure),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         height: 1.2,
         letterSpacing: 0.4,

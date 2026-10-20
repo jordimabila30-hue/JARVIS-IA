@@ -289,7 +289,7 @@ class _LigneConversationState extends State<LigneConversation>
       elevation: 6,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: CouleursJarvis.trait),
+        side: BorderSide(color: CouleursJarvis.trait),
       ),
       items: [
         entree(
@@ -470,7 +470,7 @@ class _LigneConversationState extends State<LigneConversation>
                       c.apercu,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         color: CouleursJarvis.texteSecondaire,
                       ),
@@ -489,7 +489,7 @@ class _LigneConversationState extends State<LigneConversation>
                     Text(
                       dateCourte(c.derniereActivite, widget.maintenant),
                       maxLines: 1,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: CouleursJarvis.texteSecondaire,
                         fontFeatures: [FontFeature.tabularFigures()],
@@ -499,7 +499,7 @@ class _LigneConversationState extends State<LigneConversation>
                     SizedBox(
                       height: 14,
                       child: widget.epinglee
-                          ? const Icon(
+                          ? Icon(
                               Icons.push_pin_rounded,
                               size: 13,
                               semanticLabel: 'Épinglée',

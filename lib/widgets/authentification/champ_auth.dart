@@ -65,7 +65,7 @@ class _ChampAuthState extends State<ChampAuth> {
           padding: const EdgeInsets.only(left: 4, bottom: 7),
           child: Text(
             widget.libelle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.15,
@@ -87,7 +87,7 @@ class _ChampAuthState extends State<ChampAuth> {
           autofillHints: widget.autofill,
           // Pas de retour à la ligne dans un identifiant.
           inputFormatters: [FilteringTextInputFormatter.deny(RegExp('\n'))],
-          style: const TextStyle(fontSize: 15.5, color: CouleursJarvis.texte),
+          style: TextStyle(fontSize: 15.5, color: CouleursJarvis.texte),
           cursorColor: CouleursJarvis.signal,
           decoration: InputDecoration(
             hintText: widget.indice,
@@ -107,8 +107,11 @@ class _ChampAuthState extends State<ChampAuth> {
             border: _bord(CouleursJarvis.trait),
             enabledBorder: _bord(CouleursJarvis.trait),
             focusedBorder: _bord(CouleursJarvis.signal, 1.4),
-            errorBorder: _bord(const Color(0xFFC2525C)),
-            focusedErrorBorder: _bord(const Color(0xFFC2525C), 1.4),
+            errorBorder: _bord(CouleursJarvis.lisible(const Color(0xFFC2525C))),
+            focusedErrorBorder: _bord(
+              CouleursJarvis.lisible(const Color(0xFFC2525C)),
+              1.4,
+            ),
             suffixIcon: mdp
                 ? IconButton(
                     focusNode: _focusOeil,

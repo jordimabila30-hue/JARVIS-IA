@@ -100,7 +100,7 @@ class JaugeUtilisation extends StatelessWidget {
                     Expanded(
                       child: Text(
                         sousTitre ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           height: 1.35,
                           color: CouleursJarvis.texteSecondaire,

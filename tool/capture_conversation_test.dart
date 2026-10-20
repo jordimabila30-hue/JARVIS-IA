@@ -18,6 +18,8 @@ import 'package:ia_jarvis/services/conversation/conversation_session.dart';
 import 'package:ia_jarvis/theme/theme_jarvis.dart';
 import 'package:ia_jarvis/widgets/pim_particle.dart';
 
+import '../test/outils/ecriture.dart';
+
 const _polices = r'C:\flutter\bin\cache\artifacts\material_fonts';
 
 Future<void> _charger(String famille, List<String> fichiers) async {
@@ -110,6 +112,9 @@ void main() {
         await images(5);
         await tester.testTextInput.receiveAction(TextInputAction.send);
         await images(60);
+        // Écriture progressive (phase 4) : la réponse, puis ce qui apparaît
+        // à la fin (choix du ton…), sont posés avant la photo.
+        await finirEcritures(tester);
       }
 
       final fil = find.byKey(ConversationPage.cleFil);
@@ -125,6 +130,7 @@ void main() {
       await photo('frappe');
       await tester.testTextInput.receiveAction(TextInputAction.send);
       await images(60);
+      await finirEcritures(tester);
       await envoyer('Comment fonctionne une batterie ?');
       await images(60);
       await photo('quelques_messages');

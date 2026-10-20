@@ -39,7 +39,9 @@ class BandeauAuth extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final erreur = type == TypeBandeau.erreur;
-    final couleur = erreur ? const Color(0xFFB0444F) : CouleursJarvis.signal;
+    final couleur = erreur
+        ? CouleursJarvis.lisible(const Color(0xFFB0444F))
+        : CouleursJarvis.signal;
     return Semantics(
       liveRegion: true,
       child: Container(
@@ -64,7 +66,7 @@ class BandeauAuth extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   height: 1.45,
                   color: CouleursJarvis.texte,

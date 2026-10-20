@@ -7,6 +7,7 @@ import '../../models/message_conversation.dart';
 import '../../services/ecriture/ecriture_progressive.dart';
 import '../../theme/gabarit_jarvis.dart';
 import '../../theme/theme_jarvis.dart';
+import '../apparence/frise_kuba.dart';
 import '../ecriture/texte_progressif.dart';
 import 'choix_ton.dart';
 import 'heure_message.dart';
@@ -16,8 +17,9 @@ import 'references_jarvis.dart';
 import 'signature_jarvis.dart';
 import 'reponse_proposee.dart';
 
-/// Habillage commun des messages de JARVIS : carte claire ivoire nuancée
-/// de lavande, signature « • JARVIS » ([SignatureJarvis]), heure en bas à
+/// Habillage commun des messages de JARVIS : carte du style (ivoire nuancée
+/// de lavande pour JARVIS ; frise et ombre pleine pour les styles importés),
+/// signature « • JARVIS » ([SignatureJarvis]), heure en bas à
 /// droite.
 class _CadreJarvis extends StatelessWidget {
   const _CadreJarvis({required this.child, this.heure, this.ecriture});
@@ -33,18 +35,24 @@ class _CadreJarvis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = PaletteJarvis.of(context);
+    final id = p.identite;
+    final marges = EdgeInsets.fromLTRB(18, 14, 16, heure == null ? 16 : 10);
+    final frise = id.frise;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.fromLTRB(18, 14, 16, heure == null ? 16 : 10),
+        padding: frise == null ? marges : null,
+        // Styles importés : la frise kuba suit l'arrondi de la carte.
+        clipBehavior: frise == null ? Clip.none : Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             // Fond très légèrement translucide (94 %) : les particules qui
             // passent derrière restent devinables, le texte reste net.
-            colors: [Color(0xF0FFFDF9), Color(0xF0F7F3FD)],
+            colors: p.carteJarvis,
           ),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(6),
@@ -52,47 +60,68 @@ class _CadreJarvis extends StatelessWidget {
             bottomLeft: Radius.circular(20),
             bottomRight: Radius.circular(20),
           ),
+          // Styles importés : contour marqué (texte à 35 %) et ombre pleine
+          // décalée de 5 px, comme les cartes de la source.
           border: Border.all(
-            color: CouleursJarvis.trait.withValues(alpha: 0.6),
+            color: id.marquee
+                ? p.texte.withValues(alpha: 0.35)
+                : p.trait.withValues(alpha: 0.6),
+            width: id.marquee ? id.contour : 1,
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0A3A3350),
-              blurRadius: 16,
-              offset: Offset(0, 4),
-            ),
+          boxShadow: [
+            if (id.ombreCarte case final ombre?)
+              BoxShadow(color: ombre, offset: const Offset(5, 5))
+            else
+              BoxShadow(
+                color: p.ombre.withAlpha(0x0A),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Même signature pour toutes les réponses de JARVIS.
-            SignatureJarvis(compacte: GabaritJarvis.of(context).compact),
-            const SizedBox(height: 9),
-            child,
-            if (heure != null) ...[
-              const SizedBox(height: 8),
-              Stack(
-                clipBehavior: Clip.none,
+        child: frise == null
+            ? _contenu(context)
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: HeureMessage(heure!),
-                  ),
-                  if (ecriture case final e?)
-                    Positioned(
-                      left: -6,
-                      top: -6,
-                      bottom: -6,
-                      child: Center(child: ActionToutAfficher(ecriture: e)),
-                    ),
+                  FriseKuba(couleurs: frise, fond: p.creme),
+                  Padding(padding: marges, child: _contenu(context)),
                 ],
               ),
-            ],
-          ],
-        ),
       ),
+    );
+  }
+
+  Widget _contenu(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Même signature pour toutes les réponses de JARVIS.
+        SignatureJarvis(compacte: GabaritJarvis.of(context).compact),
+        const SizedBox(height: 9),
+        child,
+        if (heure != null) ...[
+          const SizedBox(height: 8),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: HeureMessage(heure!),
+              ),
+              if (ecriture case final e?)
+                Positioned(
+                  left: -6,
+                  top: -6,
+                  bottom: -6,
+                  child: Center(child: ActionToutAfficher(ecriture: e)),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
@@ -289,7 +318,7 @@ class _Incident extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 1, right: 6),
           child: Icon(
             Icons.info_outline_rounded,
@@ -300,7 +329,7 @@ class _Incident extends StatelessWidget {
         Expanded(
           child: Text(
             texte,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.4,
               color: CouleursJarvis.texteSecondaire,
@@ -325,7 +354,7 @@ class _Raccourci extends StatelessWidget {
       onPressed: surAction,
       style: OutlinedButton.styleFrom(
         foregroundColor: CouleursJarvis.signal,
-        backgroundColor: Colors.white.withValues(alpha: 0.5),
+        backgroundColor: CouleursJarvis.voile.withValues(alpha: 0.5),
         side: BorderSide(color: CouleursJarvis.signal.withValues(alpha: 0.25)),
         shape: const StadiumBorder(),
         minimumSize: const Size(0, 36),
@@ -353,10 +382,12 @@ class _BoutonChoix extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = OutlinedButton.styleFrom(
-      foregroundColor: principal ? Colors.white : CouleursJarvis.signal,
+      foregroundColor: principal
+          ? CouleursJarvis.surSignal
+          : CouleursJarvis.signal,
       backgroundColor: principal
           ? CouleursJarvis.signal
-          : Colors.white.withValues(alpha: 0.5),
+          : CouleursJarvis.voile.withValues(alpha: 0.5),
       side: BorderSide(
         color: CouleursJarvis.signal.withValues(alpha: principal ? 1 : 0.25),
       ),
@@ -380,7 +411,7 @@ class PreparationPropositions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       key: Key('preparation-propositions'),
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -453,7 +484,9 @@ class _ReflexionJarvisState extends State<ReflexionJarvis>
       ),
     );
     return Semantics(
-      label: widget.cadre ? 'JARVIS réfléchit' : 'JARVIS prépare les propositions',
+      label: widget.cadre
+          ? 'JARVIS réfléchit'
+          : 'JARVIS prépare les propositions',
       child: widget.cadre ? _CadreJarvis(child: points) : points,
     );
   }

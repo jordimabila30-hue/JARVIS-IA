@@ -53,7 +53,7 @@ class BarreSelection extends StatelessWidget {
                 liveRegion: true,
                 child: Text(
                   compteur(nombre),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: CouleursJarvis.texte,
@@ -94,7 +94,7 @@ class BarreSelection extends StatelessWidget {
           Text(
             aide,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               color: CouleursJarvis.texteSecondaire,
             ),

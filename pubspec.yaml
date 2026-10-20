@@ -73,6 +73,12 @@ flutter:
     - family: Exo2
       fonts:
         - asset: assets/polices/Exo2.ttf
+    # Titres des styles importés (Congotronics… Léopards). Variable en
+    # graisse (400-800). Licence SIL OFL, (c) 2019 The Baloo 2 Project
+    # Authors (https://github.com/EkType/Baloo2).
+    - family: Baloo2
+      fonts:
+        - asset: assets/polices/Baloo2.ttf
 
   # Logos des messageries (sélecteur du menu latéral). Voir SOURCES.md.
   assets:

@@ -48,7 +48,7 @@ class CarteApercuVoix extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Flexible(
+                        Flexible(
                           child: Text(
                             'Écouter un aperçu',
                             style: TextStyle(
@@ -62,7 +62,7 @@ class CarteApercuVoix extends StatelessWidget {
                           const SizedBox(width: 12),
                           const _Onde(),
                           const SizedBox(width: 8),
-                          const Text(
+                          Text(
                             'Lecture…',
                             style: TextStyle(
                               fontSize: 12.5,
@@ -77,7 +77,7 @@ class CarteApercuVoix extends StatelessWidget {
                       possible
                           ? '« ${VoiceSession.phraseApercu} »'
                           : 'Disponible en dehors d’une conversation vocale.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         height: 1.45,
                         fontStyle: FontStyle.italic,
@@ -89,7 +89,7 @@ class CarteApercuVoix extends StatelessWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 2),
                             child: Icon(
                               Icons.volume_off_outlined,
@@ -101,7 +101,7 @@ class CarteApercuVoix extends StatelessWidget {
                           Expanded(
                             child: Text(
                               erreur,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12.5,
                                 height: 1.4,
                                 color: CouleursJarvis.texte,

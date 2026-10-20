@@ -452,7 +452,7 @@ void main() {
     await _images(tester, 30);
     expect(_ouvert(tester), isFalse);
     expect(find.byType(FenetreParametres), findsOneWidget);
-    for (final s in ['Général', 'Chat vocal', 'Particules PIM', 'Apparence']) {
+    for (final s in ['Général', 'Chat vocal', 'Particules PIM']) {
       expect(find.text(s), findsWidgets);
     }
     await tester.tap(find.text('Particules PIM'));
@@ -463,7 +463,6 @@ void main() {
 
   group('Glissement (téléphone)', () {
     const ecran = Size(390, 844);
-    final largeur = MenuLateral.largeurPour(ecran.width);
 
     testWidgets('depuis le bord gauche : le panneau suit le doigt, le voile '
         'aussi ; relâché au-delà du seuil, il finit de s’ouvrir', (
