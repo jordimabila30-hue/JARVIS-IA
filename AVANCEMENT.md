@@ -1899,3 +1899,26 @@ Appareil : Samsung Galaxy S10+ (SM-G975F, Android 12), `flutter run --profile` (
 ### Prochaine étape
 - Valider à l'usage la lisibilité de PIM (couleurs d'origine) sur les fonds
   sombres ; option future si souhaité : teinte PIM par style.
+
+## 2026-10-20 — Gmail phase 1 : validation réelle sur le S10+ (GroqCloud)
+
+Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie boîte Gmail, saisie par adb ; production 8000 non touchée ; 8002 arrêtée et supprimée à la fin.
+
+| Essai | Résultat | Mesures |
+|---|---|---|
+| Demande vague (« reçu quelque chose d'important cette semaine ? ») | recherche lancée seule, réponse avec les messages trouvés | 2 tours, 5,7 s, 1 outil, 1er outil 1,4 s, 3 757 tokens, 3 requêtes Gmail |
+| Demande indirecte (« le mail concernant mon inscription ») | rien de clairement lié → le dit, question de précision | 2 tours, 4,3 s, 11 requêtes |
+| Reprise après précision (« C'est pour l'ICAM ») | demande initiale reprise sans répétition | 2 tours, 4,5 s |
+| Aucun résultat (Rodrigue, semaine dernière) | « aucun message dans les échanges de la semaine dernière » + propose d'élargir | 2 tours, 3,3 s, 1 requête |
+| Contexte (« Oui élargis, regarde ce que je lui ai envoyé ») | nom repris du contexte, envoi + échec de livraison retrouvés, explication juste | 3 tours, 6,3 s, 2 outils, 5 requêtes |
+| Ambiguïté (« Le professeur m'a répondu ? ») | cherche d'abord (recherche possible), rien → demande le nom, propose d'élargir | 2 tours, 3,6 s, 2 requêtes |
+
+- **Défauts trouvés et corrigés** : période ajoutée d'office (30 jours, puis 3 mois malgré « peu importe la date ») et adresse inventée « par exemple ». Consigne et description de `periode` corrigées ; essai refait : recherche sur toute la boîte, aucune adresse inventée (3 tours, 5,6 s, 11 requêtes).
+- **GroqCloud** : limite de débit (8 000 tokens/min) atteinte une fois après des essais rapprochés → message « Le service IA est très sollicité », réussite après 1 min.
+- **Claude** : pas de nouvel essai (payant, sans accord) ; mesures réelles du 18/10 seulement.
+- Consommation du compte (Free, 100 000 tokens/jour) : 8 messages, 49 063 tokens.
+- Tests : backend 576 réussis, 1 ignoré ; Flutter 843 réussis (19/10, aucun changement Flutter depuis dans ce chantier).
+
+### Reste pour la phase 2
+- Juger la pertinence sur le CONTENU (le lien ICAM ↔ inscription n'est qu'une hypothèse prudente) ; « important » au sens de l'utilisateur (aujourd'hui : libellé Gmail et extraits).
+- Cas « plusieurs professeurs » non rencontré dans la vraie boîte (vérifié par les tests seulement).

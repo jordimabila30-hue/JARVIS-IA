@@ -122,6 +122,9 @@ def test_4_consigne_clarifier_seulement_si_la_recherche_ne_tranche_pas():
     assert "pose UNE question courte" in CONSIGNE_GMAIL
     assert "si une recherche raisonnable peut trancher, cherche d'abord" in CONSIGNE_GMAIL
     assert "sans la lui faire répéter" in CONSIGNE_GMAIL
+    # Validation S10+ : pas de période ajoutée d'office, aucune adresse inventée en exemple.
+    assert "N'ajoute AUCUNE période ni date si l'utilisateur n'en indique pas" in CONSIGNE_GMAIL
+    assert "ni adresse" in CONSIGNE_GMAIL and "même pour donner un exemple" in CONSIGNE_GMAIL
 
 
 # --- 5. Clarification puis reprise (même chat, deux fournisseurs) --------------------------
