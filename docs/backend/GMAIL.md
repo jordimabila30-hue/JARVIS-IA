@@ -171,6 +171,11 @@ But : comprendre ce que les e-mails SIGNIFIENT (refus indirect, reçu ≠ accept
 
 Tests : `tests/test_gmail_comprehension.py` (dossier transmis au modèle pour 18 scénarios fictifs, `tests/scenarios_gmail.py`) ; évaluation réelle `tests/evaluation_gmail.py` (corpus fictif, critères explicites, avant / après, débit borné).
 
+### Validation (2026-10-20)
+
+- GroqCloud réel, 17 scénarios fictifs : avant 16/17, après 17/17 puis 16/17 (rubriques « Faits / Interprétation » ajoutées une fois sur ~34 réponses : format à reprendre en phase 3).
+- Claude : joignable avec la nouvelle clé (un message « salut ») ; compréhension non évaluée (choix de l'utilisateur, coût). Reprise : `python tests/evaluation_gmail.py --fournisseur anthropic --etiquette claude --sortie /tmp/claude.jsonl` (17 appels, ≈ 30 000 tokens), à lancer seulement avec accord.
+
 ### Limites du masquage (honnêtes)
 
 Le masquage est fait par motifs (`gmail_confidentialite.py`) : codes ANNONCÉS (« code », « OTP », « vérification »…) ou seuls sur leur ligne, mots de passe annoncés, liens de connexion / jetons, cartes (Luhn), IBAN. Il ne peut PAS reconnaître :

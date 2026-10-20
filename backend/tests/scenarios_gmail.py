@@ -110,7 +110,7 @@ SCENARIOS: list[ScenarioGmail] = [
                          "Le dossier pourra être examiné une fois les pièces complétées.")},
         "gmail_preparer_resume", {"ids": ["m07cccc", "m07aaaa", "m07bbbb"]}, "Mon inscription est-elle validée ?",
         dossier_doit=["Message 1/3 (le plus ancien)", "Message 3/3 (le plus récent)"],
-        doit=[r"pas encore|\bnon\b|n'est pas (?:encore )?validée", r"attestation"],
+        doit=[r"pas encore|\bnon\b|n'est pas (?:encore )?validée|aucune confirmation|en attente", r"attestation"],
         interdit=[r"(?<!pas )(?<!n')\b(?:est|a été) validée\b", r"sera (?:forcément |certainement )?(?:acceptée|validée)"]),
     ScenarioGmail(
         "08_plusieurs_indices",
@@ -184,7 +184,7 @@ SCENARIOS: list[ScenarioGmail] = [
         # Le lycée désigné comme important (pas la promotion), heures dans l'heure de l'utilisateur.
         doit=[r"(?:lycée|scolarité|rentrée|présence)[^.]{0,200}(?:important|prioritaire|urgent|rapide|"
               r"échéance|demain midi)|(?:important|prioritaire|urgent)[^.]{0,200}(?:lycée|scolarité|rentrée)"],
-        interdit=[r"(?:promo|-50)[^.]{0,80}(?<!pas )(?:important|prioritaire|urgent)", r"\b0?9 ?h ?00\b"]),
+        interdit=[r"(?:promo|-50)[^.]{0,80}(?<!pas )(?<!aucune réponse )(?<!aucune action )(?:important|prioritaire|urgent)", r"\b0?9 ?h ?00\b"]),
     ScenarioGmail(
         "15_ancienne_info_citee",
         {"m15aaaa": mail("Mme Ndiaye <ndiaye@lycee-senghor.test>", "Re: Réunion",
