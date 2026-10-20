@@ -7,6 +7,7 @@ import '../models/conversations/apercu_conversation.dart';
 import '../models/conversations/source_conversation.dart';
 import '../models/importation/piece_jointe_whatsapp.dart';
 import '../services/api_jarvis.dart';
+import '../services/apprentissage/espace_apprentissage.dart';
 import '../services/authentification/auth_service.dart';
 import '../services/conversation/consentement_analyse.dart';
 import '../services/conversation/conversation_session.dart';
@@ -33,6 +34,7 @@ import '../services/voice_session.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/local_date_time.dart';
+import '../utils/chrono_perf.dart';
 import '../widgets/bouton_vocal.dart';
 import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
@@ -42,6 +44,7 @@ import '../widgets/menu_lateral.dart';
 import '../widgets/parametres/fenetre_parametres.dart';
 import '../widgets/pim_particle.dart';
 import '../widgets/voice_status.dart';
+import 'apprentissage/apprendre_page.dart';
 import 'conversation_page.dart';
 import '../services/importation/actualisation_whatsapp.dart';
 import '../widgets/importation/volet_actualisation.dart';
@@ -77,6 +80,7 @@ class AccueilPage extends StatefulWidget {
     this.consentement,
     this.utilisation,
     this.gmail,
+    this.apprentissage,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -126,6 +130,10 @@ class AccueilPage extends StatefulWidget {
 
   /// Connexion Gmail du compte (Paramètres › Outils › Gmail) ; null sans compte.
   final ServiceGmail? gmail;
+
+  /// Module Apprendre (tests) ; créé sinon à sa première ouverture
+  /// seulement, jamais au démarrage.
+  final EspaceApprentissage? apprentissage;
 
   /// Après un échec d'enregistrement d'une pièce jointe.
   static const pieceJointeGardee =
@@ -386,6 +394,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _pimPendantApprendre.dispose();
     _miniChat?.detacher();
     WidgetsBinding.instance.removeObserver(this);
     _conversation.surEchangeEnregistre = null;
@@ -406,6 +415,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _echangesLocaux?.dispose();
     _formesPim.removeListener(_surFormePim);
     if (widget.formesPim == null) _formesPim.dispose();
+    if (widget.apprentissage == null) _apprentissage?.dispose();
     super.dispose();
   }
 
@@ -517,6 +527,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
             _fermerMenu();
             _ouvrirParametres();
           },
+          surApprendre: ModuleApprentissage.actif ? _ouvrirApprendre : null,
           multicanal: _multicanal,
           surOuvrirConversation: _ouvrirConversation,
           surSupprimerConversation: _supprimerConversation,
@@ -561,6 +572,31 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       }
       _session.terminerChatVocal();
       _controleur.clear();
+    }
+  }
+
+  /// Module Apprendre : créé à la première ouverture puis gardé (corpus en
+  /// cache, progression lue). L'accueil passe hors scène pendant ce temps :
+  /// PIM s'arrête de lui-même et repart au retour.
+  EspaceApprentissage? _apprentissage;
+  final _pimPendantApprendre = ValueNotifier<bool>(true);
+
+  Future<void> _ouvrirApprendre() async {
+    if (!_pimPendantApprendre.value) return;
+    _fermerMenu();
+    _focus.unfocus();
+    _pim.annulerApercu();
+    final espace = _apprentissage ??=
+        widget.apprentissage ??
+        EspaceApprentissage(lecteur: LecteurEcouteSession(_session));
+    // Geler les tickers avant la première image de transition, sans
+    // capture GPU ni modification du moteur. Comparaison profile possible
+    // avec ext.jarvis.variante (sans=apprendre.pause).
+    _pimPendantApprendre.value = false;
+    try {
+      await ouvrirApprendre(context, espace);
+    } finally {
+      if (mounted) _pimPendantApprendre.value = true;
     }
   }
 
@@ -844,10 +880,17 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
                       // conversation, elles restent visibles à travers le fond
                       // légèrement translucide des cartes, jamais devant le
                       // texte.
-                      child: PimParticle(
-                        controleur: _pim,
-                        cleCentre: _cleCentre,
-                        cleChamp: _cleChamp,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _pimPendantApprendre,
+                        builder: (context, actif, child) => TickerMode(
+                          enabled: actif || ChronoPerf.sans('apprendre.pause'),
+                          child: child!,
+                        ),
+                        child: PimParticle(
+                          controleur: _pim,
+                          cleCentre: _cleCentre,
+                          cleChamp: _cleChamp,
+                        ),
                       ),
                     ),
                     Padding(

@@ -83,6 +83,10 @@ flutter:
   # Logos des messageries (sélecteur du menu latéral). Voir SOURCES.md.
   assets:
     - assets/logos/
+    # Module Apprendre (Kelasi) : corpus hors ligne, lu à l'ouverture du
+    # module seulement (jamais au démarrage).
+    - assets/apprentissage/
+    - assets/apprentissage/parcours/
 
 
   # To add assets to your application, add an assets section, like this:
