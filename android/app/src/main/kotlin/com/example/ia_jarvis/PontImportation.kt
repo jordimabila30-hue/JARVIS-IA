@@ -144,6 +144,28 @@ class PontImportation(
                 }
             }
 
+            // Bouton « + » › Ouvrir une application (Instagram, Messenger,
+            // Mail…) : premier paquet installé de la liste ; false sinon
+            // (l'appli Flutter propose alors la version Web).
+            "ouvrirApplication" -> {
+                val pm = activite.packageManager
+                @Suppress("UNCHECKED_CAST")
+                val paquets = appel.arguments as? List<String> ?: emptyList()
+                val intent = paquets.firstNotNullOfOrNull {
+                    pm.getLaunchIntentForPackage(it)
+                }
+                if (intent == null) {
+                    reponse.success(false)
+                } else {
+                    try {
+                        activite.startActivity(intent)
+                        reponse.success(true)
+                    } catch (e: ActivityNotFoundException) {
+                        reponse.success(false)
+                    }
+                }
+            }
+
             "ouvrirLecture" -> {
                 val uri = references[appel.arguments as String]
                 if (uri == null) {

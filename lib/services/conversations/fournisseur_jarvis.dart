@@ -162,15 +162,23 @@ class FournisseurJarvis extends ChangeNotifier
     return true;
   }
 
+  /// Classement d'une conversation enregistrée, d'après l'ORIGINE réelle
+  /// de son contenu : pièce jointe WhatsApp, sinon e-mails lus par l'outil
+  /// Gmail, sinon JARVIS.
+  static SourceConversation _sourceServeur(ConversationServeur c) =>
+      c.contextes.isNotEmpty
+      ? SourceConversation.whatsapp
+      : c.mail
+      ? SourceConversation.gmail
+      : SourceConversation.jarvis;
+
   ApercuConversation? _apercuServeur(String id, {bool ouverte = false}) {
     final c = synchronisation?.conversation(id);
     if (c == null) return null;
     return ApercuConversation(
       // Une pièce jointe WhatsApp enregistrée : classée sous WhatsApp
       // (titre déjà au nom du contact), sur tous les appareils.
-      source: c.contextes.isEmpty
-          ? SourceConversation.jarvis
-          : SourceConversation.whatsapp,
+      source: _sourceServeur(c),
       id: id,
       titre: c.titre.isEmpty ? 'Conversation' : _uneLigne(c.titre),
       apercu: _uneLigne(c.apercu),
@@ -201,11 +209,14 @@ class FournisseurJarvis extends ChangeNotifier
     final contextesServeur = serveur == null
         ? const <ContexteServeur>[]
         : synchronisation?.conversation(serveur)?.contextes ?? const [];
+    final conversationServeur = serveur == null
+        ? null
+        : synchronisation?.conversation(serveur);
     final source =
         classement?.source ??
-        (contextesServeur.isEmpty
+        (conversationServeur == null
             ? SourceConversation.jarvis
-            : SourceConversation.whatsapp);
+            : _sourceServeur(conversationServeur));
     final titreClasse =
         classement?.titre ??
         (contextesServeur.isEmpty ? null : contextesServeur.last.contact);

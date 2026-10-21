@@ -34,6 +34,13 @@ class InscriptionPage extends StatefulWidget {
       'La création de compte sera disponible après l’intégration du '
       'serveur JARVIS. Aucun compte n’a été créé.';
 
+  static const confirmation =
+      'Compte créé. Ouvrez le lien de confirmation reçu par e-mail, puis '
+      'revenez ici : JARVIS vous connectera directement.';
+  static const toujoursNonConfirme =
+      'Adresse pas encore confirmée. Ouvrez le lien reçu par e-mail, puis '
+      'réessayez.';
+
   @override
   State<InscriptionPage> createState() => _InscriptionPageState();
 }
@@ -45,6 +52,13 @@ class _InscriptionPageState extends State<InscriptionPage> {
   final _focusConfirmation = FocusNode();
   BandeauAuth? _bandeau;
   bool _soumis = false;
+
+  /// Compte créé, mais Supabase exige la confirmation de l'adresse avant
+  /// toute session : « J'ai confirmé » ouvre la session avec les saisies
+  /// encore en mémoire (rien n'est écrit sur l'appareil), sans repasser
+  /// par la page de connexion. La sécurité n'est jamais contournée : tant
+  /// que l'adresse n'est pas confirmée, le serveur refuse la session.
+  bool _attenteConfirmation = false;
 
   @override
   void dispose() {
@@ -75,11 +89,44 @@ class _InscriptionPageState extends State<InscriptionPage> {
         widget.surInscrit(valeur);
       case EchecAuth(:final erreur):
         if (erreur.type == TypeErreurAuth.operationEnCours) return;
+        setState(() {
+          _attenteConfirmation =
+              erreur.type == TypeErreurAuth.confirmationEnvoyee;
+          _bandeau = _attenteConfirmation
+              ? const BandeauAuth(message: InscriptionPage.confirmation)
+              : BandeauAuth.echec(
+                  erreur,
+                  siNonConfigure: InscriptionPage.nonDisponible,
+                );
+        });
+    }
+  }
+
+  /// Adresse confirmée (lien ouvert) : session ouverte directement.
+  Future<void> _continuerApresConfirmation() async {
+    if (widget.service.enCours) return;
+    final b = widget.brouillon;
+    setState(() => _bandeau = null);
+    final r = await widget.service.connecter(
+      email: b.email.text,
+      motDePasse: b.motDePasseInscription.text,
+    );
+    if (!mounted) return;
+    switch (r) {
+      case SuccesAuth(:final valeur):
+        widget.surInscrit(valeur);
+      case EchecAuth(:final erreur):
+        if (erreur.type == TypeErreurAuth.operationEnCours) return;
         setState(
-          () => _bandeau = BandeauAuth.echec(
-            erreur,
-            siNonConfigure: InscriptionPage.nonDisponible,
-          ),
+          () => _bandeau = erreur.type == TypeErreurAuth.emailNonConfirme
+              ? const BandeauAuth(
+                  message: InscriptionPage.toujoursNonConfirme,
+                  type: TypeBandeau.erreur,
+                )
+              : BandeauAuth.echec(
+                  erreur,
+                  siNonConfigure: InscriptionPage.nonDisponible,
+                ),
         );
     }
   }
@@ -149,11 +196,17 @@ class _InscriptionPageState extends State<InscriptionPage> {
               const SizedBox(height: 26),
               ListenableBuilder(
                 listenable: widget.service,
-                builder: (context, _) => BoutonAuth(
-                  libelle: 'Créer mon compte',
-                  chargement: widget.service.enCours,
-                  surAppui: _inscrire,
-                ),
+                builder: (context, _) => _attenteConfirmation
+                    ? BoutonAuth(
+                        libelle: 'J’ai confirmé, continuer',
+                        chargement: widget.service.enCours,
+                        surAppui: _continuerApresConfirmation,
+                      )
+                    : BoutonAuth(
+                        libelle: 'Créer mon compte',
+                        chargement: widget.service.enCours,
+                        surAppui: _inscrire,
+                      ),
               ),
               if (_bandeau case final bandeau?) ...[
                 const SizedBox(height: 16),

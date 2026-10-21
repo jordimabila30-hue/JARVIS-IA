@@ -1981,3 +1981,60 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Évaluation Claude autorisée par l'utilisateur, mais IMPOSSIBLE : le compte API Anthropic a atteint la limite d'utilisation fixée par son propriétaire (« You have reached your specified API usage limits », retour le 2026-11-01 00:00 UTC). 3 appels refusés, rien consommé, évaluation arrêtée. Conséquence : en production, les comptes Pro (Claude) reçoivent une erreur « service indisponible » jusqu'à cette date.
 - Relancer `evaluation_gmail.py --fournisseur anthropic` après le 1er novembre (ou après relèvement de la limite) ; essai réel S10+ sur la boîte de l'utilisateur avec son accord.
 - Phase 3 : résumés et réduction des tokens (la consigne Gmail est la première cible).
+
+## 2026-10-20 — Campagne de correction et de stabilisation (16 points)
+
+### Fait (code + tests automatisés ; validation S10+ encore à faire)
+- **Inscription** : session reçue → accueil direct (inchangé) ; confirmation
+  e-mail exigée par Supabase → bouton « J'ai confirmé, continuer » qui ouvre
+  la session avec les saisies en mémoire (jamais stockées), sans repasser par
+  la connexion ; adresse non confirmée → refus serveur respecté.
+- **Transition vers l'accueil** : fondu 700 → 320 ms.
+- **Réponses qui se réécrivaient après le vocal** (cause : en vocal le fil
+  est caché, aucun Ticker n'avançait les écritures, qui reprenaient toutes
+  au retour à l'écrit) : réponse vocale affichée d'emblée
+  (`EcritureProgressive.immediat = vocal`) ; réponse tardive rangée dans
+  une autre conversation toujours affichée entière. Test : 12 échanges
+  vocaux → aucune écriture en attente.
+- **Bouton « + »** : rangée « Ouvrir une application » (WhatsApp,
+  Instagram, Messenger, Mail) ; `services/applications_externes.dart` :
+  application installée (Android, `PontImportation.ouvrirApplication`,
+  `<queries>`), sinon version Web officielle / `mailto:`, sinon message.
+  Aucun accès aux messages. Feuille défilante sur petit écran.
+- **Classement Mail** : seulement d'après l'origine réelle : le backend
+  ajoute `{"type": "origine", "source": "gmail"}` aux `attachments` d'une
+  réponse quand un outil `gmail_*` a vraiment lu des e-mails ; Flutter lit
+  ces marques (filtre JSON `cs`, RLS) et classe le chat sous Gmail
+  (`FournisseurSourceClassee(gmail)`). Parler d'un e-mail ne suffit pas.
+- **JARVIS Touch** : perle JARVIS native (`touch/PerleJarvis.kt`, même
+  dessin que `PerleJarvis` Dart) dans la bulle et le vocal flottant (fin du
+  disque bleu à barres) ; fenêtre vocale déplaçable (en-tête ou perle,
+  seuil système, bornée à l'écran, recalée après rotation, position
+  gardée) ; réduire → bulle marquée, la réponse en cours se termine puis
+  l'écoute est suspendue (`vocalReduire`), la bulle rouvre ; plus aucun
+  texte de réponse à l'écran (description d'accessibilité seulement).
+- **Voix** : code au milieu d'une phrase dit en incise (« (le code est
+  affiché à l'écran) »), `print()` → « print », « ~ 5 » → « environ 5 ».
+- **Commandes locales** (`services/conversation/commandes_navigation.dart`,
+  détection stricte, politesse tolérée) : nouvelle conversation, mes
+  conversations, paramètres, outils, agenda, WhatsApp / Instagram /
+  Messenger / Mail, retour au chat écrit, arrêter la parole. Écrit et vocal
+  de l'accueil, sans IA.
+- **Outils › Agenda** : entrée « Bientôt disponible », page d'explication ;
+  aucune connexion, permission ni événement.
+- **Aide à répondre hors WhatsApp** : « qu'est-ce que je lui dis ? » ne
+  déclenche plus « Colle-moi la conversation » quand la situation est
+  décrite (`DetecteurIntention.decritUneSituation`) ; consigne MIA : 2 à 4
+  réponses courtes entre guillemets, une question seulement si essentiel,
+  jamais « j'ai lu vos messages ».
+
+### Tests
+- `flutter analyze` : aucun problème. Suite Flutter et pytest : voir le
+  compte rendu de la campagne.
+
+### Limites / à faire
+- Aucune mesure sur le Galaxy S10+ (environnement sans appareil) : profilage,
+  inscription réelle, Touch, applications externes à valider sur le
+  téléphone. Kotlin non compilé ici (pas de SDK Android).
+- « Ouvrir Apprendre » (Kelasi) et « fermer / réduire JARVIS Touch » à la
+  voix : non faits (Kelasi absent de cette branche ; Touch a ses boutons).

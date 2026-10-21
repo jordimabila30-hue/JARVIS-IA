@@ -133,6 +133,20 @@ Tes réponses peuvent être lues à voix haute : évite les tableaux et le Markd
 lourd, privilégie des phrases claires.
 {date}
 
+Aide à répondre à un message reçu : quand l'utilisateur rapporte ce qu'on lui
+a dit ou écrit et demande quoi répondre (« elle m'a dit que j'étais drôle, je
+réponds quoi ? », « mon patron me demande si je suis dispo demain, je lui dis
+quoi ? »), il veut des messages qu'il pourrait envoyer, pas un exposé.
+Propose directement 2 à 4 réponses courtes et naturelles, une par ligne,
+chacune entre guillemets, ton adapté à la relation (ami, proche,
+professeur, patron…), sans long préambule ni explication générale ; une
+phrase d'introduction au plus. Pose une seule question seulement si un détail
+vraiment essentiel manque. Reste respectueux et jamais manipulateur. Ne
+prétends jamais avoir lu ses messages (WhatsApp, Instagram, Messenger…) si
+rien n'a été partagé. Une demande de conseil (« est-ce que je devrais lui
+répondre ? »), d'explication (« pourquoi elle dit ça ? ») ou de rédaction
+longue (lettre, e-mail détaillé) reste traitée normalement.
+
 Ton demandé : {ton}"""
 
 
@@ -286,6 +300,9 @@ def fournisseur_attendu(limites: UserLimits | None, settings: Settings) -> tuple
         return limites.llm_provider, limites.llm_model
     nom = selection.nom_configure(settings)
     return nom, selection.modele_configure(nom, settings)
+
+
+ORIGINE_GMAIL = {"type": "origine", "source": "gmail"}
 
 
 async def get_fournisseur(
@@ -1039,6 +1056,11 @@ async def chat_stream(
                 text = filtre.visible
             else:
                 text = "".join(parts)
+            if execution is not None and any(nom.startswith("gmail_") for nom, _ in execution.donnees):
+                # Origine réelle : des e-mails ont été LUS pour cette réponse.
+                # Le chat est alors classé sous Gmail dans « Mes conversations »
+                # (jamais d'après le texte).
+                stockees.append(dict(ORIGINE_GMAIL))
             if fin is None and execution is not None:
                 # Interrompu pendant ODO : tours terminés + tour en cours (estimé).
                 prompt_tokens, completion_tokens = execution.usage_consomme()

@@ -7,7 +7,9 @@ import '../models/conversations/apercu_conversation.dart';
 import '../models/conversations/source_conversation.dart';
 import '../models/importation/piece_jointe_whatsapp.dart';
 import '../services/api_jarvis.dart';
+import '../services/applications_externes.dart';
 import '../services/authentification/auth_service.dart';
+import '../services/conversation/commandes_navigation.dart';
 import '../services/conversation/consentement_analyse.dart';
 import '../services/conversation/conversation_session.dart';
 import '../services/conversation/moteur_conversation_hybride.dart';
@@ -29,6 +31,7 @@ import '../services/jarvis_touch_service.dart';
 import '../services/preferences_pim_service.dart';
 import '../services/integrations/service_gmail.dart';
 import '../services/utilisation/service_utilisation.dart';
+import '../services/voice_command_service.dart';
 import '../services/voice_session.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
@@ -37,6 +40,7 @@ import '../widgets/bouton_vocal.dart';
 import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
 import '../widgets/fond_jarvis_anime.dart';
+import '../widgets/integrations/panneau_outils.dart';
 import '../widgets/ligne_de_commande.dart';
 import '../widgets/menu_lateral.dart';
 import '../widgets/parametres/fenetre_parametres.dart';
@@ -274,9 +278,12 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       fournisseurs: [
         jarvis,
         FournisseurSourceClassee(SourceConversation.whatsapp, jarvis),
+        // Chats où JARVIS a lu de vrais e-mails (outil Gmail).
+        FournisseurSourceClassee(SourceConversation.gmail, jarvis),
         for (final s in SourceConversation.values)
           if (s != SourceConversation.jarvis &&
-              s != SourceConversation.whatsapp)
+              s != SourceConversation.whatsapp &&
+              s != SourceConversation.gmail)
             FournisseurNonIntegre(s),
       ],
       epingles: epingles,
@@ -317,7 +324,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _session.surFin = _surFinSession;
     // Une seule conversation : le vocal y ajoute ses échanges et partage
     // son contexte avec l'écrit.
-    _session.repondeur = _conversation.repondreVocal;
+    _session.repondeur = _repondreVocal;
     _session.annulerReponse = _conversation.interrompreReponseVocale;
     if (DetecteurIntervention.disponible) {
       _session.detecteur ??= DetecteurIntervention();
@@ -567,6 +574,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   Future<void> _ouvrirParametres({
     SectionParametres section = SectionParametres.chatVocal,
     bool ouvrirSection = false,
+    OutilJarvis? outil,
   }) async {
     _focus.unfocus();
     // Quitter l'accueil interrompt une démonstration en cours.
@@ -583,6 +591,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       consentement: _consentement,
       utilisation: widget.utilisation,
       gmail: widget.gmail,
+      outil: outil,
     );
   }
 
@@ -682,6 +691,13 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       _envoyerPieceJointe(message, piece);
       return;
     }
+    // Commande de navigation (« ouvre les paramètres ») : exécutée ici,
+    // sans IA ni message dans la conversation.
+    if (CommandesNavigation.detecter(message) case final commande?) {
+      _controleur.clear();
+      _executerCommande(commande);
+      return;
+    }
     _pim.surEnvoi();
     _conversation.envoyer(message);
     _controleur.clear();
@@ -769,6 +785,61 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       _session.lireReponse(
         m.incident == null ? m.texte : '${m.texte} ${m.incident}',
       );
+    }
+  }
+
+  /// Vocal : une commande de navigation ferme d'abord l'interface vocale
+  /// (chat vocal reprenable), puis s'exécute ; tout le reste va à LA
+  /// conversation. Seulement dans le vocal de l'accueil (JARVIS Touch
+  /// garde ses propres boutons).
+  Future<ReponseVocale?> _repondreVocal(
+    String phrase, {
+    void Function(String fragment)? surFragment,
+  }) async {
+    final commande = _modeVocal ? CommandesNavigation.detecter(phrase) : null;
+    if (commande == null || commande == CommandeNavigation.arreterParole) {
+      return _conversation.repondreVocal(phrase, surFragment: surFragment);
+    }
+    await _retourAuChat();
+    if (mounted) _executerCommande(commande);
+    return null;
+  }
+
+  Future<void> _executerCommande(CommandeNavigation c) async {
+    if (c.application case final app?) {
+      final messager = ScaffoldMessenger.maybeOf(context);
+      if (!await ouvrirApplicationExterne(app)) {
+        messager?.showSnackBar(SnackBar(content: Text(app.echec)));
+      }
+      return;
+    }
+    switch (c) {
+      case CommandeNavigation.nouvelleConversation:
+        _nouvelleConversation();
+      case CommandeNavigation.afficherConversations:
+        _ouvrirMenu();
+      case CommandeNavigation.ouvrirParametres:
+        await _ouvrirParametres();
+      case CommandeNavigation.ouvrirOutils:
+        await _ouvrirParametres(
+          section: SectionParametres.outils,
+          ouvrirSection: true,
+        );
+      case CommandeNavigation.ouvrirAgenda:
+        await _ouvrirParametres(
+          section: SectionParametres.outils,
+          ouvrirSection: true,
+          outil: OutilJarvis.agenda,
+        );
+      case CommandeNavigation.retourChatEcrit:
+        if (_modeVocal) await _retourAuChat();
+      case CommandeNavigation.arreterParole:
+        await _session.arreterLecture();
+      case CommandeNavigation.ouvrirWhatsApp ||
+          CommandeNavigation.ouvrirInstagram ||
+          CommandeNavigation.ouvrirMessenger ||
+          CommandeNavigation.ouvrirMail:
+        break;
     }
   }
 

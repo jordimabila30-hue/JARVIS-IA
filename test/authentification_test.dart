@@ -393,6 +393,38 @@ void main() {
       expect(find.text('Jordi'), findsOneWidget);
     });
 
+    testWidgets('inscription : session reçue → accueil direct ; '
+        'confirmation exigée → « J’ai confirmé » connecte sans ressaisie', (
+      tester,
+    ) async {
+      await _monter(tester, ecran: EcranAuth.inscription);
+      await _saisir(tester, 'Nom ou pseudonyme', 'Jordi');
+      await _saisir(tester, 'Adresse e-mail', 'jordi@exemple.com');
+      await _saisir(tester, 'Mot de passe', 'motdepasse1');
+      await _saisir(tester, 'Confirmer le mot de passe', 'motdepasse1');
+      _depot.reponse = const EchecAuth(
+        ErreurAuth(TypeErreurAuth.confirmationEnvoyee),
+      );
+      await _appuyer(tester, 'Créer mon compte');
+      expect(find.text(InscriptionPage.confirmation), findsOneWidget);
+      expect(_connectes, isEmpty);
+      // Pas encore confirmée : le serveur refuse, rien n'est contourné.
+      _depot.reponse = const EchecAuth(
+        ErreurAuth(TypeErreurAuth.emailNonConfirme),
+      );
+      await _appuyer(tester, 'J’ai confirmé, continuer');
+      expect(find.text(InscriptionPage.toujoursNonConfirme), findsOneWidget);
+      expect(_connectes, isEmpty);
+      const u = UtilisateurAuth(identifiant: '1', email: 'jordi@exemple.com');
+      _depot.reponse = const SuccesAuth(u);
+      await _appuyer(tester, 'J’ai confirmé, continuer');
+      expect(_connectes, [u]);
+      expect(
+        _depot.appels.where((a) => a.startsWith('connecter')),
+        hasLength(2),
+      );
+    });
+
     testWidgets('13. aucun compte fictif créé', (tester) async {
       await _monter(tester, ecran: EcranAuth.inscription);
       await _saisir(tester, 'Nom ou pseudonyme', 'Jordi');

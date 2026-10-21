@@ -241,7 +241,8 @@ enum _Destination {
 /// Transition en fondu entre deux pages.
 Route<void> _routeEnFondu(Widget page) {
   return PageRouteBuilder(
-    transitionDuration: const Duration(milliseconds: 700),
+    // Court : l'accueil est utilisable sans attendre la fin du fondu.
+    transitionDuration: const Duration(milliseconds: 320),
     pageBuilder: (_, _, _) => page,
     transitionsBuilder: (_, animation, _, enfant) =>
         FadeTransition(opacity: animation, child: enfant),

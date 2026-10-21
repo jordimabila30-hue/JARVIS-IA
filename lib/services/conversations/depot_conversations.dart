@@ -72,7 +72,14 @@ class ConversationServeur {
     required this.derniereActivite,
     this.apercu = '',
     this.contextes = const [],
+    this.mail = false,
   });
+
+  /// Au moins une réponse de JARVIS s'est appuyée sur des e-mails réellement
+  /// lus par l'outil Gmail (marque `origine` posée par le serveur dans
+  /// `messages.attachments`). Jamais déduit du texte : parler d'un e-mail
+  /// ne suffit pas.
+  final bool mail;
 
   /// Pièces jointes WhatsApp de la conversation, de la plus ancienne à la
   /// plus récente. Au moins une : la conversation est classée sous
@@ -220,9 +227,11 @@ class DepotConversationsSupabase implements DepotConversations {
             .limit(1, referencedTable: 'messages')
             .limit(limite)
             .timeout(delai);
+        final mails = await _conversationsMail(uid);
         return [
           for (final l in lignes)
             ConversationServeur(
+              mail: mails.contains(l['id']),
               id: l['id'] as String,
               titre: (l['title'] as String?)?.trim() ?? '',
               derniereActivite: _date(l['last_message_at']),
@@ -235,6 +244,28 @@ class DepotConversationsSupabase implements DepotConversations {
             ),
         ];
       });
+
+  /// Marque d'origine écrite par le serveur quand un outil Gmail a lu des
+  /// e-mails pour la réponse (voir `backend/app/api/v1/chat.py`).
+  static const origineGmail = {'type': 'origine', 'source': 'gmail'};
+
+  /// Conversations dont une réponse porte [origineGmail] (filtre JSON
+  /// `cs`, lignes du compte seulement). Échec : aucune, jamais une erreur
+  /// de liste pour un simple classement.
+  Future<Set<String>> _conversationsMail(String uid) async {
+    try {
+      final lignes = await _client
+          .from('messages')
+          .select('conversation_id')
+          .eq('user_id', uid)
+          .eq('role', 'assistant')
+          .contains('attachments', [origineGmail])
+          .timeout(delai);
+      return {for (final l in lignes) l['conversation_id'] as String};
+    } catch (_) {
+      return const {};
+    }
+  }
 
   @override
   Future<PageMessages> messages(

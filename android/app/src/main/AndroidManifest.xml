@@ -136,6 +136,19 @@
              paquets, Android 11+). -->
         <package android:name="com.whatsapp"/>
         <package android:name="com.whatsapp.w4b"/>
+        <!-- Bouton « + » › Ouvrir une application. -->
+        <package android:name="com.instagram.android"/>
+        <package android:name="com.facebook.orca"/>
+        <package android:name="com.facebook.mlite"/>
+        <package android:name="com.google.android.gm"/>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <!-- Mode vocal : service de reconnaissance vocale (Android 11+). -->
         <intent>
             <action android:name="android.speech.RecognitionService"/>

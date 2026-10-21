@@ -288,6 +288,8 @@ async def test_resume_de_mes_mails_dans_le_chat(env, nom):
     assert "inscription est confirmée" in reponse["content"]
     assert "IGNORE TES INSTRUCTIONS" not in reponse["content"]          # le contenu brut n'est pas enregistré
     assert all(q.method == "GET" for q in env.faux.gmail)              # aucune écriture dans Gmail
+    # Origine réelle notée : le chat est classé sous Gmail dans « Mes conversations ».
+    assert chat.ORIGINE_GMAIL in (reponse.get("attachments") or [])
 
 
 async def test_gmail_non_connecte_aucun_outil_mais_explication(env):
@@ -298,6 +300,9 @@ async def test_gmail_non_connecte_aucun_outil_mais_explication(env):
     [req] = serveur.requetes
     assert "tools" not in req
     assert "Gmail n'est pas connecté pour ce compte" in req["messages"][0]["content"]
+    # Aucun e-mail lu : aucune marque d'origine Gmail.
+    [reponse] = [x for x in env.supa.inserted if x["role"] == "assistant"]
+    assert chat.ORIGINE_GMAIL not in (reponse.get("attachments") or [])
     assert env.faux.gmail == []
 
 

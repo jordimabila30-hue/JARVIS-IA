@@ -860,6 +860,34 @@ void main() {
       c.dispose();
     });
 
+    test('longue session vocale puis retour à l’écrit : aucune ancienne '
+        'réponse ne se réécrit', () async {
+      final s = _ServeurPilote();
+      final c = _session(s);
+      for (var i = 0; i < 12; i++) {
+        final vocale = c.repondreVocal('$_question $i');
+        await _attendreFlux(s);
+        s.meta();
+        s.delta('Réponse numéro $i, ');
+        await _laisser();
+        s.delta('assez longue pour être écrite mot par mot.');
+        s.done();
+        await s.fermer();
+        await vocale;
+      }
+      final reponses = _deJarvis(c);
+      expect(reponses, hasLength(12));
+      // Aucune image n'a tourné (fil caché pendant le vocal) : tout est
+      // pourtant déjà affiché, rien n'attend d'être révélé.
+      for (final m in reponses) {
+        expect(m.ecriture!.termine, isTrue, reason: m.texte);
+        expect(m.ecriture!.enMouvement, isFalse);
+        expect(m.ecriture!.visible, m.texte);
+      }
+      expect(reponses.map((m) => m.id).toSet(), hasLength(12));
+      c.dispose();
+    });
+
     test('mode vocal interrompu : le texte reçu puis l’explication', () async {
       final s = _ServeurPilote();
       final c = _session(s);

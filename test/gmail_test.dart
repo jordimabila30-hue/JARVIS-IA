@@ -202,7 +202,9 @@ void main() {
           page: (g) => PanneauOutils(gmail: g, surChoix: (o) => ouvert = o));
       expect(find.text('Gmail'), findsOneWidget);
       expect(find.text('Connecté'), findsOneWidget);
-      expect(find.text('Agenda'), findsNothing);                 // aucun outil fictif
+      // Agenda : présent, annoncé « Bientôt disponible », jamais « connecté ».
+      expect(find.text('Agenda'), findsOneWidget);
+      expect(find.text(PanneauAgenda.statut), findsOneWidget);
       await t.tap(find.text('Gmail'));
       expect(ouvert, OutilJarvis.gmail);
       g.etat = const EtatGmail(statut: StatutGmail.nonConnecte);

@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/applications_externes.dart';
 import '../theme/theme_jarvis.dart';
 import 'feuille_ajout.dart';
 import 'importation/logo_whatsapp.dart';
@@ -605,9 +606,17 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
         widget.surImporter?.call();
       case ChoixAjout.ajouterMessageWhatsApp:
         widget.surAjouterMessage?.call();
-      case null:
+      case ChoixAjout(:final application?):
+        await _ouvrirApplication(application);
+      case _:
         break;
     }
+  }
+
+  Future<void> _ouvrirApplication(ApplicationExterne app) async {
+    final messager = ScaffoldMessenger.maybeOf(context);
+    if (await ouvrirApplicationExterne(app)) return;
+    messager?.showSnackBar(SnackBar(content: Text(app.echec)));
   }
 
   @override
@@ -655,6 +664,13 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
               LigneImportGlissante.action,
               style: TextStyle(fontSize: 13),
             ),
+          ),
+        // Ouvrir une application (jamais ses messages).
+        for (final app in ApplicationExterne.values)
+          MenuItemButton(
+            leadingIcon: LogoApplication(application: app, taille: 18),
+            onPressed: () => _ouvrirApplication(app),
+            child: Text('Ouvrir ${app.nom}'),
           ),
       ],
       builder: (context, menu, _) => Listener(

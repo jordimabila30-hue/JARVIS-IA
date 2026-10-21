@@ -960,7 +960,11 @@ class ConversationSession extends ChangeNotifier {
     final flux = TexteEnDirect(
       nettoyer: MoteurConversationIA.texteSimpleProvisoire,
     );
-    final ecriture = EcritureProgressive(flux);
+    // Réponse vocale : le fil n'est pas affiché pendant le vocal, aucun
+    // Ticker n'y fait avancer l'écriture. Sans cela, toutes les réponses
+    // du vocal se mettraient à s'écrire au retour au chat écrit. Elles
+    // sont donc affichées d'emblée (la voix les a déjà dites).
+    final ecriture = EcritureProgressive(flux)..immediat = vocal;
     int? idBulle;
     DateTime? heureBulle;
     var attente = true;
@@ -1087,7 +1091,9 @@ class ConversationSession extends ChangeNotifier {
       // conversation, mise de côté ou rouverte, comme sur le serveur ;
       // conversation supprimée : perdue. Rien à dire en vocal. Jamais vue
       // en train de s'écrire : elle sera affichée entière.
-      if (idBulle == null) ecriture.toutAfficher();
+      // Bulle déjà née ou non : jamais d'écriture qui reprendrait à la
+      // réouverture de cette conversation.
+      ecriture.toutAfficher();
       _rangerReponseTardive(demande, message);
       notifyListeners();
       return null;

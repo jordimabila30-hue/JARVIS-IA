@@ -9,7 +9,11 @@ import 'panneau_gmail.dart';
 /// Ajouter un outil : une valeur ici, puis son logo, son statut et sa page
 /// dans [PanneauOutils] et `FenetreParametres` (aucun outil fictif).
 enum OutilJarvis {
-  gmail('Gmail', 'E-mails Google');
+  gmail('Gmail', 'E-mails Google'),
+
+  /// Préparé seulement : aucun fournisseur raccordé, aucune permission,
+  /// aucun événement (ni réel ni fictif).
+  agenda('Agenda', 'Rendez-vous et événements');
 
   const OutilJarvis(this.nom, this.description);
 
@@ -60,6 +64,15 @@ class _PanneauOutilsState extends State<PanneauOutils> {
                   surAppui: () => widget.surChoix(outil),
                 );
               },
+            ),
+            OutilJarvis.agenda => _LigneOutil(
+              outil: outil,
+              logo: const LogoAgenda(),
+              statut: StatutOutil(
+                libelle: PanneauAgenda.statut,
+                couleur: CouleursJarvis.texteSecondaire,
+              ),
+              surAppui: () => widget.surChoix(outil),
             ),
           },
       ],
@@ -147,6 +160,74 @@ class _LigneOutil extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// Pastille de l'Agenda (même taille que le logo Gmail).
+class LogoAgenda extends StatelessWidget {
+  const LogoAgenda({super.key, this.taille = 36});
+
+  final double taille;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: taille,
+    height: taille,
+    decoration: BoxDecoration(
+      color: CouleursJarvis.creme,
+      borderRadius: BorderRadius.circular(taille * 0.28),
+      border: Border.all(color: CouleursJarvis.trait.withValues(alpha: 0.7)),
+    ),
+    child: Icon(
+      Icons.event_rounded,
+      size: taille * 0.58,
+      color: CouleursJarvis.signal,
+    ),
+  );
+}
+
+/// Paramètres › Outils › Agenda : présentation honnête d'un outil à venir.
+/// Aucune connexion lancée, aucune permission demandée, aucun événement.
+class PanneauAgenda extends StatelessWidget {
+  const PanneauAgenda({super.key});
+
+  static const statut = 'Bientôt disponible';
+  static const explication =
+      'JARVIS pourra bientôt consulter votre agenda (Google Agenda ou un '
+      'autre fournisseur) pour vous rappeler vos rendez-vous et vous aider '
+      'à organiser vos journées. La connexion n’est pas encore disponible : '
+      'JARVIS n’a aujourd’hui aucun accès à votre calendrier.';
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 420),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const LogoAgenda(taille: 56),
+        const SizedBox(height: 16),
+        Text(
+          OutilJarvis.agenda.nom,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: CouleursJarvis.texte,
+          ),
+        ),
+        const SizedBox(height: 8),
+        StatutOutil(libelle: statut, couleur: CouleursJarvis.texteSecondaire),
+        const SizedBox(height: 16),
+        Text(
+          explication,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.45,
+            color: CouleursJarvis.texteSecondaire,
+          ),
+        ),
+      ],
     ),
   );
 }

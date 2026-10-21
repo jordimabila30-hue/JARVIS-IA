@@ -30,9 +30,10 @@ interface RenduBulle {
 }
 
 /**
- * Bulle JARVIS dessinée à la main : disque sombre translucide, anneau
- * fin, cœur lumineux qui évoque la particule PIM (respiration lente
- * seulement quand la bulle est sollicitée).
+ * Bulle JARVIS : disque sombre translucide (lisible sur tous les fonds),
+ * anneau fin et, au centre, la perle JARVIS de l'application
+ * ([PerleJarvis]) ; respiration lente seulement quand la bulle est
+ * sollicitée.
  */
 class BulleJarvis(context: Context) : View(context), RenduBulle {
 
@@ -58,7 +59,7 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
         color = Color.rgb(0x7D, 0x8D, 0xF5)
     }
     private var vocal = false
-    private val coeur = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val perle = PerleJarvis()
 
     private var phase = 0f
     private val respiration = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -83,11 +84,6 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
             intArrayOf(Color.argb(150, 140, 122, 210), Color.argb(60, 85, 89, 184), Color.TRANSPARENT),
             floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
         )
-        coeur.shader = RadialGradient(
-            w / 2f, h / 2f, r * 0.34f,
-            intArrayOf(Color.WHITE, Color.argb(255, 236, 232, 250), Color.argb(0, 221, 213, 239)),
-            floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
-        )
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -102,7 +98,7 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
         canvas.scale(s, s, cx, cy)
         canvas.drawCircle(cx, cy, r * 0.62f, halo)
         canvas.restore()
-        canvas.drawCircle(cx, cy, r * 0.34f, coeur)
+        perle.dessiner(canvas, cx, cy, r * 0.5f, avecHalo = false)
         if (vocal) canvas.drawCircle(cx, cy, r - 2.5f * densite, marqueVocal)
     }
 

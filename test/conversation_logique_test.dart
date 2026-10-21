@@ -230,6 +230,26 @@ void main() {
       expect(s.messages.last.texte, isNot(MoteurConversationLocal.inconnue));
     });
 
+    test('aide à répondre : situation décrite → IA (même hors WhatsApp) ; '
+        'demande nue → la conversation est demandée', () {
+      for (final t in [
+        'Elle m’a dit que j’étais drôle, je réponds quoi ?',
+        'Mon professeur m’a demandé de lui envoyer le travail, je réponds quoi ?',
+        'Mon ami s’est excusé, qu’est-ce que je lui dis ?',
+        'Mon patron m’a demandé si je suis disponible demain, comment je réponds ?',
+      ]) {
+        expect(DetecteurIntention.decritUneSituation(t), isTrue, reason: t);
+      }
+      for (final t in [
+        'Tu peux me dire quoi répondre ?',
+        'Que lui répondre ?',
+        'Qu’est-ce que je lui réponds ?',
+        'Je réponds quoi à ce message ?',
+      ]) {
+        expect(DetecteurIntention.decritUneSituation(t), isFalse, reason: t);
+      }
+    });
+
     test('demande de réponse sans conversation : JARVIS la demande', () async {
       final s = _session();
       await s.envoyer('Tu peux me dire quoi répondre ?');

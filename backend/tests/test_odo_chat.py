@@ -192,3 +192,13 @@ async def test_tours_consommes_comptes_meme_sans_reponse_finale(env):
     [(messages, tokens)] = env.supa.increments
     assert messages == 1 and tokens == settings.odo_max_tours * 110
     assert [x for x in env.supa.inserted if x["role"] == "assistant"] == []
+
+
+def test_consigne_aide_a_repondre_dans_le_chat_ordinaire():
+    """Correction 16 : « je réponds quoi ? » hors WhatsApp → réponses concrètes."""
+    from datetime import datetime
+
+    from app.api.v1.chat import Ton, build_system_prompt
+    systeme = build_system_prompt(Ton.naturel, None, datetime(2026, 10, 20, 12, 0))
+    assert "2 à 4 réponses courtes" in systeme
+    assert "prétends jamais avoir lu ses messages" in systeme

@@ -191,6 +191,71 @@ class DetecteurIntention {
     return _motsEmail.any(a) && _personnel.any(a);
   }
 
+  static const _vides = {
+    'je',
+    'j',
+    'tu',
+    'il',
+    'elle',
+    'lui',
+    'leur',
+    'quoi',
+    'comment',
+    'que',
+    'qu',
+    'est',
+    'ce',
+    'a',
+    'dis',
+    'dire',
+    'dit',
+    'reponds',
+    'repond',
+    'repondre',
+    'ecrire',
+    'ecris',
+    'envoyer',
+    'envoie',
+    'mon',
+    'ma',
+    'un',
+    'une',
+    'le',
+    'la',
+    'les',
+    'de',
+    'du',
+    'message',
+    'sms',
+    'texto',
+    'mail',
+    'cette',
+    'ca',
+    'ton',
+    'avis',
+    'peux',
+    'dois',
+    'faut',
+    'et',
+    'alors',
+    'conversation',
+    'discussion',
+  };
+
+  /// Vrai si une demande d'aide à répondre DÉCRIT déjà ce qui a été reçu
+  /// (« elle m'a dit que j'étais drôle, je réponds quoi ? », « mon patron
+  /// me demande si je suis dispo demain ») : l'IA peut proposer des
+  /// réponses sans qu'on lui colle de conversation. « Que lui répondre ? »
+  /// seul ne décrit rien.
+  static bool decritUneSituation(String demande) {
+    var t = ' ${normaliser(demande)} ';
+    for (final f in _reponse) {
+      t = t.replaceAll(' $f ', ' ');
+    }
+    final mots = t.split(' ').where((m) => m.isNotEmpty && !_vides.contains(m));
+    return mots.length >= 3;
+  }
+
   /// Vrai si [demande] concerne visiblement une conversation (sert à
   /// accepter une conversation d'un seul message).
   bool concerneUneConversation(String demande) =>

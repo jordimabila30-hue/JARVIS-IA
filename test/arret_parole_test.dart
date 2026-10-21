@@ -4,9 +4,11 @@
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/models/voice_state.dart';
+import 'package:ia_jarvis/services/jarvis_touch_vocal.dart';
 import 'package:ia_jarvis/services/microphone_service.dart';
 import 'package:ia_jarvis/services/niveau_micro.dart';
 import 'package:ia_jarvis/services/peripheriques_audio.dart';
@@ -222,5 +224,38 @@ void main() {
     await _attendre(500);
     expect(session.actif, isFalse);
     expect(reco.ecoutes, 1);
+  });
+
+  test('JARVIS Touch réduit : la réponse en cours finit, puis plus aucun '
+      'micro ouvert ; la bulle rouvre l’écoute', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const canal = MethodChannel('test/touch_vocal');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(canal, (_) async => null);
+    final passerelle = PasserelleVocalTouch(session, canal);
+    await passerelle.surAppel(const MethodCall('vocalOuvrir'));
+    reco.phrase!('Explique le moteur électrique');
+    await _attendre();
+    envoyer('Un moteur électrique transforme l’énergie. Il comporte un rotor. ');
+    await _attendre();
+    expect(session.parle, isTrue);
+
+    await passerelle.surAppel(const MethodCall('vocalReduire'));
+    // Jamais coupée par la réduction.
+    expect(session.parle, isTrue);
+    expect(voix.arrets, 0);
+    finReponse.complete();
+    for (var i = 0; i < 4; i++) {
+      voix.finir();
+      await _attendre(200);
+    }
+    expect(session.actif, isFalse, reason: 'micro suspendu fenêtre réduite');
+    final ecoutes = reco.ecoutes;
+
+    await passerelle.surAppel(const MethodCall('vocalOuvrir'));
+    await _attendre();
+    expect(session.actif, isTrue);
+    expect(reco.ecoutes, greaterThan(ecoutes));
+    passerelle.detacher();
   });
 }

@@ -3,11 +3,67 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import 'package:flutter_svg/flutter_svg.dart';
+
+import '../services/applications_externes.dart';
 import '../theme/theme_jarvis.dart';
 import 'importation/logo_whatsapp.dart';
 
 /// Ce que l'utilisateur a choisi dans la feuille « Ajouter à JARVIS ».
-enum ChoixAjout { coller, importerWhatsApp, ajouterMessageWhatsApp }
+enum ChoixAjout {
+  coller,
+  importerWhatsApp,
+  ajouterMessageWhatsApp,
+  ouvrirWhatsApp,
+  ouvrirInstagram,
+  ouvrirMessenger,
+  ouvrirMail;
+
+  /// Application à ouvrir (null : action de JARVIS).
+  ApplicationExterne? get application => switch (this) {
+    ouvrirWhatsApp => ApplicationExterne.whatsapp,
+    ouvrirInstagram => ApplicationExterne.instagram,
+    ouvrirMessenger => ApplicationExterne.messenger,
+    ouvrirMail => ApplicationExterne.mail,
+    _ => null,
+  };
+
+  static ChoixAjout pour(ApplicationExterne app) =>
+      values.firstWhere((c) => c.application == app);
+}
+
+/// Logo d'une application externe (ressources locales, voir
+/// `assets/logos/SOURCES.md`) ; Mail : icône générique (n'importe quelle
+/// messagerie du système).
+class LogoApplication extends StatelessWidget {
+  const LogoApplication({
+    super.key,
+    required this.application,
+    this.taille = 28,
+  });
+
+  final ApplicationExterne application;
+  final double taille;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: taille,
+    child: switch (application) {
+      ApplicationExterne.whatsapp => LogoWhatsApp(taille: taille),
+      ApplicationExterne.instagram => SvgPicture.asset(
+        'assets/logos/instagram.svg',
+      ),
+      ApplicationExterne.messenger => SvgPicture.asset(
+        'assets/logos/messenger.svg',
+      ),
+      ApplicationExterne.mail => Icon(
+        Icons.mail_outline_rounded,
+        size: taille * 0.86,
+        color: CouleursJarvis.signal,
+      ),
+    },
+  );
+}
 
 /// Feuille « Ajouter à JARVIS » (téléphone) : remplace le petit menu du
 /// bouton « + », qui pouvait passer sous le clavier. Renvoie le choix, ou
@@ -30,6 +86,7 @@ class FeuilleAjout extends StatelessWidget {
   const FeuilleAjout({super.key, this.actualisation = false});
 
   static const titre = 'Ajouter à JARVIS';
+  static const ouvrir = 'Ouvrir une application';
 
   /// Phase 5 : « Ajouter une réponse reçue » disponible (compte connecté),
   /// révélé en glissant « Importer une conversation » vers la gauche.
@@ -58,51 +115,118 @@ class FeuilleAjout extends StatelessWidget {
         20,
         20 + MediaQuery.viewPaddingOf(context).bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: CouleursJarvis.trait,
-                borderRadius: BorderRadius.circular(2),
+      // Petit écran (320 × 568) : la feuille défile au lieu de déborder.
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: CouleursJarvis.trait,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              titre,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-                color: CouleursJarvis.texte,
+            const SizedBox(height: 16),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                titre,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: CouleursJarvis.texte,
+                ),
               ),
             ),
+            const SizedBox(height: 12),
+            _Choix(
+              icone: Icons.content_paste_rounded,
+              titre: 'Coller une conversation',
+              detail: 'Depuis le presse-papiers',
+              surChoix: () => Navigator.of(context).pop(ChoixAjout.coller),
+            ),
+            const SizedBox(height: 6),
+            LigneImportGlissante(
+              surImporter: () =>
+                  Navigator.of(context).pop(ChoixAjout.importerWhatsApp),
+              surAjouterMessage: actualisation
+                  ? () => Navigator.of(
+                      context,
+                    ).pop(ChoixAjout.ajouterMessageWhatsApp)
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                ouvrir,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                  color: CouleursJarvis.texte.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (final app in ApplicationExterne.values)
+                  Expanded(
+                    child: _TuileApplication(
+                      application: app,
+                      surChoix: () =>
+                          Navigator.of(context).pop(ChoixAjout.pour(app)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tuile compacte « logo + nom » : ouvre l'application (jamais ses
+/// messages).
+class _TuileApplication extends StatelessWidget {
+  const _TuileApplication({required this.application, required this.surChoix});
+
+  final ApplicationExterne application;
+  final VoidCallback surChoix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Ouvrir ${application.nom}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: surChoix,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LogoApplication(application: application),
+              const SizedBox(height: 6),
+              Text(
+                application.nom,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: CouleursJarvis.texte),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          _Choix(
-            icone: Icons.content_paste_rounded,
-            titre: 'Coller une conversation',
-            detail: 'Depuis le presse-papiers',
-            surChoix: () => Navigator.of(context).pop(ChoixAjout.coller),
-          ),
-          const SizedBox(height: 6),
-          LigneImportGlissante(
-            surImporter: () =>
-                Navigator.of(context).pop(ChoixAjout.importerWhatsApp),
-            surAjouterMessage: actualisation
-                ? () => Navigator.of(
-                    context,
-                  ).pop(ChoixAjout.ajouterMessageWhatsApp)
-                : null,
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -284,6 +284,14 @@ class MoteurConversationLocal implements MoteurConversation {
         : null;
     switch (demande.intention) {
       case IntentionMessage.reponse:
+        // La situation est décrite (« elle m'a dit que j'étais drôle, je
+        // réponds quoi ? ») : l'IA propose directement des réponses, même
+        // hors WhatsApp. Sinon, on demande la conversation.
+        if (c == null &&
+            avecIA &&
+            DetecteurIntention.decritUneSituation(demande.texte)) {
+          return null;
+        }
         if (c == null) return sansConversation;
         return ReponseJarvis(
           AnalyseConversation(c).avantReponse,

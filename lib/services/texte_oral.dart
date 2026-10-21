@@ -19,7 +19,9 @@ class TexteOral {
     var t = texte.replaceAll('\r\n', '\n');
 
     // Blocs de code : jamais lus caractère par caractère.
-    t = t.replaceAll(RegExp(r'```[\s\S]*?(```|$)'), '\nLe code est affiché à l’écran.\n');
+    // Seul sur sa ligne : une phrase ; au milieu d'une phrase : une
+    // incise, sans casser la phrase autour.
+    t = t.replaceAll(RegExp(r'```[\s\S]*?(```|$)'), _code);
 
     final lignes = <String>[];
     final liste = <String>[];
@@ -84,9 +86,14 @@ class TexteOral {
     return sortie;
   }
 
+  static const _code = '\u0000code\u0000';
+
   /// Une ligne nettoyée, terminée par une ponctuation.
   static String _phrase(String ligne) {
-    var l = _symboles(_sansMarques(ligne)).trim();
+    if (ligne.trim() == _code) return 'Le code est affiché à l’écran.';
+    var l = _symboles(
+      _sansMarques(ligne.replaceAll(_code, ' (le code est affiché à l’écran) ')),
+    ).trim();
     if (l.isEmpty) return '';
     if (!RegExp(r'[.!?…:;,»"]$').hasMatch(l)) l = '$l.';
     return l;
@@ -99,7 +106,13 @@ class TexteOral {
       .replaceAllMapped(RegExp(r'(\*\*|__)(.+?)\1'), (m) => m.group(2)!)
       .replaceAllMapped(RegExp(r'~~(.+?)~~'), (m) => m.group(1)!)
       .replaceAllMapped(RegExp(r'(?<![\w*])[*_](?!\s)([^*_\n]+?)[*_](?!\w)'), (m) => m.group(1)!)
-      .replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1)!)
+      // Code en ligne : le mot seul (« print() » → « print »).
+      .replaceAllMapped(
+        RegExp(r'`([^`]+)`'),
+        (m) => m.group(1)!.replaceAll(RegExp(r'\(\)$'), ''),
+      )
+      // « ~ 5 € » : environ (jamais « tilde »).
+      .replaceAll(RegExp(r'~\s*(?=\d)'), 'environ ')
       // Marques restantes (non refermées) : jamais prononcées.
       .replaceAll(RegExp(r'[*`#]+'), '')
       .replaceAll(RegExp(r'(?<!\w)_+|_+(?!\w)'), ' ')

@@ -15,7 +15,9 @@ import 'voice_session.dart';
 /// Canal `jarvis/touch_chat` (partagé avec le mini-chat) :
 /// - natif → Dart : `vocalOuvrir`, `vocalMicro` (couper / réactiver),
 ///   `vocalQuitter` (fin réelle : micro et voix libérés), `vocalFermer`
-///   (fenêtre fermée : écoute suspendue, chat reprenable) ;
+///   (fenêtre fermée : écoute suspendue, chat reprenable), `vocalReduire`
+///   (fenêtre réduite en bulle : la réponse en cours se termine, puis
+///   l'écoute est suspendue ; jamais de micro ouvert fenêtre masquée) ;
 /// - Dart → natif : `vocal` (état, quelques fois par phrase) et `niveau`
 ///   (amplitude réelle, au plus ~16 fois par seconde, seulement fenêtre
 ///   ouverte).
@@ -26,6 +28,9 @@ class PasserelleVocalTouch {
   final MethodChannel _canal;
 
   bool _ouverte = false;
+
+  /// Fenêtre réduite en bulle : plus d'écoute dès la fin de la réponse.
+  bool _reduite = false;
   Timer? _cadence;
   double? _niveauEnAttente;
   String _dernierEtat = '';
@@ -41,6 +46,8 @@ class PasserelleVocalTouch {
         return _quitter();
       case 'vocalFermer':
         return _fermer();
+      case 'vocalReduire':
+        return _reduire();
       // L'état suit par `vocal` (poussé dans l'ordre) : jamais renvoyé ici,
       // une réponse arrivée après lui afficherait un état périmé.
       case 'vocalArreterParole':
@@ -50,6 +57,7 @@ class PasserelleVocalTouch {
   }
 
   Future<Object?> _ouvrir() async {
+    _reduite = false;
     if (!_ouverte) {
       _ouverte = true;
       _session.addListener(_surSession);
@@ -83,7 +91,24 @@ class PasserelleVocalTouch {
     return null;
   }
 
+  /// Réduite : écoute coupée tout de suite, ou dès que JARVIS a fini de
+  /// réfléchir et de parler (la réponse n'est jamais coupée par la
+  /// réduction). La bulle rouvre la fenêtre (`vocalOuvrir`).
+  Future<Object?> _reduire() async {
+    _reduite = true;
+    await _suspendreSiReduite();
+    return null;
+  }
+
+  Future<void> _suspendreSiReduite() async {
+    if (!_reduite || !_session.actif) return;
+    final etat = _session.etat;
+    if (etat == VoiceState.thinking || etat == VoiceState.speaking) return;
+    await _session.mettreEnArrierePlan();
+  }
+
   void _detacher() {
+    _reduite = false;
     if (!_ouverte) return;
     _ouverte = false;
     _session.removeListener(_surSession);
@@ -111,6 +136,10 @@ class PasserelleVocalTouch {
 
   void _surSession() {
     if (!_ouverte) return;
+    if (_reduite) {
+      unawaited(_suspendreSiReduite());
+      return;
+    }
     final e = _etat();
     final signature = e.toString();
     if (signature == _dernierEtat) return;
@@ -127,7 +156,7 @@ class PasserelleVocalTouch {
       _cadence = null;
       final n = _niveauEnAttente;
       _niveauEnAttente = null;
-      if (n != null && _ouverte) _envoyer('niveau', n);
+      if (n != null && _ouverte && !_reduite) _envoyer('niveau', n);
     });
   }
 

@@ -140,6 +140,8 @@ class FenetresJarvisTouch(private val service: Context) {
             if (!ajoutee) return@postDelayed
             placer()
             mettreAJour()
+            // Vocal flottant : toujours entier dans le nouvel écran.
+            vocal?.recaler(zoneEcran())
         }, 150)
     }
 
@@ -530,11 +532,14 @@ class FenetresJarvisTouch(private val service: Context) {
         })
     }
 
-    /** Réduire : la session continue ; la bulle, marquée, la rouvre. */
+    /** Réduire : petite bulle JARVIS marquée, qui rouvre la fenêtre (même
+     *  session). Le micro ne reste jamais ouvert fenêtre masquée : Dart
+     *  laisse finir la réponse en cours puis suspend l'écoute. */
     private fun reduireVocal() {
         val v = vocal ?: return
         vocal = null
         CanalMiniChat.recepteurVocal = null
+        CanalMiniChat.appeler("vocalReduire", null, {}, {})
         v.retirer()
         vocalReduit = true
         rendu.marquerVocal(true)

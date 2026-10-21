@@ -53,4 +53,19 @@ void main() {
   test('réponse courte inchangée', () {
     expect(oral('Il est 14 h 05.'), 'Il est 14 h 05.');
   });
+
+  test('code au milieu d’une phrase : la phrase reste entière', () {
+    expect(
+      oral('Utilise `print()` puis ```dart\nvoid main() {}\n``` ensuite.'),
+      'Utilise print puis (le code est affiché à l’écran) ensuite.',
+    );
+    expect(
+      oral('Voici :\n```\nx = 1\n```\nC’est tout.'),
+      'Voici : Le code est affiché à l’écran. C’est tout.',
+    );
+  });
+
+  test('« ~ » devant un nombre : environ', () {
+    expect(oral('Comptez ~ 5 minutes.'), 'Comptez environ 5 minutes.');
+  });
 }

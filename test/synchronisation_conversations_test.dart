@@ -34,6 +34,9 @@ class _DepotFaux implements DepotConversations {
   String? utilisateur = 'compte-a';
 
   final titres = <String, String>{};
+
+  /// Conversations dont une réponse a lu de vrais e-mails (outil Gmail).
+  final mails = <String>{};
   final lignes = <String, List<MessageServeur>>{};
   EchecSynchro? panne;
   int listes = 0;
@@ -75,6 +78,7 @@ class _DepotFaux implements DepotConversations {
           titre: titres[id]!,
           derniereActivite: activite(id),
           apercu: lignes[id]!.lastOrNull?.contenu ?? '',
+          mail: mails.contains(id),
         ),
     ];
   }
@@ -296,6 +300,29 @@ void main() {
       await x.synchro.actualiser();
       expect(x.titres, ['Océans', 'Volcans']);
       expect(x.menu.liste(SourceConversation.jarvis).first.apercu, 'Ils…');
+      x.fermer();
+    });
+
+    test('classement Mail : seulement d’après l’origine réelle (outil '
+        'Gmail), jamais d’après le texte', () async {
+      depot.conversation(_a, 'Mes mails', [
+        ('user', 'Résume mes mails'),
+        ('assistant', 'Vous avez reçu deux e-mails…'),
+      ]);
+      depot.mails.add(_a);
+      depot.conversation(_b, 'Écrire un e-mail', [
+        ('user', 'Comment écrire un e-mail poli ?'),
+        ('assistant', 'Commencez par…'),
+      ]);
+      final x = _Appareil(depot, backend);
+      await x.synchro.actualiser();
+      expect(
+        x.fournisseur
+            .conversationsDe(SourceConversation.gmail)
+            .map((c) => c.titre),
+        ['Mes mails'],
+      );
+      expect(x.titres, ['Écrire un e-mail']);
       x.fermer();
     });
 

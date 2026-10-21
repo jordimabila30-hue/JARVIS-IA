@@ -66,6 +66,7 @@ Future<void> ouvrirParametres(
   ConsentementAnalyse? consentement,
   ServiceUtilisation? utilisation,
   ServiceGmail? gmail,
+  OutilJarvis? outil,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < largeurParametresCompacte;
   final route = RawDialogRoute<void>(
@@ -84,6 +85,7 @@ Future<void> ouvrirParametres(
       consentement: consentement,
       utilisation: utilisation,
       gmail: gmail,
+      outilInitial: outil,
     ),
     transitionBuilder: (context, animation, _, enfant) {
       final courbe = CurvedAnimation(
@@ -138,9 +140,13 @@ class FenetreParametres extends StatefulWidget {
     this.consentement,
     this.utilisation,
     this.gmail,
+    this.outilInitial,
   });
 
   final VoiceSession session;
+
+  /// Outil ouvert d'emblée (section Outils ; commande « ouvre l'agenda »).
+  final OutilJarvis? outilInitial;
 
   /// Utilisation de l'IA du compte (null : sans compte).
   final ServiceUtilisation? utilisation;
@@ -187,7 +193,7 @@ class _FenetreParametresState extends State<FenetreParametres> {
   late bool _dansSection = widget.ouvrirSection;
 
   /// Outils : outil ouvert (null : la liste des outils).
-  OutilJarvis? _outil;
+  late OutilJarvis? _outil = widget.outilInitial;
 
   /// Général : sous-page ouverte (JARVIS Touch…), null : Général.
   PageGenerale? _pageGenerale;
@@ -951,6 +957,9 @@ class _Contenu extends StatelessWidget {
                       ),
                       OutilJarvis.gmail => Expanded(
                         child: Center(child: PanneauGmail(service: gmail)),
+                      ),
+                      OutilJarvis.agenda => const Expanded(
+                        child: Center(child: PanneauAgenda()),
                       ),
                     },
                     SectionParametres.chatVocal => PanneauChatVocal(

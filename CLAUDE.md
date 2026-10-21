@@ -189,7 +189,7 @@ lib/
 │   ├── conversation/                 # bulle, carte JARVIS, signature « • JARVIS », conversation collée, ton, réponse proposée, heure, références, propositions par ton (aide à répondre)
 │   ├── ecriture/                     # TexteProgressif (texte qui s'écrit, curseur), « Tout afficher »
 │   ├── importation/                  # logo WhatsApp, accueil (bouton sous la carte), carte du fichier, « Filtrer » en bas, aperçu de discussion (bulles, jours, médias regroupés) ; filtrage/ : modes, capsules, calendrier, aperçu cochable, barre du bas
-│   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
+│   ├── integrations/                 # Paramètres › Outils (PanneauOutils, OutilJarvis : un outil = une valeur ; Agenda « Bientôt disponible », PanneauAgenda) › Gmail (PanneauGmail : statut, compte, « Gérer la connexion » : changer de compte / déconnecter)
 │   ├── parametres/                   # fenêtre Paramètres (Chat vocal : FR/EN/DE/ES, voix aux noms simples ; formes PIM en tuiles ; Confidentialité : accord d'analyse WhatsApp ; Utilisation : jauges de /me/quota ; Apparence : page unique, mode + carrousels styles / motifs + intensité, pages_apparence.dart ; Chat vocal en sections compactes, aperçu ▶ près de la voix ; grille PIM 2 × 2 centrée ; croix = ferme tout (pop), flèche = un niveau)
 │   ├── utilisation/                  # jauge (bleu, orange dès le seuil serveur, « Limite atteinte »), panneau Utilisation
 │   ├── apparence/                    # TransitionApparence (fondu + reconstruction unique), FriseKuba
@@ -207,7 +207,8 @@ lib/
 │   ├── peripheriques_audio*.dart     # liste des micros (Web uniquement)
 │   ├── prosodie.dart                 # rythme et accents des réponses (pour PIM)
 │   ├── voice_command_service.dart    # conversation locale (contexte) + futur relais IA
-│   ├── conversation/                 # LA conversation (écrit + vocal) : session, détecteurs, analyse, tons, moteurs local / IA / hybride
+│   ├── applications_externes.dart    # ouvrir WhatsApp / Instagram / Messenger / Mail (appli installée, sinon Web / mailto:)
+│   ├── conversation/                 # LA conversation (écrit + vocal) : session, détecteurs, analyse, tons, moteurs local / IA / hybride ; commandes_navigation (commandes locales strictes)
 │   ├── ecriture/                     # écriture progressive : TexteEnDirect (réception), EcritureProgressive (affichage)
 │   ├── api_jarvis.dart               # client FastAPI : /me, chat SSE (discuter) ; flux_sse.dart : décodage SSE
 │   ├── authentification/            # AuthService, contrat AuthRepository (non configuré), validations, session, ConfigAuth
@@ -355,6 +356,11 @@ source : une valeur de `SourceConversation`, son logo dans `assets/logos/`
 démonstration : `test/fixtures/` uniquement, jamais dans l'application.
 « Nouvelle conversation » met la conversation JARVIS de côté (en mémoire,
 avec son contexte) au lieu de l'effacer.
+Classement Gmail : seulement si une réponse porte la marque d'origine
+`{"type": "origine", "source": "gmail"}` (posée par `chat.py` quand un outil
+`gmail_*` a réellement lu des e-mails), lue par
+`DepotConversationsSupabase` → `ConversationServeur.mail` →
+`FournisseurSourceClassee(gmail)`. Jamais d'après le texte.
 Balayage d'une ligne (doigt) : court = bouton révélé (à toucher) ;
 complet (≥ `LigneConversation.seuilComplet` = 60 % de la ligne, au moins
 1,6 bouton) = action au relâchement, une seule fois. Panneau : bande de

@@ -393,7 +393,11 @@ void main() {
     expect(find.byType(FeuilleAjout), findsNothing);
     expect(find.text('Coller une conversation'), findsOneWidget);
     expect(find.text('Importer une conversation'), findsOneWidget);
-    expect(find.byType(LogoWhatsApp), findsOneWidget);
+    // Import (flèche) + « Ouvrir WhatsApp » (applications externes).
+    expect(find.byType(LogoWhatsApp), findsNWidgets(2));
+    expect(find.text('Ouvrir Instagram'), findsOneWidget);
+    expect(find.text('Ouvrir Messenger'), findsOneWidget);
+    expect(find.text('Ouvrir Mail'), findsOneWidget);
     expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
 
     // Le menu se ferme et la page d'import s'ouvre.
@@ -438,7 +442,14 @@ void main() {
     expect(find.text('Depuis un export WhatsApp'), findsNothing);
     // Logo, texte et flèche sur le même axe horizontal.
     final centre = tester.getCenter(find.text('Importer une conversation')).dy;
-    expect(tester.getCenter(find.byType(LogoWhatsApp)).dy, closeTo(centre, 1));
+    expect(
+      tester
+          .getCenter(
+            find.descendant(of: ligne, matching: find.byType(LogoWhatsApp)),
+          )
+          .dy,
+      closeTo(centre, 1),
+    );
     expect(
       tester.getCenter(find.byIcon(Icons.chevron_right_rounded)).dy,
       closeTo(centre, 1),
