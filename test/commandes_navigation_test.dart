@@ -23,6 +23,10 @@ void main() {
       'Ouvre mes mails': CommandeNavigation.ouvrirMail,
       'Retour au chat écrit': CommandeNavigation.retourChatEcrit,
       'Arrête de parler': CommandeNavigation.arreterParole,
+      'Réduis la fenêtre': CommandeNavigation.reduireTouch,
+      'JARVIS, réduis le vocal': CommandeNavigation.reduireTouch,
+      'Ferme le vocal': CommandeNavigation.fermerTouch,
+      'Quitte le vocal s’il te plaît': CommandeNavigation.fermerTouch,
     };
     attendu.forEach((phrase, commande) {
       expect(CommandesNavigation.detecter(phrase), commande, reason: phrase);
@@ -37,6 +41,7 @@ void main() {
       'Pourquoi mon agenda est vide ?',
       'Elle m’a dit que j’étais drôle, je réponds quoi ?',
       'Ouvre les paramètres de mon téléphone et active le Bluetooth',
+      'Comment réduire la fenêtre de mon navigateur ?',
       '',
     ]) {
       expect(CommandesNavigation.detecter(phrase), isNull, reason: phrase);

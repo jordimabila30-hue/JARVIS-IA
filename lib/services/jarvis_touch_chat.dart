@@ -40,6 +40,7 @@ class PasserelleMiniChat {
 
   /// Vocal flottant (même session vocale que l'accueil), null : absent.
   PasserelleVocalTouch? _vocal;
+  PasserelleVocalTouch? get vocal => _vocal;
 
   final ConversationSession _session;
   final MethodChannel _canal;

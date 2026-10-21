@@ -18,7 +18,11 @@ enum CommandeNavigation {
   ouvrirMessenger('J’ouvre Messenger.'),
   ouvrirMail('J’ouvre votre messagerie.'),
   retourChatEcrit('Retour au chat écrit.'),
-  arreterParole('D’accord, je me tais.');
+  arreterParole('D’accord, je me tais.'),
+
+  /// Seulement dans la fenêtre vocale de JARVIS Touch.
+  reduireTouch('D’accord, je me fais discret.'),
+  fermerTouch('À bientôt.');
 
   const CommandeNavigation(this.confirmation);
 
@@ -167,6 +171,27 @@ class CommandesNavigation {
       'stop lecture',
     ]) {
       m[p] = CommandeNavigation.arreterParole;
+    }
+    for (final p in [
+      'reduis la fenetre',
+      'reduis la fenetre vocale',
+      'reduis le vocal',
+      'reduis jarvis touch',
+      'reduire la fenetre',
+      'reduire le vocal',
+      'mets toi en bulle',
+    ]) {
+      m[p] = CommandeNavigation.reduireTouch;
+    }
+    for (final p in [
+      'ferme la fenetre vocale',
+      'ferme le vocal',
+      'ferme jarvis touch',
+      'quitte le vocal',
+      'quitter le vocal',
+      'fermer le vocal',
+    ]) {
+      m[p] = CommandeNavigation.fermerTouch;
     }
     return m;
   }

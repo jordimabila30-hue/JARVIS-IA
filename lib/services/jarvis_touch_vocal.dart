@@ -120,6 +120,14 @@ class PasserelleVocalTouch {
 
   void detacher() => _detacher();
 
+  /// Fenêtre vocale de JARVIS Touch affichée (ni fermée ni réduite).
+  bool get affichee => _ouverte && !_reduite;
+
+  /// Commande vocale pour la fenêtre (`reduire` ou `fermer`) : exécutée
+  /// par le natif avec ses propres règles (réduire = micro suspendu après
+  /// la réponse ; fermer = fin réelle, micro et voix libérés).
+  void commander(String action) => _envoyer('vocalCommande', action);
+
   Map<String, Object?> _etat() => {
     'etat': switch (_session.etat) {
       VoiceState.listening => 'ecoute',

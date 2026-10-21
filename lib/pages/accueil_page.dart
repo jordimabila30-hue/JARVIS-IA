@@ -759,7 +759,9 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     }
     // Commande de navigation (« ouvre les paramètres ») : exécutée ici,
     // sans IA ni message dans la conversation.
-    if (CommandesNavigation.detecter(message) case final commande?) {
+    if (CommandesNavigation.detecter(message) case final commande?
+        when commande != CommandeNavigation.reduireTouch &&
+            commande != CommandeNavigation.fermerTouch) {
       _controleur.clear();
       _executerCommande(commande);
       return;
@@ -862,7 +864,26 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     String phrase, {
     void Function(String fragment)? surFragment,
   }) async {
-    final commande = _modeVocal ? CommandesNavigation.detecter(phrase) : null;
+    // Fenêtre vocale de JARVIS Touch : seules ses deux commandes
+    // (réduire, fermer) ; tout le reste va à la conversation.
+    final touch = _miniChat?.vocal;
+    if (touch != null && touch.affichee) {
+      final c = CommandesNavigation.detecter(phrase);
+      if (c == CommandeNavigation.reduireTouch) {
+        touch.commander('reduire');
+        return ReponseVocale(c!.confirmation, source: SourceReponse.locale);
+      }
+      if (c == CommandeNavigation.fermerTouch) {
+        touch.commander('fermer');
+        return null;
+      }
+      return _conversation.repondreVocal(phrase, surFragment: surFragment);
+    }
+    var commande = _modeVocal ? CommandesNavigation.detecter(phrase) : null;
+    if (commande == CommandeNavigation.reduireTouch ||
+        commande == CommandeNavigation.fermerTouch) {
+      commande = null;
+    }
     if (commande == null || commande == CommandeNavigation.arreterParole) {
       return _conversation.repondreVocal(phrase, surFragment: surFragment);
     }
@@ -903,6 +924,9 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
         if (_modeVocal) await _retourAuChat();
       case CommandeNavigation.arreterParole:
         await _session.arreterLecture();
+      case CommandeNavigation.reduireTouch || CommandeNavigation.fermerTouch:
+        // Hors de la fenêtre vocale de JARVIS Touch : rien à faire.
+        break;
       case CommandeNavigation.ouvrirWhatsApp ||
           CommandeNavigation.ouvrirInstagram ||
           CommandeNavigation.ouvrirMessenger ||

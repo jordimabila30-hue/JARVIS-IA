@@ -518,6 +518,11 @@ class FenetresJarvisTouch(private val service: Context) {
             when (methode) {
                 "vocal" -> (args as? Map<*, *>)?.let { v.appliquer(it) }
                 "niveau" -> (args as? Number)?.let { v.niveau(it.toDouble()) }
+                // Commande dite à JARVIS : mêmes règles que les boutons.
+                "vocalCommande" -> when (args as? String) {
+                    "reduire" -> if (vocal === v) reduireVocal()
+                    "fermer" -> if (vocal === v) quitterVocal()
+                }
             }
         }
         if (!microOk) {

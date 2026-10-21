@@ -2134,3 +2134,25 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
   Android, ni APK, ni profilage, ni test réel S10+.
 - Pas d'identifiants backend / compte de test : inscription réelle et
   appel IA réel non faits ; backend non redéployé.
+
+## 2026-10-21 — Branche d'intégration publiée, commandes Touch, passation S10+
+
+### Fait
+- `integration/correction-approfondie` poussée sur GitHub (aucune fusion).
+- Commandes vocales de la fenêtre JARVIS Touch : « réduis la fenêtre / le
+  vocal », « ferme / quitte le vocal » → `PasserelleVocalTouch.commander`
+  → `vocalCommande` → natif (`reduireVocal` / `quitterVocal`, mêmes règles
+  que les boutons). Ignorées à l'écrit et hors fenêtre Touch.
+- `docs/PASSATION_S10.md` : étapes exécutables sur le PC Windows (worktree,
+  build Gradle profile, installation sans effacer les données, mesures
+  gfxinfo / meminfo / DevTools, parcours des 16 corrections).
+
+### Tests
+- `flutter analyze` : 0 problème ; Flutter : 943 réussis ; pytest : 614
+  réussis, 1 ignoré ; kotlinc (API 31) : aucune erreur dans les fichiers
+  modifiés.
+
+### Toujours bloqué ici
+- Pas de téléphone ni d'ADB dans le conteneur cloud : build Gradle,
+  profilage, tests S10+, inscription réelle à faire depuis le PC Windows.
+- Redéploiement du backend (points 15 et 16) : accord requis.

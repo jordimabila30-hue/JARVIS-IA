@@ -258,4 +258,29 @@ void main() {
     expect(reco.ecoutes, greaterThan(ecoutes));
     passerelle.detacher();
   });
+
+  test('JARVIS Touch : commande vocale envoyée au natif, fenêtre affichée '
+      'seulement ouverte et non réduite', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const canal = MethodChannel('test/touch_commande');
+    final recus = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(canal, (appel) async {
+          recus.add(appel);
+          return null;
+        });
+    final passerelle = PasserelleVocalTouch(session, canal);
+    expect(passerelle.affichee, isFalse);
+    await passerelle.surAppel(const MethodCall('vocalOuvrir'));
+    expect(passerelle.affichee, isTrue);
+    passerelle.commander('reduire');
+    await _attendre();
+    expect(
+      recus.where((a) => a.method == 'vocalCommande').single.arguments,
+      'reduire',
+    );
+    await passerelle.surAppel(const MethodCall('vocalReduire'));
+    expect(passerelle.affichee, isFalse);
+    passerelle.detacher();
+  });
 }
