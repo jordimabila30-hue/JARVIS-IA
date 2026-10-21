@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../../models/apparence/fond_photo.dart';
 import '../../models/apparence/preferences_apparence.dart';
 import '../../theme/motifs_jarvis.dart';
 import '../../theme/palette_jarvis.dart';
@@ -29,6 +30,11 @@ class ServiceApparence extends ChangeNotifier {
   StyleVisuel get style => _prefs.style;
   MotifJarvis get motif => _prefs.motif;
   double get intensite => _prefs.intensite;
+  FondPhoto? get photo => _prefs.photo;
+  bool get photoActive => _prefs.photoActive && _prefs.photo != null;
+
+  /// Fond général : photo active, sinon le motif et son intensité.
+  FondChoisi get fondGeneral => _prefs.fondGeneral;
 
   /// Luminosité demandée par le système (mode « Système »).
   Brightness get luminositeSysteme => _systeme;
@@ -75,8 +81,20 @@ class ServiceApparence extends ChangeNotifier {
   Future<void> choisirStyle(StyleVisuel s) =>
       _choisir(_prefs.copyWith(style: s));
 
+  /// Motif classique : il devient le fond général (la photo de « Ma
+  /// galerie » est gardée, inactive).
   Future<void> choisirMotif(MotifJarvis m) =>
-      _choisir(_prefs.copyWith(motif: m));
+      _choisir(_prefs.copyWith(motif: m, photoActive: false));
+
+  /// Photo de « Ma galerie » (nouvelle ou réglée) : fond général actif.
+  Future<void> choisirPhoto(FondPhoto p) =>
+      _choisir(_prefs.copyWith(photo: p, photoActive: true));
+
+  /// Réactive la photo déjà choisie (sans rien faire s'il n'y en a pas).
+  Future<void> activerPhoto() async {
+    if (_prefs.photo == null) return;
+    await _choisir(_prefs.copyWith(photoActive: true));
+  }
 
   /// Intensité du motif : affichée à chaque mouvement du curseur
   /// ([enregistrer] faux), écrite au relâchement.

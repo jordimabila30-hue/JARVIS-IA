@@ -7,6 +7,7 @@ import '../models/conversations/apercu_conversation.dart';
 import '../models/conversations/source_conversation.dart';
 import '../models/importation/piece_jointe_whatsapp.dart';
 import '../services/api_jarvis.dart';
+import '../services/apprentissage/espace_apprentissage.dart';
 import '../services/applications_externes.dart';
 import '../services/authentification/auth_service.dart';
 import '../services/conversation/commandes_navigation.dart';
@@ -36,9 +37,12 @@ import '../services/voice_session.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/local_date_time.dart';
+import '../utils/chrono_perf.dart';
 import '../widgets/bouton_vocal.dart';
 import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
+import '../models/apparence/fond_photo.dart';
+import '../services/apparence/service_fonds.dart';
 import '../widgets/fond_jarvis_anime.dart';
 import '../widgets/integrations/panneau_outils.dart';
 import '../widgets/ligne_de_commande.dart';
@@ -46,6 +50,7 @@ import '../widgets/menu_lateral.dart';
 import '../widgets/parametres/fenetre_parametres.dart';
 import '../widgets/pim_particle.dart';
 import '../widgets/voice_status.dart';
+import 'apprentissage/apprendre_page.dart';
 import 'conversation_page.dart';
 import '../services/importation/actualisation_whatsapp.dart';
 import '../widgets/importation/volet_actualisation.dart';
@@ -81,6 +86,7 @@ class AccueilPage extends StatefulWidget {
     this.consentement,
     this.utilisation,
     this.gmail,
+    this.apprentissage,
   });
 
   /// Injectables pour les tests (services vocaux factices, diagnostic des
@@ -130,6 +136,10 @@ class AccueilPage extends StatefulWidget {
 
   /// Connexion Gmail du compte (Paramètres › Outils › Gmail) ; null sans compte.
   final ServiceGmail? gmail;
+
+  /// Module Apprendre (tests) ; créé sinon à sa première ouverture
+  /// seulement, jamais au démarrage.
+  final EspaceApprentissage? apprentissage;
 
   /// Après un échec d'enregistrement d'une pièce jointe.
   static const pieceJointeGardee =
@@ -306,9 +316,34 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
   late final _partages = widget.partages ?? PontAndroidImportation.reception;
   StreamController<PartageRecu>? _partagesImport;
 
+  /// Fond propre à la conversation affichée (null : fond général). Changé
+  /// seulement quand ce fond change, jamais à chaque message.
+  final _fondConversation = ValueNotifier<FondChoisi?>(null);
+  ServiceFonds? _fonds;
+
+  void _majFond() {
+    final fond = _fonds?.fondDe([
+      _conversation.idServeurCourant,
+      _conversation.idCourant,
+    ]);
+    if (fond != _fondConversation.value) _fondConversation.value = fond;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final fonds = ServiceFonds.of(context, ecouter: false);
+    if (fonds != _fonds) {
+      _fonds?.removeListener(_majFond);
+      _fonds = fonds?..addListener(_majFond);
+      _majFond();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _conversation.addListener(_majFond);
     // Partage arrivé avant l'accueil (lancement à froid, connexion) ou
     // pendant qu'il est affiché.
     _partages.annonces.addListener(_surPartage);
@@ -393,6 +428,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _pimPendantApprendre.dispose();
+    _conversation.removeListener(_majFond);
+    _fonds?.removeListener(_majFond);
+    _fondConversation.dispose();
     _miniChat?.detacher();
     WidgetsBinding.instance.removeObserver(this);
     _conversation.surEchangeEnregistre = null;
@@ -413,6 +452,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _echangesLocaux?.dispose();
     _formesPim.removeListener(_surFormePim);
     if (widget.formesPim == null) _formesPim.dispose();
+    if (widget.apprentissage == null) _apprentissage?.dispose();
     super.dispose();
   }
 
@@ -524,6 +564,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
             _fermerMenu();
             _ouvrirParametres();
           },
+          surApprendre: ModuleApprentissage.actif ? _ouvrirApprendre : null,
           multicanal: _multicanal,
           surOuvrirConversation: _ouvrirConversation,
           surSupprimerConversation: _supprimerConversation,
@@ -568,6 +609,31 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       }
       _session.terminerChatVocal();
       _controleur.clear();
+    }
+  }
+
+  /// Module Apprendre : créé à la première ouverture puis gardé (corpus en
+  /// cache, progression lue). L'accueil passe hors scène pendant ce temps :
+  /// PIM s'arrête de lui-même et repart au retour.
+  EspaceApprentissage? _apprentissage;
+  final _pimPendantApprendre = ValueNotifier<bool>(true);
+
+  Future<void> _ouvrirApprendre() async {
+    if (!_pimPendantApprendre.value) return;
+    _fermerMenu();
+    _focus.unfocus();
+    _pim.annulerApercu();
+    final espace = _apprentissage ??=
+        widget.apprentissage ??
+        EspaceApprentissage(lecteur: LecteurEcouteSession(_session));
+    // Geler les tickers avant la première image de transition, sans
+    // capture GPU ni modification du moteur. Comparaison profile possible
+    // avec ext.jarvis.variante (sans=apprendre.pause).
+    _pimPendantApprendre.value = false;
+    try {
+      await ouvrirApprendre(context, espace);
+    } finally {
+      if (mounted) _pimPendantApprendre.value = true;
     }
   }
 
@@ -831,6 +897,8 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
           ouvrirSection: true,
           outil: OutilJarvis.agenda,
         );
+      case CommandeNavigation.ouvrirApprendre:
+        if (ModuleApprentissage.actif) await _ouvrirApprendre();
       case CommandeNavigation.retourChatEcrit:
         if (_modeVocal) await _retourAuChat();
       case CommandeNavigation.arreterParole:
@@ -905,8 +973,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
           ScrollConfiguration(
             behavior: const DefilementSansBarre(),
             child: FondJarvisAnime(
-              // Fond fixe, centré sur la zone des particules.
+              // Fond fixe, centré sur la zone des particules ; celui de la
+              // conversation affichée s'il en a un.
               zoneParticules: _pim.zone,
+              fondConversation: _fondConversation,
               child: SafeArea(
                 child: Stack(
                   children: [
@@ -915,10 +985,17 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
                       // conversation, elles restent visibles à travers le fond
                       // légèrement translucide des cartes, jamais devant le
                       // texte.
-                      child: PimParticle(
-                        controleur: _pim,
-                        cleCentre: _cleCentre,
-                        cleChamp: _cleChamp,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _pimPendantApprendre,
+                        builder: (context, actif, child) => TickerMode(
+                          enabled: actif || ChronoPerf.sans('apprendre.pause'),
+                          child: child!,
+                        ),
+                        child: PimParticle(
+                          controleur: _pim,
+                          cleCentre: _cleCentre,
+                          cleChamp: _cleChamp,
+                        ),
                       ),
                     ),
                     Padding(
@@ -1131,7 +1208,36 @@ class _Accueil extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final clarte = ServiceFonds.of(context, ecouter: false)?.clarteFondPhoto;
+    if (clarte == null) return _textes(context, null);
+    return ValueListenableBuilder<double?>(
+      valueListenable: clarte,
+      builder: (context, c, _) => _textes(context, c),
+    );
+  }
+
+  /// Fond photo trop sombre pour l'encre du thème (ou trop clair pour un
+  /// thème sombre) : texte inversé, avec une ombre douce, toujours lisible.
+  Widget _textes(BuildContext context, double? clarteFond) {
     final g = gabarit;
+    final p = PaletteJarvis.of(context);
+    final inverse =
+        clarteFond != null &&
+        (p.sombre ? clarteFond > 0.55 : clarteFond < 0.42);
+    final clair = inverse ? !p.sombre : p.sombre;
+    final titre = inverse
+        ? (clair ? const Color(0xFFFAF8F2) : const Color(0xFF1E1F26))
+        : null;
+    final ombres = clarteFond == null
+        ? null
+        : [
+            Shadow(
+              color: (clair ? Colors.black : Colors.white).withValues(
+                alpha: 0.45,
+              ),
+              blurRadius: 10,
+            ),
+          ];
     return Padding(
       padding: EdgeInsets.only(top: g.ecartSphereTexte),
       child: Column(
@@ -1143,6 +1249,8 @@ class _Accueil extends StatelessWidget {
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
               fontSize: g.tailleSalutation,
               letterSpacing: -0.3,
+              color: titre,
+              shadows: ombres,
             ),
           ),
           SizedBox(height: g.compact ? 8 : 10),
@@ -1155,7 +1263,9 @@ class _Accueil extends StatelessWidget {
                 fontSize: g.tailleMission,
                 height: 1.5,
                 letterSpacing: 0.1,
-                color: CouleursJarvis.texteSecondaire,
+                color: titre?.withValues(alpha: 0.88) ??
+                    CouleursJarvis.texteSecondaire,
+                shadows: ombres,
               ),
             ),
           ),

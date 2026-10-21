@@ -376,7 +376,13 @@ void main() {
             .first,
       );
       final calque = (pile.children.first as Positioned).child;
-      expect(calque, isA<PimParticle>());
+      expect(
+        find.descendant(
+          of: find.byWidget(calque),
+          matching: find.byType(PimParticle),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.descendant(
           of: find.byType(PimParticle),

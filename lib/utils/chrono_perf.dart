@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+
 /// Chronomètre de performance du moteur graphique (particules, fond).
 ///
 /// Désactivé par défaut : [actif] est une constante, donc les appels sont
@@ -65,6 +68,7 @@ class ChronoPerf {
   /// les remet à zéro. Sans effet hors mesure.
   static void enregistrerExtension() {
     if (!actif) return;
+    suivreImages();
     developer.registerExtension('ext.jarvis.chrono', (_, _) async {
       final r = jsonEncode(rapport());
       reinitialiser();
@@ -82,6 +86,47 @@ class ChronoPerf {
         }),
       );
     });
+  }
+
+  static bool _imagesSuivies = false;
+
+  /// Temps de chaque image (fil d'interface, fil de rendu) en sections
+  /// `image.ui` / `image.raster` ; `image.hors_budget` : images dont l'un
+  /// des deux fils dépasse 16,7 ms (image réellement manquée à 60 Hz) ;
+  /// `image.lente` : latence totale > 16,7 ms (inclut l'attente entre les
+  /// fils, donc plus large). Sans effet hors mesure.
+  static void suivreImages() {
+    if (!actif || _imagesSuivies) return;
+    _imagesSuivies = true;
+    SchedulerBinding.instance.addTimingsCallback((liste) {
+      for (final t in liste) {
+        _ajouter('image.ui', t.buildDuration.inMicroseconds);
+        _ajouter('image.raster', t.rasterDuration.inMicroseconds);
+        final pire = t.buildDuration > t.rasterDuration
+            ? t.buildDuration
+            : t.rasterDuration;
+        if (pire.inMicroseconds > 16667) {
+          _ajouter('image.hors_budget', pire.inMicroseconds);
+        }
+        if (t.totalSpan.inMicroseconds > 16700) {
+          _ajouter('image.lente', t.totalSpan.inMicroseconds);
+        }
+      }
+    });
+  }
+
+  static void _ajouter(String nom, int duree) {
+    _total[nom] = (_total[nom] ?? 0) + duree;
+    _nombre[nom] = (_nombre[nom] ?? 0) + 1;
+    if (duree > (_max[nom] ?? 0)) _max[nom] = duree;
+  }
+
+  /// Écrit les sections dans le journal (`[PERF] titre {…}`), puis les
+  /// remet à zéro. Sans effet hors mesure.
+  static void journal(String titre) {
+    if (!actif) return;
+    debugPrint('[PERF] $titre ${jsonEncode(rapport())}');
+    reinitialiser();
   }
 
   static void reinitialiser() {

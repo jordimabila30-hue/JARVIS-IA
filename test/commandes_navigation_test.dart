@@ -13,6 +13,8 @@ void main() {
           CommandeNavigation.ouvrirParametres,
       'Affiche les outils': CommandeNavigation.ouvrirOutils,
       'Ouvre l’agenda': CommandeNavigation.ouvrirAgenda,
+      'Ouvre Apprendre': CommandeNavigation.ouvrirApprendre,
+      'Lance le module Apprendre': CommandeNavigation.ouvrirApprendre,
       'Montre-moi mes conversations': CommandeNavigation.afficherConversations,
       'Nouvelle conversation': CommandeNavigation.nouvelleConversation,
       'Tu peux ouvrir Instagram ?': CommandeNavigation.ouvrirInstagram,

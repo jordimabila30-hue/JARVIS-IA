@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "parcours": [
+    { "id": "correspondance", "titre": "Correspondance", "icone": "courrier", "fichier": "assets/apprentissage/parcours/correspondance.json" },
+    { "id": "communication", "titre": "Communication", "icone": "dialogue", "fichier": "assets/apprentissage/parcours/communication.json" },
+    { "id": "relations", "titre": "Relations et respect", "icone": "relations", "fichier": "assets/apprentissage/parcours/relations.json" },
+    { "id": "technique", "titre": "Termes techniques", "icone": "technique", "fichier": "assets/apprentissage/parcours/technique.json" }
+  ]
+}

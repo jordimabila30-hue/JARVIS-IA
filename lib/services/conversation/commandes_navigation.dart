@@ -12,6 +12,7 @@ enum CommandeNavigation {
   ouvrirParametres('J’ouvre les paramètres.'),
   ouvrirOutils('J’ouvre les outils.'),
   ouvrirAgenda('J’ouvre l’Agenda.'),
+  ouvrirApprendre('J’ouvre Apprendre.'),
   ouvrirWhatsApp('J’ouvre WhatsApp.'),
   ouvrirInstagram('J’ouvre Instagram.'),
   ouvrirMessenger('J’ouvre Messenger.'),
@@ -109,6 +110,12 @@ class CommandesNavigation {
     ouvrir(['parametres', 'reglages'], CommandeNavigation.ouvrirParametres);
     ouvrir(['outils'], CommandeNavigation.ouvrirOutils);
     ouvrir(['agenda', 'calendrier'], CommandeNavigation.ouvrirAgenda);
+    ouvrir([
+      'apprendre',
+      'apprentissage',
+      'kelasi',
+      'module apprendre',
+    ], CommandeNavigation.ouvrirApprendre);
     ouvrir([
       'conversations',
       'historique',
