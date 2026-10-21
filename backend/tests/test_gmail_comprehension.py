@@ -128,10 +128,18 @@ def test_reperes_jamais_tires_du_texte_cite():
 
 
 def test_consigne_de_comprehension():
-    for attendu in ("Reçu ≠ accepté", "« sous réserve »", "ne pas donner suite", "simple possibilité",
-                    "MÊME chose", "n'est pas une nouvelle information", "jamais lue",
-                    "pas seulement le libellé « important »", "relis l'e-mail par son id",
-                    "langue de l'utilisateur", "va à l'essentiel"):
+    for attendu in ("Reçu ≠ accepté", "« sous réserve » ≠ validé", "ne pas donner suite", "simple possibilité",
+                    "MÊME chose", "pas une nouvelle information", "Pièces jointes jamais lues",
+                    "pas le seul libellé Gmail", "relis-le par son id", "langue de l'utilisateur",
+                    "pas de préambule"):
+        assert attendu in CONSIGNE_GMAIL, attendu
+
+
+def test_consigne_sans_rubriques_et_longueur_adaptee():
+    # Phase 3 : la distinction fait / déduction reste interne, jamais en rubriques.
+    assert "Jamais de rubriques ou d'étiquettes" in CONSIGNE_GMAIL
+    assert "sépare" not in CONSIGNE_GMAIL                      # plus d'invitation à « séparer » en sections
+    for attendu in ("question précise", "« résume »", "point sur plusieurs e-mails", "« explique »"):
         assert attendu in CONSIGNE_GMAIL, attendu
 
 
@@ -171,3 +179,46 @@ async def test_memoire_des_mails_lus_isolee(env):
     await odo.memoriser(execution, OWN_CONV)
     assert "id=m1aaaa" in await odo.rappel(ctx(conversation=OWN_CONV))
     assert await odo.rappel(ctx(AUTRE, conversation=OWN_CONV)) is None
+
+
+# --- Phase 3 : lire dans la recherche, alléger, fils sans citations répétées -------------------
+
+async def test_recherche_avec_lecture_un_seul_appel(env):
+    from app.odo.outils_gmail import GmailRechercher
+    await connecter(env)
+    env.faux.filtrer = True
+    s = next(x for x in SCENARIOS if x.nom == "07_situation_globale")
+    charger(env, s)
+    env.faux.filtrer = True
+    r = await GmailRechercher(ClientGmail(env.google)).executer({"expediteurs": ["Senghor"], "lire": True}, ctx())
+    assert "Texte des 3 e-mail(s) les plus pertinents" in r.contenu
+    assert "Il manque encore votre attestation de bourse" in r.contenu          # le texte, pas seulement l'extrait
+    assert [x["id"] for x in r.donnees["lus"]] == ["m07aaaa", "m07bbbb", "m07cccc"]   # chronologique
+    assert r.donnees["requetes_gmail"] == 1 + 3 + 3                              # liste + en-têtes + textes
+
+
+def test_signature_et_mentions_automatiques_retirees():
+    from app.odo.gmail_lecture import alleger
+    texte = ("Merci de transmettre l'attestation avant le 23 octobre.\nCordialement\n--\nService Scolarité\n"
+             "Tél. 01 23 45 67 89\nCe message est confidentiel.")
+    assert alleger(texte) == "Merci de transmettre l'attestation avant le 23 octobre.\nCordialement"
+    assert alleger("Promo !\nSe désabonner : [lien]\nÀ bientôt") == "Promo !\nÀ bientôt"
+    assert alleger("Oui.\n\nEnvoyé de mon iPhone") == "Oui."
+
+
+async def test_fil_citation_non_repetee(env):
+    await connecter(env)
+    from scenarios_resumes import BOITE
+    env.faux.messages = {i: message(i, de=BOITE[i]["de"], objet=BOITE[i]["objet"], date=BOITE[i]["date"],
+                                    texte=BOITE[i]["texte"], fil=BOITE[i]["fil"]) for i in ("b03aaaa", "b04aaaa")}
+    r = await GmailLireFil(ClientGmail(env.google)).executer({"fil": "filreun1"}, ctx())
+    assert r.contenu.count("La réunion de projet aura lieu mardi 20 octobre") == 1     # une seule fois
+    assert "déjà donné plus haut" in r.contenu and "27 octobre" in r.contenu
+
+
+async def test_lot_de_dix_mails_budget_reparti(env):
+    await connecter(env)
+    env.faux.messages = {f"m{i:02d}aaaa": message(f"m{i:02d}aaaa", texte="Texte " * 500, fil=f"f{i:02d}xxxx")
+                         for i in range(10)}
+    r = await GmailPreparerResume(ClientGmail(env.google)).executer({"ids": list(env.faux.messages)}, ctx())
+    assert r.contenu.count("Message ") == 10 and len(r.contenu) < 6000 * 1.6
