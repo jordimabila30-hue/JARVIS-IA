@@ -70,6 +70,11 @@ import 'importation_whatsapp_page.dart';
 /// les particules (autour de la barre) restent ceux de l'accueil.
 /// « Nouvelle conversation » ramène à l'accueil.
 class AccueilPage extends StatefulWidget {
+  /// Délai avant les chargements secondaires (synchronisation des
+  /// conversations, file locale, épingles, JARVIS Touch) : juste après le
+  /// fondu vers l'accueil (320 ms), pour qu'il reste fluide.
+  static const delaiChargementsSecondaires = Duration(milliseconds: 360);
+
   const AccueilPage({
     super.key,
     this.session,
@@ -373,17 +378,10 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     // Réglages vocaux enregistrés (voix, vitesse, micro…), appliqués à
     // chaque prise de parole.
     _session.reglages.charger();
-    // JARVIS Touch (Android) : bulle rallumée si elle était activée ; son
-    // mini-chat affiche et alimente CETTE conversation.
-    JarvisTouchService.instance.restaurer();
     if (JarvisTouchService.instance.disponible) {
       _miniChat = PasserelleMiniChat(_conversation, vocal: _session)
         ..attacher();
     }
-    final consentement = _consentement;
-    if (consentement != null && !consentement.charge) consentement.charger();
-    // Conversations épinglées (menu latéral).
-    _multicanal.epingles.charger();
     // Conversations enregistrées : à la connexion, puis à l'ouverture du
     // menu, au retour au premier plan et après chaque échange avec l'IA.
     WidgetsBinding.instance.addObserver(this);
@@ -393,11 +391,30 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       _synchronisation?.actualiser();
     };
     final echanges = _echangesLocaux;
-    if (echanges != null) {
-      _conversation.surEchangeLocal = echanges.ajouter;
-      // File restée sur l'appareil (hors connexion, application fermée).
-      echanges.charger().then((_) => echanges.envoyer());
-    }
+    if (echanges != null) _conversation.surEchangeLocal = echanges.ajouter;
+    // Chargements secondaires (réseau, disque, JARVIS Touch) : après la
+    // transition vers l'accueil, jamais pendant (aucune réponse réseau ni
+    // décodage JSON au milieu du fondu). L'accueil est utilisable aussitôt.
+    _chargementsSecondaires = Timer(
+      AccueilPage.delaiChargementsSecondaires,
+      _chargerSecondaires,
+    );
+  }
+
+  Timer? _chargementsSecondaires;
+
+  void _chargerSecondaires() {
+    if (!mounted) return;
+    // JARVIS Touch (Android) : bulle rallumée si elle était activée ; son
+    // mini-chat affiche et alimente CETTE conversation.
+    JarvisTouchService.instance.restaurer();
+    final consentement = _consentement;
+    if (consentement != null && !consentement.charge) consentement.charger();
+    // Conversations épinglées (menu latéral).
+    _multicanal.epingles.charger();
+    // File restée sur l'appareil (hors connexion, application fermée).
+    final echanges = _echangesLocaux;
+    if (echanges != null) echanges.charger().then((_) => echanges.envoyer());
     _synchronisation?.actualiser(force: true);
   }
 
@@ -428,6 +445,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _chargementsSecondaires?.cancel();
     _pimPendantApprendre.dispose();
     _conversation.removeListener(_majFond);
     _fonds?.removeListener(_majFond);

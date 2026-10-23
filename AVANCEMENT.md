@@ -2156,3 +2156,26 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Pas de téléphone ni d'ADB dans le conteneur cloud : build Gradle,
   profilage, tests S10+, inscription réelle à faire depuis le PC Windows.
 - Redéploiement du backend (points 15 et 16) : accord requis.
+
+## 2026-10-23 — Corrections restantes (1, 2, 12) côté code
+
+### Fait
+- **Fil long (C1)** : `ConversationPage` retrouvait chaque message par
+  `indexWhere` à chaque mise à jour (coût quadratique sur une longue
+  conversation) → index id → position calculé une fois par construction.
+- **Accueil (C2)** : synchronisation des conversations, file locale,
+  épingles, consentement et restauration de JARVIS Touch lancés 360 ms
+  après l'ouverture (`AccueilPage.delaiChargementsSecondaires`), plus
+  pendant le fondu de 320 ms ; l'accueil est utilisable aussitôt.
+- **Voix (C12)** : « 2 * 3 » dit « 2 fois 3 » (était « 2 3 »), puissances
+  (« au carré », « au cube »), « ⭐ » retiré, « (≈ » → « (environ »,
+  « vs » → « contre », « RDV » → « rendez-vous », « p. 12 » → « page 12 ».
+
+### Tests
+- `flutter analyze` : 0 problème ; Flutter : 944 réussis.
+
+### Reste
+- Gains de fluidité non mesurés : à vérifier sur le S10+ en profile
+  (`docs/PASSATION_S10.md`). Pistes non touchées sans mesure : ShaderMask
+  du fil (fondus haut/bas, saveLayer au défilement), respiration continue
+  de la pastille du bouton vocal au repos.

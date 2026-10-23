@@ -388,6 +388,13 @@ class _ConversationPageState extends State<ConversationPage> {
     // seuls les derniers messages sont chargés).
     final precedents = session.plusAnciens && !session.chargement;
     final total = messages.length + decalage + (precedents ? 1 : 0);
+    // Position de chaque message, calculée UNE fois par construction :
+    // retrouver un enfant ne parcourt plus tout l'historique (long fil :
+    // coût linéaire au lieu de quadratique à chaque mise à jour).
+    Map<int, int>? positions;
+    int? position(int id) => (positions ??= {
+      for (var i = 0; i < messages.length; i++) messages[i].id: i,
+    })[id];
 
     return ShaderMask(
       key: ConversationPage.cleFil,
@@ -434,8 +441,8 @@ class _ConversationPageState extends State<ConversationPage> {
                 return precedents ? total - 1 : null;
               }
               if (cle is! ValueKey<int>) return null;
-              final i = messages.indexWhere((m) => m.id == cle.value);
-              return i < 0 ? null : messages.length - 1 - i + decalage;
+              final i = position(cle.value);
+              return i == null ? null : messages.length - 1 - i + decalage;
             },
             itemBuilder: (context, i) {
               // Liste inversée : l'élément 0 est le plus récent.
