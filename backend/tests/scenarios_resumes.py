@@ -134,3 +134,12 @@ DEMANDES: list[Demande] = [
     Demande("r13_suivi", "Maintenant, explique-moi davantage celui sur la bourse.",
             doit=[r"commission|sous réserve|30 octobre"], suite_de="r12_dix_mails"),
 ]
+
+# GMAIL 1 : demandes simples (chemin direct attendu) — critères fixés avant les mesures.
+DEMANDES += [
+    Demande("d01_trois_derniers", "Résume mes trois derniers mails.",
+            doit=[r"180|rectifi|promo|banque|code"], interdit=[r"482|913|zz9"], mots_max=120),
+    Demande("d02_mail_expediteur", "Résume le mail de Mme Ndiaye.",
+            doit=[r"27 octobre|mardi 27"], interdit=[r"(?:aura lieu|est prévue?|a lieu)[^.]{0,20}20 octobre"], mots_max=70),
+    Demande("d03_non_lus", "Lis mes mails non lus.", doit=[r"\w"], interdit=[r"482|913|zz9"], mots_max=160),
+]

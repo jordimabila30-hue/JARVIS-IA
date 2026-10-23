@@ -118,8 +118,69 @@ class ExecutionODO:
 
     # --- Boucle -----------------------------------------------------------------
 
+    def _plan_direct(self, prompt: Sequence[Message]) -> tuple[Outil, dict[str, Any]] | None:
+        """Outil exécutable par ODO sans demander au modèle (demande simple)."""
+        if not prompt or prompt[-1]["role"] != "user" or prompt[-1].get("images"):
+            return None
+        # La question seule (sans le rappel de la dernière recherche joint devant).
+        question = prompt[-1]["content"].rsplit("</gmail_derniere_recherche>", 1)[-1].strip()
+        for outil in self.outils.values():
+            arguments = outil.direct(question) if outil.consigne_directe else None
+            if arguments is not None and not valider(outil.schema, arguments):
+                return outil, arguments
+        return None
+
+    async def _direct(self, outil: Outil, arguments: dict[str, Any], prompt: Sequence[Message],
+                      max_sortie: int) -> AsyncIterator[EvenementODO]:
+        """UN appel IA : ODO exécute l'outil, le modèle reçoit les données et
+        répond (ni définitions d'outils, ni consigne de recherche). Rien
+        d'utilisable : aucun événement texte, la boucle habituelle reprend."""
+        self.appels += 1
+        self._premier_outil_ms = int((time.perf_counter() - self._debut) * 1000)
+        yield EtatOutil(outil.nom, "en_cours")
+        r = await executer_outil(outil, arguments, self.contexte, self.delai_outil)
+        yield EtatOutil(outil.nom, "erreur" if r.erreur else "termine", r.erreur)
+        if r.donnees:
+            self.donnees.append((outil.nom, r.donnees))
+        if r.erreur or not (r.donnees or {}).get("lus"):
+            self.direct_abandonne = True
+            return
+        systeme = prompt[0]["content"] if prompt[0]["role"] == "system" else ""
+        donnees = envelopper(outil.nom, r.contenu, self.resultat_max)
+        messages = [{"role": "system", "content": f"{systeme}\n\n{outil.consigne_directe}".strip()},
+                    *[m for m in prompt[1:-1] if m["role"] != "system"],
+                    {**prompt[-1], "content": f"{prompt[-1]['content']}\n\n{donnees}"}]
+        self.prompt_courant, self.texte_tour = messages, ""
+        fin: Fin | None = None
+        async for ev in self.llm.flux(messages, max_sortie=max_sortie):
+            if isinstance(ev, Texte):
+                self.texte_tour += ev.texte
+                yield ev
+            elif isinstance(ev, Fin):
+                fin = ev
+        if fin is None:
+            return
+        self.tours += 1
+        self.entree += fin.usage.entree_totale
+        self.sortie += fin.usage.sortie
+        self.prompt_courant, self.texte_tour = [], ""
+        journaliser("fin", demande=self.contexte.demande_id, tours=self.tours, appels=self.appels,
+                    duree_ms=(time.perf_counter() - self._debut) * 1000, premier_outil_ms=self._premier_outil_ms,
+                    entree=self.entree, sortie=self.sortie, direct=1,
+                    requetes_gmail=sum(int(d.get("requetes_gmail", 0)) for _, d in self.donnees) or None,
+                    fournisseur=self.llm.nom)
+        yield replace(fin, usage=Usage(entree=self.entree, sortie=self.sortie), tour=None)
+
     async def flux(self, prompt: Sequence[Message], *, max_sortie: int) -> AsyncIterator[EvenementODO]:
         self._reinitialiser()
+        plan = self._plan_direct(prompt)
+        if plan is not None:
+            self.direct_abandonne = False
+            async for ev in self._direct(*plan, prompt, max_sortie):
+                yield ev
+            if not self.direct_abandonne:
+                return
+            # Rien de clairement pertinent : le modèle reprend la main (chemin habituel).
         consignes = list(dict.fromkeys(o.consigne for o in self.outils.values() if o.consigne))
         messages = _avec_consigne(list(prompt), consignes)
         definitions = [o.definition() for o in self.outils.values()]

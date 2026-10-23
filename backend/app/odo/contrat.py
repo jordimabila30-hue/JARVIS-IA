@@ -72,6 +72,15 @@ class Outil(ABC):
     #: (règles de présentation partagées par une famille d'outils).
     consigne: str | None = None
 
+    #: Chemin direct (un seul appel IA) : consigne donnée au modèle à la place
+    #: des définitions d'outils quand ODO exécute lui-même l'outil.
+    consigne_directe: str | None = None
+
+    def direct(self, question: str) -> dict[str, Any] | None:
+        """Arguments si ODO peut exécuter cet outil SANS demander au modèle
+        (demande simple et sûre) ; None sinon (chemin habituel)."""
+        return None
+
     @abstractmethod
     async def executer(self, arguments: dict[str, Any], contexte: ContexteOutil) -> ResultatOutil:
         """Exécute l'outil (arguments déjà validés contre `schema`)."""

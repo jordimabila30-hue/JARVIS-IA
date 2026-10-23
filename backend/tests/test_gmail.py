@@ -266,7 +266,7 @@ async def test_resume_de_mes_mails_dans_le_chat(env, nom):
                             etapes=[Scenario(textes=[], appels=[("a1", "gmail_rechercher", {"depuis": "2026-10-18"})]),
                                     Scenario(textes=[], appels=[("a2", "gmail_preparer_resume", {"ids": ["m1aaaa"]})])])
     env.llm = serveur.fournisseur()
-    r = await env.client.post("/api/v1/chat/stream", json={"message": "Résume mes mails d'aujourd'hui"},
+    r = await env.client.post("/api/v1/chat/stream", json={"message": "Résume mes mails importants d'aujourd'hui"},
                               headers=jeton(USER))
     await chat.wait_background_tasks()
     ev = evenements(r.text)
