@@ -2156,3 +2156,75 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Pas de téléphone ni d'ADB dans le conteneur cloud : build Gradle,
   profilage, tests S10+, inscription réelle à faire depuis le PC Windows.
 - Redéploiement du backend (points 15 et 16) : accord requis.
+
+## 2026-10-21 — Validation réelle Windows + Galaxy S10+ (profile)
+
+### Environnement
+- PC Windows, SDK Android local, ADB ; S10+ (SM-G975F, 1440 × 3040,
+  60 Hz, Impeller OpenGLES) en USB, batterie 100 %. Worktree
+  `C:\jarvis_corr` ; phase 3 Gmail (`8371ad8`, absente de la branche)
+  fusionnée.
+- Build Gradle profile réel : **réussi** (première vraie compilation des
+  fichiers Kotlin Touch, aucune erreur). Installation `-r`, données gardées.
+
+### Mesures (S10+, profile)
+Méthode retenue : images réellement présentées (`dumpsys SurfaceFlinger
+--latency` sur la SurfaceView, ≈ 2 s par scénario) + timeline du VM
+service (build UI). La durée « raster » de Flutter n'est pas fiable ici :
+≈ 13-16 ms même sur un écran presque vide, presque entièrement dans
+`SurfaceFrame::Submit` (attente du tampon / vsync), pas du travail.
+- Démarrage à froid (`am start -W`) : 682 / 715 / 635 ms.
+- PIM accueil au repos : 0 vsync manqué ; build UI moyen 4,4 ms (p99 7,8).
+- Menu latéral ouvert immobile : 0 à 3 manqués / 2 s ; ouverture et
+  fermeture : 1 manqué.
+- Conversation : repos 0 ; défilement 0 ; ouverture depuis le menu : 1.
+- Clavier : ouverture 0, ouvert 0, saisie 0.
+- Écrit → vocal : 1 manqué. Kelasi (ouverture) : 1 image de 50 ms.
+- Vocal → écrit : **8 à 44 manqués / 1,8 s, très variable** (pics 50-67
+  ms). Côté Flutter : quelques images de 33 ms au basculement, 2-3
+  `saveLayer` par image, textures recréées ; le reste des écarts coïncide
+  avec l'arrêt du micro (indicateur de confidentialité Android, fenêtre
+  Touch) : non attribuable à un défaut Flutter démontré.
+- Mémoire : PSS total ≈ 337 Mo (natif 90 Mo, graphique 84 Mo) ; tas Dart
+  34-41 Mo.
+
+### Essais de performance annulés (aucun gain mesuré)
+- Ombre du panneau du menu sur un rrect uniforme : 1 vsync manqué / 2 s
+  avant comme après, encodage plus long → annulé.
+- Fondu d'apparition de la conversation porté par le `ShaderMask` du fil
+  (une couche hors écran de moins) : vocal → écrit 2 / 22 / 7 / 41
+  manqués après, aussi variable qu'avant → annulé.
+JARVIS n'est donc pas déclaré « optimisé » : aucun goulet Flutter
+démontré hors de la transition vocal → écrit, dont la cause reste à isoler
+(trace système Perfetto avec l'arrêt du micro).
+
+### Correctif trouvé sur le téléphone
+- **Classement Gmail (point 15) cassé** : `postgrest.contains` avec une
+  `List` envoie un tableau Postgres (`cs.{…}`), refusé sur la colonne
+  jsonb `messages.attachments` ; l'erreur était avalée → « Aucune
+  conversation Gmail ». La marque `origine: gmail` était bien écrite en
+  base (vérifié). Corrigé : JSON encodé
+  (`depot_conversations.dart`) ; test `depot_conversations_gmail_test.dart`
+  (échoue sans le correctif, réussit avec).
+
+### Vérifié sur le S10+
+- Backend : `jarvis-api` (production locale) n'a PAS les correctifs 15-16
+  ni la phase 3 Gmail (fichiers différents de la branche) ; non redéployé.
+  Points 15-16 validés contre un backend TEMPORAIRE `jarvis-api-test`
+  (code de la branche monté, port 8001, `adb reverse 8000 → 8001`, arrêté
+  ensuite).
+- 16 : « Elle m'a dit que j'étais drôle… » → 4 réponses courtes entre
+  guillemets, une phrase d'intro ; patron → 4 réponses polies ; « Quelle
+  est la capitale du Japon ? » → réponse normale.
+- 15 : « résume mes mails » → précision demandée puis résumé (ODO
+  `gmail_rechercher`, 1 appel) ; marque d'origine écrite ; classement
+  défectueux (corrigé ci-dessus, à revérifier sur le téléphone).
+- 13 : « ouvre les paramètres », « ouvre apprendre », « ouvre l'agenda »,
+  « lance messenger » (appli absente → messenger.com), « nouvelle
+  conversation » ; « comment ouvrir Instagram sur PC ? » → vraie réponse,
+  rien déclenché.
+- 14 : Outils › Agenda « Bientôt disponible », page sans accès.
+- 7 : perle JARVIS nette sur la bulle Touch.
+- Mode vocal : ouverture, micro actif, « Retour au chat » avec les
+  échanges vocaux affichés.
+- Kelasi s'ouvre ; Apparence / style Kuba affichés ; PIM stable.

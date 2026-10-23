@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -259,7 +260,10 @@ class DepotConversationsSupabase implements DepotConversations {
           .select('conversation_id')
           .eq('user_id', uid)
           .eq('role', 'assistant')
-          .contains('attachments', [origineGmail])
+          // JSON encodé : une List serait envoyée comme tableau Postgres
+          // (`cs.{…}`), refusée pour une colonne jsonb (erreur avalée,
+          // aucun chat classé sous Gmail — constaté sur S10+).
+          .contains('attachments', jsonEncode([origineGmail]))
           .timeout(delai);
       return {for (final l in lignes) l['conversation_id'] as String};
     } catch (_) {
