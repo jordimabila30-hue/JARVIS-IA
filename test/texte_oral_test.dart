@@ -68,4 +68,13 @@ void main() {
   test('« ~ » devant un nombre : environ', () {
     expect(oral('Comptez ~ 5 minutes.'), 'Comptez environ 5 minutes.');
   });
+
+  test('calculs jamais déformés, abréviations et pictogrammes', () {
+    expect(oral('x = 2 * 3 ; y = x^2.'), 'x = 2 fois 3 ; y = x au carré.');
+    expect(oral('Note : 4/5 ⭐ très bien !'), 'Note : 4/5 très bien !');
+    expect(oral('Prix (≈ 1 300 €).'), 'Prix (environ 1 300 €).');
+    expect(oral('Paris vs Lyon, RDV p. 12.'), 'Paris contre Lyon, rendez-vous page 12.');
+    // Gras et italique toujours retirés (pas de « fois » parasite).
+    expect(oral('**Gras** et *italique*.'), 'Gras et italique.');
+  });
 }

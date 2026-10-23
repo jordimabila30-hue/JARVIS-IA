@@ -113,11 +113,17 @@ class TexteOral {
       )
       // « ~ 5 € » : environ (jamais « tilde »).
       .replaceAll(RegExp(r'~\s*(?=\d)'), 'environ ')
+      // Calculs : « 2 * 3 » → « 2 fois 3 » (jamais « 2 3 », le sens
+      // changerait) ; puissances dites en mots.
+      .replaceAllMapped(RegExp(r'(\w)\s*\*\s*(\w)'), (m) => '${m.group(1)} fois ${m.group(2)}')
+      .replaceAllMapped(RegExp(r'(\w)\^2(?!\d)'), (m) => '${m.group(1)} au carré')
+      .replaceAllMapped(RegExp(r'(\w)\^3(?!\d)'), (m) => '${m.group(1)} au cube')
+      .replaceAllMapped(RegExp(r'(\w)\^(\d+)'), (m) => '${m.group(1)} puissance ${m.group(2)}')
       // Marques restantes (non refermées) : jamais prononcées.
       .replaceAll(RegExp(r'[*`#]+'), '')
       .replaceAll(RegExp(r'(?<!\w)_+|_+(?!\w)'), ' ')
       // Émojis et pictogrammes.
-      .replaceAll(RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]', unicode: true), '');
+      .replaceAll(RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]', unicode: true), '');
 
   static final _unites = <String, String>{
     'km/h': 'kilomètres par heure',
@@ -149,7 +155,12 @@ class TexteOral {
         .replaceAllMapped(RegExp(r'(\d)\s*[×x]\s*(\d)'), (m) => '${m.group(1)} fois ${m.group(2)}')
         .replaceAll('÷', ' divisé par ')
         .replaceAll(' & ', ' et ')
-        .replaceAll(RegExp(r'\s{2,}'), ' ');
+        // Abréviations courantes, dites en entier.
+        .replaceAll(RegExp(r'\bvs\.?(?=\s)'), 'contre')
+        .replaceAll(RegExp(r'\bRDV\b'), 'rendez-vous')
+        .replaceAllMapped(RegExp(r'\bp\.\s?(\d)'), (m) => 'page ${m.group(1)}')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .replaceAll(RegExp(r'\(\s+'), '(');
   }
 
   /// « Absorption » → « absorption » (jamais un sigle : « ADN » reste).
