@@ -252,3 +252,45 @@ class Parcours {
 List<String> _liste(Object? v) => v is List
     ? List<String>.unmodifiable(v.whereType<String>())
     : const <String>[];
+
+/// Situation du quotidien (`situations.json`) : pratique écrite corrigée
+/// par le tuteur, et dialogue oral (JARVIS joue [role]).
+class SituationPratique {
+  const SituationPratique({
+    required this.id,
+    required this.titre,
+    required this.icone,
+    required this.fiches,
+    required this.objectif,
+    required this.consigne,
+    required this.role,
+    required this.ouverture,
+  });
+
+  final String id;
+  final String titre;
+  final String icone;
+  final List<String> fiches;
+  final String objectif;
+  final String consigne;
+  final String role;
+
+  /// Première réplique de JARVIS dans le dialogue.
+  final String ouverture;
+
+  static SituationPratique? depuisJson(Object? j) {
+    if (j is! Map) return null;
+    final champs = ['id', 'titre', 'objectif', 'consigne', 'role', 'ouverture'];
+    if (champs.any((c) => j[c] is! String) || j['fiches'] is! List) return null;
+    return SituationPratique(
+      id: j['id'] as String,
+      titre: j['titre'] as String,
+      icone: j['icone'] is String ? j['icone'] as String : '',
+      fiches: (j['fiches'] as List).whereType<String>().toList(),
+      objectif: j['objectif'] as String,
+      consigne: j['consigne'] as String,
+      role: j['role'] as String,
+      ouverture: j['ouverture'] as String,
+    );
+  }
+}

@@ -857,6 +857,15 @@ debug / profile seulement). Progression locale `jarvis.apprentissage.progression
 (+ `.secours`, `.corrompue`). PIM : coupé par Flutter tant que le module
 couvre l'accueil (page opaque), jamais modifié. Interrupteur :
 `--dart-define=JARVIS_APPRENTISSAGE=false`. Tests : `test/apprentissage/`.
+Phase 2 (B et C, doc `docs/APPRENTISSAGE.md` § Phase 2) : test de niveau
+facultatif et adaptation locale (`AdaptationKelasi`, progression v2 :
+niveaux, maîtrise par fiche) ; professeur IA par
+`POST /api/v1/apprentissage/tuteur` (backend unifié, MIA universel, quotas,
+SSE ; corpus lu par le serveur dans `backend/app/apprentissage/corpus/`,
+copie des assets ; production : fiches relues seulement) ; quatre actions
+(Plus simplement, Un exemple, Mon erreur, M'entraîner) ; situations du
+quotidien (`situations.json`) ; oral sur LA `VoiceSession` (`OralSituation`
+emprunte puis rétablit `repondeur`), interruption manuelle seulement.
 
 ---
 

@@ -2250,3 +2250,21 @@ démontré hors de la transition vocal → écrit, dont la cause reste à isoler
   (`docs/PASSATION_S10.md`). Pistes non touchées sans mesure : ShaderMask
   du fil (fondus haut/bas, saveLayer au défilement), respiration continue
   de la pastille du bouton vocal au repos.
+
+## 2026-10-23 — Kelasi, phase 2 étapes B et C : professeur intelligent et vocal
+
+### Fait
+- B1-B2 : test de niveau facultatif (5 questions locales, une notion à tour de rôle, simple d'abord), niveau Débutant / Intermédiaire / Avancé ; adaptation locale (`AdaptationKelasi` : maîtrise par notion, difficulté selon le niveau, ajustement d'un cran après une leçon) ; progression v2 (niveaux, maîtrise ; v1 relue puis réécrite).
+- B3 : quatre actions (Plus simplement, Un exemple, Mon erreur, M'entraîner — exercices locaux d'abord).
+- B4 : 8 situations du quotidien (correction écrite, nouvelle tentative, oral).
+- B5 : route `POST /api/v1/apprentissage/tuteur` dans le backend unifié (MIA universel, quotas, SSE, erreurs) ; corpus lu par le serveur (copie contrôlée, version comparée) ; repères `[[fiche]]` filtrés, sources validées après la fin ; textes de l'élève balisés et masqués, jamais enregistrés.
+- C : oral sur LA `VoiceSession` (`OralSituation` emprunte puis rétablit le répondeur), historique écrit / oral partagé, arrêt manuel de la parole, micro coupé pendant la saisie, bilan à la fin.
+
+### Vérifié
+- Flutter : `flutter analyze` sans problème ; 968 / 968 (dont 75 Kelasi : 23 nouveaux, oral avec une vraie `VoiceSession` et des doublures).
+- Backend : 634 réussis, 1 ignoré (dont 15 `test_apprentissage.py` : vrai SDK `anthropic` vers le faux serveur Messages API).
+- Backend temporaire isolé (`kelasi-api-test`, port 8001, vrais Supabase / MIA) : démarré, `/health/ready` OK, arrêté par nom.
+
+### Non vérifié
+- Aucun test sur le S10+ (téléphone non branché) : professeur IA réel, oral (micro, voix), mesures. Passation : `docs/PASSATION_KELASI_S10.md`.
+- Route non déployée sur `jarvis-api` (autorisation distincte). En production, le tuteur refuse les 9 fiches tant qu'elles ne sont pas relues.

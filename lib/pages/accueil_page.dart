@@ -643,7 +643,16 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _pim.annulerApercu();
     final espace = _apprentissage ??=
         widget.apprentissage ??
-        EspaceApprentissage(lecteur: LecteurEcouteSession(_session));
+        EspaceApprentissage(
+          lecteur: LecteurEcouteSession(_session),
+          voix: _session,
+          // Compte connecté seulement : le professeur IA passe par le
+          // backend unifié (MIA universel, quotas, annulation).
+          tuteur: switch ((widget.api, widget.depotConversations)) {
+            (final api?, _?) => api.tuteur,
+            _ => null,
+          },
+        );
     // Geler les tickers avant la première image de transition, sans
     // capture GPU ni modification du moteur. Comparaison profile possible
     // avec ext.jarvis.variante (sans=apprendre.pause).

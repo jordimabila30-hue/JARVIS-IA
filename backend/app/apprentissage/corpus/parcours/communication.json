@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "parcours": "communication",
+  "version": 2,
+  "fiches": [
+    {
+      "id": "com-f-ecoute",
+      "titre": "L'écoute active",
+      "niveau": 1,
+      "explication": "Écouter activement, c'est s'intéresser vraiment à la personne : montrer son intérêt (regard, signes d'attention), rester calme, ne pas juger, accepter les silences et poser des questions ouvertes, qui ne se répondent pas par oui ou non.",
+      "exemples": [
+        "« Qu'est-ce qui s'est passé ? »",
+        "« Qu'est-ce que tu as ressenti ? »"
+      ],
+      "a_eviter": [
+        "Couper la parole.",
+        "Minimiser : « Ce n'est pas grave. »",
+        "Regarder ailleurs pendant que l'autre parle."
+      ],
+      "sources": [
+        {
+          "titre": "L'écoute active — fiche outil",
+          "editeur": "Académie de Lille (Éducation nationale), « Tous Apprenants ! »",
+          "url": "https://conservatoire.etab.ac-lille.fr/files/2020/08/infographie-e%CC%81coute-active-1.pdf",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    },
+    {
+      "id": "com-f-reformuler",
+      "titre": "Reformuler pour vérifier",
+      "niveau": 1,
+      "explication": "Reformuler, c'est redire avec ses mots ce que l'autre pense et ressent, puis vérifier : « C'est bien ça ? ». L'autre peut confirmer, corriger ou préciser sa pensée.",
+      "exemples": [
+        "« Tu es déçu que la sortie soit annulée, c'est bien ça ? »"
+      ],
+      "a_eviter": [
+        "« Moi aussi, une fois… » : on parle de soi au lieu d'écouter."
+      ],
+      "sources": [
+        {
+          "titre": "L'écoute active — fiche outil",
+          "editeur": "Académie de Lille (Éducation nationale), « Tous Apprenants ! »",
+          "url": "https://conservatoire.etab.ac-lille.fr/files/2020/08/infographie-e%CC%81coute-active-1.pdf",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    }
+  ],
+  "unites": [
+    {
+      "id": "com-u1",
+      "titre": "Bien écouter",
+      "lecons": [
+        {
+          "id": "com-l1",
+          "titre": "Écouter et répondre avec respect",
+          "niveau": 1,
+          "duree_minutes": 3,
+          "objectif": "Écouter vraiment, puis répondre sans blesser.",
+          "fiches": [
+            "com-f-ecoute",
+            "com-f-reformuler"
+          ],
+          "exercices": [
+            {
+              "id": "com-l1-e1",
+              "type": "choix",
+              "fiche": "com-f-ecoute",
+              "consigne": "Un ami vous raconte sa mauvaise journée. Que faites-vous ?",
+              "options": [
+                "Je regarde mon téléphone en même temps.",
+                "Je le laisse finir et je m'intéresse à ce qu'il dit.",
+                "Je lui coupe la parole pour raconter ma journée.",
+                "Je lui dis tout de suite que ce n'est pas grave."
+              ],
+              "bonne": 1,
+              "explication": "Écouter, c'est montrer son intérêt, sans couper la parole ni minimiser ce que l'autre ressent."
+            },
+            {
+              "id": "com-l1-e2",
+              "type": "vrai_faux",
+              "fiche": "com-f-ecoute",
+              "consigne": "Vrai ou faux ?",
+              "affirmation": "Pendant l'écoute active, on donne tout de suite son jugement.",
+              "reponse": false,
+              "explication": "Pendant l'écoute active, on évite de juger : on cherche d'abord à comprendre."
+            },
+            {
+              "id": "com-l1-e3",
+              "type": "ecoute",
+              "fiche": "com-f-reformuler",
+              "consigne": "Écoutez, puis choisissez la meilleure reformulation.",
+              "audio": "Je suis inquiète. J'ai un exposé demain et je n'ai pas fini mes diapositives.",
+              "options": [
+                "Tu as peur de ne pas être prête pour ton exposé de demain ?",
+                "Moi aussi, j'ai déjà eu un exposé.",
+                "Tu n'avais qu'à t'y prendre plus tôt."
+              ],
+              "bonne": 0,
+              "explication": "Une bonne reformulation redit ce que l'autre pense et ressent, sans juger ni parler de soi."
+            },
+            {
+              "id": "com-l1-e4",
+              "type": "trous",
+              "fiche": "com-f-reformuler",
+              "consigne": "Complétez.",
+              "texte": "Pour vérifier qu'on a compris, on peut ___ : « Tu es déçu que la sortie soit annulée, c'est ___ ça ? »",
+              "trous": [
+                {
+                  "options": [
+                    "reformuler",
+                    "ignorer",
+                    "interrompre"
+                  ],
+                  "bonne": 0
+                },
+                {
+                  "options": [
+                    "faux",
+                    "bien",
+                    "nul"
+                  ],
+                  "bonne": 1
+                }
+              ],
+              "explication": "« C'est bien ça ? » invite l'autre à confirmer ou à corriger."
+            },
+            {
+              "id": "com-l1-e5",
+              "type": "ordre",
+              "fiche": "com-f-reformuler",
+              "consigne": "Remettez les étapes dans l'ordre.",
+              "elements": [
+                "Laisser l'autre parler sans l'interrompre",
+                "Redire avec ses mots ce qu'il pense et ressent",
+                "Vérifier : « C'est bien ça ? »",
+                "Donner son propre avis"
+              ],
+              "explication": "On écoute, on reformule, on vérifie, puis on peut répondre."
+            },
+            {
+              "id": "com-l1-e6",
+              "type": "meilleur_message",
+              "fiche": "com-f-ecoute",
+              "consigne": "Choisissez la meilleure réponse.",
+              "contexte": "Une camarade : « Je n'ai pas aimé que tu racontes mon secret. »",
+              "options": [
+                "C'est bon, ce n'était pas si important.",
+                "Tu as raison, je n'aurais pas dû le raconter. Je suis désolé de t'avoir blessée.",
+                "Tu exagères toujours."
+              ],
+              "bonne": 1,
+              "explication": "On reconnaît ce qu'elle ressent, sans minimiser ni accuser."
+            },
+            {
+              "id": "com-l1-e7",
+              "type": "association",
+              "fiche": "com-f-ecoute",
+              "consigne": "Associez chaque geste à son but.",
+              "paires": [
+                [
+                  "Ne pas juger",
+                  "Comprendre avant de répondre"
+                ],
+                [
+                  "Poser une question ouverte",
+                  "Aider l'autre à dire ce qu'il pense"
+                ],
+                [
+                  "Reformuler",
+                  "Vérifier qu'on a bien compris"
+                ]
+              ],
+              "explication": "Chaque geste de l'écoute active a un but précis."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

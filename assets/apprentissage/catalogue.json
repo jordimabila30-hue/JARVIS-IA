@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "version_corpus": "2026-10-23.1",
   "parcours": [
     { "id": "correspondance", "titre": "Correspondance", "icone": "courrier", "fichier": "assets/apprentissage/parcours/correspondance.json" },
     { "id": "communication", "titre": "Communication", "icone": "dialogue", "fichier": "assets/apprentissage/parcours/communication.json" },

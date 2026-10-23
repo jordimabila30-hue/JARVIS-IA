@@ -131,3 +131,28 @@ Avatars (aucun affiché ; un futur `LecteurEcoute` / présentateur pourra être
 injecté dans `EspaceApprentissage`), exercices IA, professeur, test de
 niveau (aucun blocage de leçon : sauter des unités sera direct), XP,
 badges, synchronisation Supabase (format versionné, identifiants stables).
+
+## Phase 2 — professeur intelligent (B) et vocal (C)
+
+### Test de niveau et adaptation (local, sans IA)
+- `services/apprentissage/adaptation.dart` (`AdaptationKelasi`) : difficulté d'un exercice d'après sa forme (reconnaître 1, compléter / choisir 2, construire 3) ; test de niveau de 5 questions, une notion à tour de rôle, du plus simple au plus construit ; niveau estimé (< 50 % débutant, < 80 % intermédiaire, sinon avancé) ; ordre d'entraînement (notions les moins maîtrisées, difficulté proche du niveau) ; ajustement d'un cran après une leçon, seulement si la maîtrise des notions le confirme. Jamais fondé sur la vitesse.
+- Page d'un parcours : carte « Découvrir mon niveau » (« Faire le test » / « Commencer directement »), puis « Niveau : … » et « Refaire le test ». Jamais imposé, jamais bloquant.
+- Progression **v2** : `niveaux` (parcours → niveau), `test_sans_niveau`, `maitrise` (fiche → 0..1, moyenne glissante, poids 0,35). Une progression v1 est lue telle quelle puis réécrite en v2.
+- Pratiquer et Réviser suivent l'ordre adaptatif.
+
+### Professeur IA (backend unifié, MIA universel)
+- Route `POST /api/v1/apprentissage/tuteur` (`backend/app/api/v1/apprentissage.py`), SSE : `meta` (version du corpus), `delta`, `sources`, `done` / `error`. Mêmes protections que le chat : `get_fournisseur` (offre du compte), `enforce_quota` (réservé avant, rendu si rien n'est généré), erreurs typées, refus / plafond → `error`. Aucun texte de l'élève enregistré : seuls les tokens sont comptés.
+- Corpus du serveur : copie contrôlée `backend/app/apprentissage/corpus/` (identique aux assets, vérifié par `tests/test_apprentissage.py`), version `version_corpus` du catalogue. Le client n'envoie que des identifiants ; le serveur lit fiches, solutions et sources. Production : fiches `valide` avec relecture tracée seulement ; hors production (`ENVIRONNEMENT` ≠ `production`) : brouillons aussi.
+- Réponses : lignes « Règle : » (fiche, repère `[[id]]`), « Exemple : » (inventé pour illustrer), « Conseil : » (style, jamais une vérité absolue). `FiltreCitations` retire les repères du flux (même coupés) et ne garde que les fiches fournies ; les sources (lues dans le corpus) n'arrivent qu'après la fin. Textes de l'élève : données balisées `<eleve>`, secrets masqués (`masquer_secrets`), balises neutralisées.
+- Actions : `simplifier`, `exemple`, `erreur` (solution lue par le serveur), `entrainer`, `situation` (correction), `dialogue` (rôle, oral), `bilan`. Plafonds de sortie par action (300 à 800 tokens + marge de réflexion).
+- Flutter : `ApiJarvis.tuteur` (jeton renouvelé, annulation, délais, utilisation actualisée), `SessionTuteur` (texte en direct, sources à la fin, arrêt, « Réessayer » ; sans compte : message, leçons disponibles hors ligne), `widgets/apprentissage/tuteur_kelasi.dart` (`ActionsTuteur` en capsules, feuille `afficherTuteur`, lignes typées).
+- Leçon : sous chaque fiche (Plus simplement, Un exemple, M'entraîner) et sous la correction (+ « Mon erreur » après une erreur). M'entraîner ouvre d'abord des exercices LOCAUX de la même notion (sans IA) ; l'IA seulement s'il n'y en a pas.
+
+### Situations du quotidien
+- `assets/apprentissage/situations.json` : 8 situations (professeur, stage, courriel, entretien, projet, réponse à un message, désaccord, notion technique), chacune rattachée à des fiches ; visible seulement si toutes ses fiches le sont.
+- Accueil : rangée « Situations » ; `SituationPage` : objectif, consigne, production écrite → correction (Réussi / À améliorer / Exemple), « Nouvelle tentative », « S'entraîner à l'oral ».
+
+### Professeur vocal
+- `DialogueSituation` : UN historique (écrit et oral partagés), en mémoire seulement ; l'ouverture est connue du serveur.
+- `OralSituation` : emprunte LA `VoiceSession` de JARVIS (aucun second moteur) : remplace `repondeur` / `annulerReponse` le temps de l'exercice, puis les rétablit ; JARVIS dit sa première réplique (`lireReponse`), écoute, répond par le dialogue (lecture en flux existante). Refusé pendant un chat vocal en cours ou en pause, sans voix, sans compte (raison affichée).
+- `OralPage` : fil (répliques, réponse en cours, transcription provisoire), « Arrêter la parole » (manuel), « Couper le micro », « Parler », phrase en attente (Envoyer / Ignorer, réglage existant), saisie écrite (micro coupé dès le focus, réponse dite par la même voix), « Terminer » → bilan. Interruption automatique non activée.

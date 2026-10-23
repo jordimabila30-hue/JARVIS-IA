@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.exceptions import RedisError
 
 from . import console
-from .api.v1 import chat, contexts, integrations, local_exchanges, odo
+from .api.v1 import apprentissage, chat, contexts, integrations, local_exchanges, odo
 from .llm import FournisseurNonConfigure, selection
 from .auth import AuthUser, get_current_user
 from .config import Settings, get_settings
@@ -90,6 +90,7 @@ app.add_middleware(
 )
 
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(apprentissage.router, prefix="/api/v1")
 app.include_router(local_exchanges.router, prefix="/api/v1")
 app.include_router(contexts.conversations_router, prefix="/api/v1")
 app.include_router(contexts.contexts_router, prefix="/api/v1")

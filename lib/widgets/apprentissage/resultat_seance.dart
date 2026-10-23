@@ -14,7 +14,11 @@ class ResultatSeance extends StatelessWidget {
     required this.titresFiches,
     required this.surContinuer,
     this.surReviser,
+    this.message,
   });
+
+  /// Ligne sous le titre (niveau estimé ou ajusté), facultative.
+  final String? message;
 
   final String titre;
   final BilanSeance bilan;
@@ -71,6 +75,15 @@ class ResultatSeance extends StatelessWidget {
             color: p.texte,
           ),
         ),
+        if (message != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            message!,
+            key: const ValueKey('resultat-message'),
+            textAlign: TextAlign.center,
+            style: styleDiscret(context, taille: 14.5),
+          ),
+        ],
         const SizedBox(height: 18),
         SurfaceApprentissage(
           child: Column(

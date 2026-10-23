@@ -76,16 +76,65 @@ class CatalogueApprentissage {
     return null;
   }
 
+  static const fichierSituations = 'assets/apprentissage/situations.json';
+
+  /// `version_corpus` du catalogue : comparée par le serveur à sa copie.
+  String? get versionCorpus => _versionCorpus;
+  String? _versionCorpus;
+
+  List<SituationPratique> _situations = const [];
+
+  /// Fiches visibles (même règle que les leçons : relues, ou brouillons en
+  /// aperçu de développement).
+  Map<String, FichePedagogique> get fichesVisibles => {
+    for (final p in _parcours ?? const <ParcoursCharge>[])
+      for (final f in p.contenu?.fiches.values ?? const <FichePedagogique>[])
+        if (apercu.value || f.validee) f.id: f,
+  };
+
+  /// Situations du quotidien publiables : toutes leurs fiches visibles.
+  List<SituationPratique> get situations {
+    final visibles = fichesVisibles;
+    return [
+      for (final s in _situations)
+        if (s.fiches.isNotEmpty && s.fiches.every(visibles.containsKey)) s,
+    ];
+  }
+
   Future<List<ParcoursCharge>> _lire() async {
     List<ResumeParcours> resumes;
     try {
-      resumes = _resumes(await _json(fichierCatalogue));
+      final j = await _json(fichierCatalogue);
+      resumes = _resumes(j);
+      if (j is Map && j['version_corpus'] is String) {
+        _versionCorpus = j['version_corpus'] as String;
+      }
     } catch (e) {
       debugPrint('[JARVIS Apprendre] catalogue illisible : $e');
       resumes = const [];
     }
-    final charges = await Future.wait(resumes.map(_parcoursDe));
-    return _parcours = List.unmodifiable(charges);
+    final lus = await Future.wait([
+      Future.wait(resumes.map(_parcoursDe)),
+      _lireSituations(),
+    ]);
+    _situations = lus[1] as List<SituationPratique>;
+    return _parcours = List.unmodifiable(lus[0] as List<ParcoursCharge>);
+  }
+
+  Future<List<SituationPratique>> _lireSituations() async {
+    try {
+      final j = await _json(fichierSituations);
+      final liste = j is Map ? j['situations'] : null;
+      if (liste is! List) return const [];
+      return [
+        for (final s in liste)
+          ?SituationPratique.depuisJson(s),
+      ];
+    } catch (e) {
+      // Fichier absent ou illisible : aucune situation, rien d'autre ne casse.
+      debugPrint('[JARVIS Apprendre] situations illisibles : $e');
+      return const [];
+    }
   }
 
   Future<ParcoursCharge> _parcoursDe(ResumeParcours r) async {

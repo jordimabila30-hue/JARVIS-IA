@@ -2,6 +2,8 @@ import 'dart:math';
 
 import '../../models/apprentissage/contenu_pedagogique.dart';
 import '../../models/apprentissage/exercice.dart';
+import '../../models/apprentissage/progression.dart';
+import 'adaptation.dart';
 import 'catalogue_apprentissage.dart';
 import 'service_progression.dart';
 
@@ -88,10 +90,43 @@ class SelectionExercices {
     return r;
   }
 
-  /// Réviser : d'abord les exercices ratés, complétés par ceux des leçons
-  /// déjà étudiées (terminées ou commencées). Vide : rien à réviser.
+  double _maitrise(String fiche) => progression.maitriseDe(fiche) ?? 0.5;
+
+  /// Niveau du parcours de la leçon [lecon].
+  NiveauApprenant? _niveauDe(String lecon) {
+    final p = catalogue.lecon(lecon)?.$1;
+    return p == null ? null : progression.niveau(p.resume.id);
+  }
+
+  /// Ordre adaptatif ([AdaptationKelasi.ordonner]), le niveau suivant le parcours
+  /// de chaque exercice ; [hasard] départage les égalités.
+  List<ExerciceSitue> _adapter(List<ExerciceSitue> liste, Random? hasard) {
+    liste.shuffle(hasard);
+    final parNiveau = <NiveauApprenant?, List<ExerciceSitue>>{};
+    for (final e in liste) {
+      (parNiveau[_niveauDe(e.lecon)] ??= []).add(e);
+    }
+    final tries = [
+      for (final entree in parNiveau.entries)
+        ...AdaptationKelasi.ordonner(
+          entree.value,
+          exercice: (e) => e.exercice,
+          maitrise: _maitrise,
+          niveau: entree.key,
+        ),
+    ];
+    return tries;
+  }
+
+  /// Réviser : d'abord les exercices ratés (notions les plus fragiles en
+  /// premier), complétés par ceux des leçons déjà étudiées. Vide : rien à
+  /// réviser.
   List<ExerciceSitue> revision({Random? hasard}) {
-    final r = aRevoir();
+    final r = aRevoir()
+      ..sort(
+        (a, b) =>
+            _maitrise(a.exercice.fiche).compareTo(_maitrise(b.exercice.fiche)),
+      );
     final deja = r.map((e) => e.exercice.id).toSet();
     final etudies = [
       for (final (_, l) in _visibles)
@@ -115,9 +150,11 @@ class SelectionExercices {
       return e != null && (e.terminee || e.commencee);
     }
 
+    // Leçons étudiées d'abord ; dans chaque groupe, ordre adaptatif
+    // (notions fragiles, difficulté proche du niveau).
     return [
-      ...de(etudiee)..shuffle(hasard),
-      ...de((l) => !etudiee(l))..shuffle(hasard),
+      ..._adapter(de(etudiee), hasard),
+      ..._adapter(de((l) => !etudiee(l)), hasard),
     ].take(tailleSeanceLibre).toList();
   }
 }

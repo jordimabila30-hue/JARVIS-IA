@@ -105,6 +105,25 @@ class EtatLecon {
   }
 }
 
+/// Niveau estimé dans un parcours (test facultatif, puis résultats).
+/// Une estimation pédagogique, jamais un jugement sur la personne.
+enum NiveauApprenant {
+  debutant('Débutant'),
+  intermediaire('Intermédiaire'),
+  avance('Avancé');
+
+  const NiveauApprenant(this.libelle);
+
+  final String libelle;
+
+  static NiveauApprenant? depuis(Object? v) {
+    for (final n in values) {
+      if (n.name == v) return n;
+    }
+    return null;
+  }
+}
+
 /// Toute la progression (une seule valeur enregistrée).
 class ProgressionApprentissage {
   const ProgressionApprentissage({
@@ -112,10 +131,15 @@ class ProgressionApprentissage {
     this.aReviser = const {},
     this.dernierParcours,
     this.derniereLecon,
+    this.niveaux = const {},
+    this.testSansNiveau = const {},
+    this.maitrise = const {},
   });
 
   /// Version du format écrit ; une version plus récente reste lue au mieux.
-  static const version = 1;
+  /// 1 → 2 (phase 2) : niveaux, maîtrise par fiche. Une progression v1 est
+  /// lue telle quelle (niveaux et maîtrise vides) puis réécrite en v2.
+  static const version = 2;
 
   static const vide = ProgressionApprentissage();
 
@@ -127,16 +151,32 @@ class ProgressionApprentissage {
   final String? dernierParcours;
   final String? derniereLecon;
 
+  /// Parcours (id) → niveau estimé.
+  final Map<String, NiveauApprenant> niveaux;
+
+  /// Parcours où l'utilisateur a choisi « Commencer directement » : le test
+  /// n'est plus proposé d'office (toujours accessible).
+  final Set<String> testSansNiveau;
+
+  /// Fiche (id) → maîtrise de 0 à 1 (moyenne glissante des réponses).
+  final Map<String, double> maitrise;
+
   ProgressionApprentissage copier({
     Map<String, EtatLecon>? lecons,
     Map<String, String>? aReviser,
     String? dernierParcours,
     String? derniereLecon,
+    Map<String, NiveauApprenant>? niveaux,
+    Set<String>? testSansNiveau,
+    Map<String, double>? maitrise,
   }) => ProgressionApprentissage(
     lecons: lecons ?? this.lecons,
     aReviser: aReviser ?? this.aReviser,
     dernierParcours: dernierParcours ?? this.dernierParcours,
     derniereLecon: derniereLecon ?? this.derniereLecon,
+    niveaux: niveaux ?? this.niveaux,
+    testSansNiveau: testSansNiveau ?? this.testSansNiveau,
+    maitrise: maitrise ?? this.maitrise,
   );
 
   String encoder() => jsonEncode({
@@ -145,6 +185,9 @@ class ProgressionApprentissage {
     'a_reviser': aReviser,
     'dernier_parcours': ?dernierParcours,
     'derniere_lecon': ?derniereLecon,
+    'niveaux': {for (final e in niveaux.entries) e.key: e.value.name},
+    'test_sans_niveau': testSansNiveau.toList(),
+    'maitrise': maitrise,
   });
 
   /// Lit une progression enregistrée. [FormatException] si le texte n'est
@@ -169,7 +212,32 @@ class ProgressionApprentissage {
         }
       }
     }
+    final niveaux = <String, NiveauApprenant>{};
+    if (j['niveaux'] case final Map n) {
+      for (final e in n.entries) {
+        final niveau = NiveauApprenant.depuis(e.value);
+        if (e.key is String && niveau != null) {
+          niveaux[e.key as String] = niveau;
+        }
+      }
+    }
+    final maitrise = <String, double>{};
+    if (j['maitrise'] case final Map m) {
+      for (final e in m.entries) {
+        if (e.key is String && e.value is num) {
+          maitrise[e.key as String] = (e.value as num).toDouble().clamp(
+            0.0,
+            1.0,
+          );
+        }
+      }
+    }
     return ProgressionApprentissage(
+      niveaux: niveaux,
+      maitrise: maitrise,
+      testSansNiveau: {
+        if (j['test_sans_niveau'] case final List l) ...l.whereType<String>(),
+      },
       lecons: lecons,
       aReviser: reviser,
       dernierParcours: switch (j['dernier_parcours']) {

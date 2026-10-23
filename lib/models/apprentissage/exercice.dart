@@ -422,3 +422,34 @@ List<String> _textes(Map<String, dynamic> j, String cle) {
   }
   throw FormatException('« $cle » : liste de textes (${j['id'] ?? '?'})');
 }
+
+/// Réponse de l'élève en clair (« Mon erreur » : envoyée au tuteur, qui
+/// lit lui-même la bonne réponse dans son corpus).
+String texteReponse(Exercice e, ReponseExercice r) => switch ((e, r)) {
+  (ExerciceChoix(:final options), ReponseChoix(:final index))
+      when index >= 0 && index < options.length =>
+    options[index],
+  (ExerciceVraiFaux(), ReponseVraiFaux(:final valeur)) =>
+    valeur ? 'Vrai' : 'Faux',
+  (final ExerciceTrous t, ReponseTrous(:final choix)) => () {
+    final m = t.morceaux;
+    final b = StringBuffer(m.first);
+    for (var i = 0; i < t.trous.length && i < choix.length; i++) {
+      final o = t.trous[i].options;
+      b
+        ..write(choix[i] >= 0 && choix[i] < o.length ? o[choix[i]] : '…')
+        ..write(m[i + 1]);
+    }
+    return b.toString();
+  }(),
+  (ExerciceOrdre(:final elements), ReponseOrdre(:final ordre)) => [
+    for (final i in ordre)
+      if (i >= 0 && i < elements.length) elements[i],
+  ].join(' / '),
+  (ExerciceAssociation(:final paires), ReponseAssociation(paires: final p)) => [
+    for (final e in p.entries)
+      if (e.key < paires.length && e.value < paires.length)
+        '${paires[e.key].$1} → ${paires[e.value].$2}',
+  ].join(' ; '),
+  _ => '',
+};

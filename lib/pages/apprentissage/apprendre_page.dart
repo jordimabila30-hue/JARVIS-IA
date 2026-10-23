@@ -9,6 +9,7 @@ import '../../widgets/apprentissage/cartes_apprendre.dart';
 import '../../widgets/apprentissage/elements_apprentissage.dart';
 import 'lecon_page.dart';
 import 'parcours_page.dart';
+import 'situation_page.dart';
 
 /// Ouvre le module Apprendre par-dessus l'accueil. Page opaque : l'accueil
 /// passe hors scène et Flutter suspend ses animations (PIM compris) ;
@@ -296,6 +297,57 @@ class _Contenu extends StatelessWidget {
                     ),
                   ),
                   centre(GrilleCartes(enfants: cartes)),
+                  if (catalogue.situations.isNotEmpty) ...[
+                    const SizedBox(height: 26),
+                    centre(
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 12),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Situations',
+                            style: styleTitre(context, taille: 17),
+                          ),
+                        ),
+                      ),
+                    ),
+                    centre(
+                      SizedBox(
+                        height: 96,
+                        child: ListView.separated(
+                          key: const ValueKey('liste-situations'),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: catalogue.situations.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemBuilder: (context, i) {
+                            final s = catalogue.situations[i];
+                            return SizedBox(
+                              width: 168,
+                              child: SurfaceApprentissage(
+                                key: ValueKey('situation-${s.id}'),
+                                etiquette: s.titre,
+                                padding: const EdgeInsets.all(12),
+                                surAppui: () => ouvrirSituation(context, espace, s),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(iconeParcours(s.icone), size: 20),
+                                    const Spacer(),
+                                    Text(
+                                      s.titre,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: styleTitre(context, taille: 13.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

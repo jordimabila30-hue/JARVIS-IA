@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "version": 1,
+  "situations": [
+    {
+      "id": "sit-professeur",
+      "titre": "Écrire à un professeur",
+      "icone": "courrier",
+      "fiches": ["cor-f-appel", "cor-f-objet", "cor-f-corps"],
+      "objectif": "Demander un délai pour un devoir, poliment et clairement.",
+      "consigne": "Écrivez le courriel complet : objet, formule d'appel, demande, salutation.",
+      "role": "ton professeur, qui lit ta demande",
+      "ouverture": "Bonjour. Vous vouliez me parler de votre devoir ?"
+    },
+    {
+      "id": "sit-stage",
+      "titre": "Demander un stage",
+      "icone": "courrier",
+      "fiches": ["cor-f-appel", "cor-f-objet", "cor-f-corps"],
+      "objectif": "Demander un stage à une entreprise, en quelques lignes.",
+      "consigne": "Écrivez un courriel court à une responsable, Mme Kabongo.",
+      "role": "Mme Kabongo, responsable des stages d'une entreprise",
+      "ouverture": "Bonjour, Kabongo à l'appareil. Que puis-je faire pour vous ?"
+    },
+    {
+      "id": "sit-courriel",
+      "titre": "Rédiger un courriel",
+      "icone": "courrier",
+      "fiches": ["cor-f-objet", "cor-f-corps"],
+      "objectif": "Annoncer un retard à une réunion, en restant bref.",
+      "consigne": "Écrivez un courriel avec un objet précis et une seule demande.",
+      "role": "ta collègue, qui organise la réunion",
+      "ouverture": "Salut, la réunion commence bientôt. Tout va bien ?"
+    },
+    {
+      "id": "sit-entretien",
+      "titre": "Préparer un entretien",
+      "icone": "dialogue",
+      "fiches": ["com-f-ecoute", "com-f-reformuler"],
+      "objectif": "Répondre à une question d'entretien en montrant que tu as compris.",
+      "consigne": "On vous demande : « Parlez-moi d'une difficulté que vous avez surmontée. » Répondez.",
+      "role": "la recruteuse qui fait passer l'entretien",
+      "ouverture": "Bonjour, merci d'être venu. Parlez-moi d'une difficulté que vous avez surmontée."
+    },
+    {
+      "id": "sit-projet",
+      "titre": "Présenter un projet",
+      "icone": "dialogue",
+      "fiches": ["com-f-ecoute", "com-f-reformuler"],
+      "objectif": "Présenter ton projet en trois phrases, puis répondre à une question.",
+      "consigne": "Présentez votre projet en trois phrases claires.",
+      "role": "un membre du jury, curieux et bienveillant",
+      "ouverture": "Bonjour, nous vous écoutons. Présentez-nous votre projet."
+    },
+    {
+      "id": "sit-reponse",
+      "titre": "Répondre à un message",
+      "icone": "dialogue",
+      "fiches": ["com-f-ecoute", "com-f-reformuler", "rel-f-desaccord"],
+      "objectif": "Répondre à un ami contrarié, en l'écoutant d'abord.",
+      "consigne": "Votre ami écrit : « Tu n'es jamais venu à mon match. » Répondez-lui.",
+      "role": "ton ami, un peu vexé",
+      "ouverture": "Franchement, tu n'es jamais venu à mon match."
+    },
+    {
+      "id": "sit-desaccord",
+      "titre": "Exprimer un désaccord",
+      "icone": "relations",
+      "fiches": ["rel-f-osbd", "rel-f-desaccord"],
+      "objectif": "Dire non à une proposition, sans blesser, avec une demande précise.",
+      "consigne": "Votre groupe veut tout faire la veille du rendu. Dites votre désaccord.",
+      "role": "un camarade de groupe, pressé",
+      "ouverture": "On fait tout la veille, comme d'habitude, d'accord ?"
+    },
+    {
+      "id": "sit-technique",
+      "titre": "Expliquer une notion technique",
+      "icone": "technique",
+      "fiches": ["tec-f-materiel", "tec-f-logiciel"],
+      "objectif": "Expliquer simplement la différence entre mémoire vive et stockage.",
+      "consigne": "Expliquez à un ami, en trois phrases, pourquoi un document non enregistré peut se perdre.",
+      "role": "ton ami, qui n'y connaît rien en informatique",
+      "ouverture": "Dis, c'est quoi la différence entre la mémoire vive et le stockage ?"
+    }
+  ]
+}

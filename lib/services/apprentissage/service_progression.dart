@@ -172,17 +172,58 @@ class ServiceProgression extends ChangeNotifier with WidgetsBindingObserver {
     return enregistrerMaintenant();
   }
 
-  /// Résultat d'un exercice : raté → à réviser ; réussi → retiré.
-  void noterExercice(String lecon, String exercice, {required bool juste}) {
-    final dansLaListe = _p.aReviser.containsKey(exercice);
-    if (juste == !dansLaListe) return;
+  /// Résultat d'un exercice : raté → à réviser ; réussi → retiré. Avec
+  /// [fiche], la maîtrise de la notion évolue (moyenne glissante : une
+  /// erreur isolée ne fait pas tout chuter, la régularité compte).
+  void noterExercice(
+    String lecon,
+    String exercice, {
+    required bool juste,
+    String? fiche,
+  }) {
+    if (fiche == null && juste == !_p.aReviser.containsKey(exercice)) return;
     final reviser = Map<String, String>.of(_p.aReviser);
     if (juste) {
       reviser.remove(exercice);
     } else {
       reviser[exercice] = lecon;
     }
-    _changer(_p.copier(aReviser: reviser), immediat: true);
+    Map<String, double>? maitrise;
+    if (fiche != null) {
+      final avant = _p.maitrise[fiche] ?? 0.5;
+      maitrise = {
+        ..._p.maitrise,
+        fiche: (avant * (1 - poidsReponse) + (juste ? poidsReponse : 0)).clamp(
+          0.0,
+          1.0,
+        ),
+      };
+    }
+    _changer(_p.copier(aReviser: reviser, maitrise: maitrise), immediat: true);
+  }
+
+  /// Poids d'une réponse dans la maîtrise d'une fiche.
+  static const poidsReponse = 0.35;
+
+  NiveauApprenant? niveau(String parcours) => _p.niveaux[parcours];
+
+  double? maitriseDe(String fiche) => _p.maitrise[fiche];
+
+  /// Le test de niveau est-il à proposer d'office pour ce parcours ?
+  bool testAProposer(String parcours) =>
+      !_p.niveaux.containsKey(parcours) &&
+      !_p.testSansNiveau.contains(parcours);
+
+  /// Niveau estimé (test, ou ajustement après une leçon). Écrit aussitôt.
+  Future<void> fixerNiveau(String parcours, NiveauApprenant niveau) {
+    _changer(_p.copier(niveaux: {..._p.niveaux, parcours: niveau}));
+    return enregistrerMaintenant();
+  }
+
+  /// « Commencer directement » : le test reste disponible, jamais imposé.
+  void passerTest(String parcours) {
+    if (_p.testSansNiveau.contains(parcours)) return;
+    _changer(_p.copier(testSansNiveau: {..._p.testSansNiveau, parcours}));
   }
 
   /// Efface toute la progression (demande confirmée de l'utilisateur).

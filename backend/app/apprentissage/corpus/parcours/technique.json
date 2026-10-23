@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "parcours": "technique",
+  "version": 2,
+  "fiches": [
+    {
+      "id": "tec-f-materiel",
+      "titre": "Processeur, mémoire vive et stockage",
+      "niveau": 1,
+      "explication": "Le processeur interprète et exécute les instructions des programmes. La mémoire vive est la mémoire principale, rapidement accessible : on y lit, écrit et efface des données, et elle ne conserve pas son contenu quand l'appareil est mis hors tension. La mémoire de masse, comme un disque dur, garde de grandes quantités de données à long terme : elle est non volatile, mais plus lente.",
+      "exemples": [
+        "Un document non enregistré est en mémoire vive : il est perdu si l'appareil s'éteint."
+      ],
+      "a_eviter": [
+        "Croire qu'un document non enregistré est déjà gardé dans le stockage."
+      ],
+      "sources": [
+        {
+          "titre": "Processeur (fiche du Grand dictionnaire terminologique)",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/2072032/processeur",
+          "consulte_le": "2026-10-20"
+        },
+        {
+          "titre": "Mémoire vive (fiche du Grand dictionnaire terminologique)",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/8359892/memoire-vive",
+          "consulte_le": "2026-10-20"
+        },
+        {
+          "titre": "Mémoire vive (fiche du Grand dictionnaire terminologique, reprise du Dictionnaire de la comptabilité et de la gestion financière (ICCA))",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/504601/memoire-vive",
+          "consulte_le": "2026-10-20"
+        },
+        {
+          "titre": "Mémoire auxiliaire / mémoire de masse (fiche du Grand dictionnaire terminologique)",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/8390687/memoire-auxiliaire",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    },
+    {
+      "id": "tec-f-logiciel",
+      "titre": "Système d'exploitation et navigateur",
+      "niveau": 1,
+      "explication": "Le système d'exploitation est le logiciel qui sert d'intermédiaire entre l'appareil et l'utilisateur : il exécute les programmes et répartit les ressources. Windows, macOS, Ubuntu, Android et iOS en sont des exemples. Le navigateur Web (en France : « logiciel de navigation ») est un logiciel qui sert à chercher et à consulter les ressources du Web.",
+      "exemples": [
+        "Sur un téléphone Android, le navigateur est un programme exécuté par le système Android."
+      ],
+      "a_eviter": [
+        "Dire qu'un navigateur est un système d'exploitation."
+      ],
+      "sources": [
+        {
+          "titre": "Système d'exploitation (fiche du Grand dictionnaire terminologique)",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/8358548/systeme-dexploitation",
+          "consulte_le": "2026-10-20"
+        },
+        {
+          "titre": "Navigateur Web (fiche du Grand dictionnaire terminologique)",
+          "editeur": "Office québécois de la langue française",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/1299148/navigateur-web",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    }
+  ],
+  "unites": [
+    {
+      "id": "tec-u1",
+      "titre": "Les bases",
+      "lecons": [
+        {
+          "id": "tec-l1",
+          "titre": "Quelques notions d'informatique",
+          "niveau": 1,
+          "duree_minutes": 3,
+          "objectif": "Reconnaître les pièces et les logiciels essentiels d'un appareil.",
+          "fiches": [
+            "tec-f-materiel",
+            "tec-f-logiciel"
+          ],
+          "exercices": [
+            {
+              "id": "tec-l1-e1",
+              "type": "association",
+              "fiche": "tec-f-materiel",
+              "consigne": "Associez chaque élément à son rôle.",
+              "paires": [
+                [
+                  "Processeur",
+                  "Exécute les instructions des programmes"
+                ],
+                [
+                  "Mémoire vive",
+                  "Mémoire rapide, vidée hors tension"
+                ],
+                [
+                  "Mémoire de masse",
+                  "Garde les données à long terme"
+                ]
+              ],
+              "explication": "Le processeur exécute, la mémoire vive sert pendant le travail, la mémoire de masse conserve."
+            },
+            {
+              "id": "tec-l1-e2",
+              "type": "vrai_faux",
+              "fiche": "tec-f-materiel",
+              "consigne": "Vrai ou faux ?",
+              "affirmation": "Le contenu de la mémoire vive est conservé quand on éteint l'ordinateur.",
+              "reponse": false,
+              "explication": "La mémoire vive ne conserve pas son contenu hors tension."
+            },
+            {
+              "id": "tec-l1-e3",
+              "type": "choix",
+              "fiche": "tec-f-logiciel",
+              "consigne": "Lequel est un système d'exploitation ?",
+              "options": [
+                "Android",
+                "Firefox",
+                "Un processeur",
+                "Une clé USB"
+              ],
+              "bonne": 0,
+              "explication": "Android est un système d'exploitation ; Firefox est un navigateur."
+            },
+            {
+              "id": "tec-l1-e4",
+              "type": "choix",
+              "fiche": "tec-f-logiciel",
+              "consigne": "À quoi sert un navigateur web ?",
+              "options": [
+                "À chercher et consulter le Web",
+                "À refroidir l'ordinateur",
+                "À ranger les fichiers sur le disque"
+              ],
+              "bonne": 0,
+              "explication": "Le navigateur Web sert à chercher et à consulter les ressources du Web."
+            },
+            {
+              "id": "tec-l1-e5",
+              "type": "trous",
+              "fiche": "tec-f-logiciel",
+              "consigne": "Complétez.",
+              "texte": "Le ___ sert d'intermédiaire entre l'appareil et l'utilisateur. Pour consulter un site, on utilise un ___.",
+              "trous": [
+                {
+                  "options": [
+                    "clavier",
+                    "système d'exploitation",
+                    "fichier"
+                  ],
+                  "bonne": 1
+                },
+                {
+                  "options": [
+                    "navigateur",
+                    "processeur",
+                    "câble"
+                  ],
+                  "bonne": 0
+                }
+              ],
+              "explication": "Le système d'exploitation gère l'appareil et exécute les programmes ; le navigateur ouvre les sites."
+            },
+            {
+              "id": "tec-l1-e6",
+              "type": "meilleur_message",
+              "fiche": "tec-f-logiciel",
+              "consigne": "Choisissez la meilleure explication.",
+              "contexte": "Un ami demande : « C'est quoi la différence entre Android et Chrome ? »",
+              "options": [
+                "Android est un système d'exploitation ; Chrome est un navigateur, un programme qu'Android exécute.",
+                "C'est la même chose.",
+                "Chrome est un téléphone."
+              ],
+              "bonne": 0,
+              "explication": "Le navigateur est un programme parmi d'autres, exécuté par le système d'exploitation."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -6,6 +6,8 @@ import '../../services/apprentissage/espace_apprentissage.dart';
 import '../../theme/theme_jarvis.dart';
 import '../../widgets/apprentissage/elements_apprentissage.dart';
 import '../../widgets/apprentissage/fiche_et_correction.dart';
+import '../../services/apprentissage/adaptation.dart';
+import '../../services/apprentissage/selection_exercices.dart';
 import 'lecon_page.dart';
 
 /// Ouvre un parcours (noté comme dernier parcours ouvert).
@@ -94,6 +96,17 @@ class ParcoursPage extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (visibles.isNotEmpty)
+                          _centre(
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: CarteNiveau(
+                                espace: espace,
+                                parcours: parcours,
+                                lecons: [for (final (_, l) in unites) ...l],
+                              ),
+                            ),
+                          ),
                         if (unites.isEmpty)
                           _centre(
                             Padding(
@@ -303,6 +316,117 @@ class CarteLecon extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Test de niveau facultatif : proposé à la première ouverture du parcours
+/// (« Faire le test » / « Commencer directement »), puis le niveau estimé et
+/// « Refaire le test ». Exercices locaux uniquement, aucun appel IA.
+class CarteNiveau extends StatelessWidget {
+  const CarteNiveau({
+    super.key,
+    required this.espace,
+    required this.parcours,
+    required this.lecons,
+  });
+
+  final EspaceApprentissage espace;
+  final ParcoursCharge parcours;
+  final List<Lecon> lecons;
+
+  Future<void> _test(BuildContext context) {
+    final id = parcours.resume.id;
+    final progression = espace.progression;
+    return ouvrirEntrainement(
+      context,
+      espace,
+      titre: 'Découvrir mon niveau',
+      titreResultat: 'Test terminé',
+      exercices: [
+        for (final (e, lecon) in AdaptationKelasi.exercicesTest(lecons))
+          ExerciceSitue(e, lecon),
+      ],
+      surBilan: (b) {
+        final n = AdaptationKelasi.niveauPour(b.justes, b.total);
+        progression.fixerNiveau(id, n);
+        return 'Niveau estimé : ${n.libelle}';
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = PaletteJarvis.of(context);
+    final progression = espace.progression;
+    final id = parcours.resume.id;
+    final niveau = progression.niveau(id);
+    if (niveau == null && progression.testAProposer(id)) {
+      return SurfaceApprentissage(
+        key: const ValueKey('carte-test-niveau'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.speed_rounded, color: p.signal),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Découvrir mon niveau',
+                    style: styleTitre(context, taille: 15.5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${AdaptationKelasi.tailleTest} questions, facultatif.',
+              style: styleDiscret(context),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: BoutonApprentissage(
+                    key: const ValueKey('passer-test'),
+                    libelle: 'Commencer directement',
+                    secondaire: true,
+                    surAppui: () => progression.passerTest(id),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: BoutonApprentissage(
+                    key: const ValueKey('faire-test'),
+                    libelle: 'Faire le test',
+                    surAppui: () => _test(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+    return Row(
+      key: const ValueKey('niveau-parcours'),
+      children: [
+        const SizedBox(width: 4),
+        Icon(Icons.speed_rounded, size: 18, color: p.texteSecondaire),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            niveau == null ? 'Niveau non évalué' : 'Niveau : ${niveau.libelle}',
+            style: styleDiscret(context, taille: 13.5),
+          ),
+        ),
+        TextButton(
+          key: const ValueKey('refaire-test'),
+          onPressed: () => _test(context),
+          child: Text(niveau == null ? 'Faire le test' : 'Refaire le test'),
+        ),
+      ],
     );
   }
 }

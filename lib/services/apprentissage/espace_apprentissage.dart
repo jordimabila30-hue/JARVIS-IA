@@ -1,6 +1,7 @@
 import '../voice_session.dart';
 import 'catalogue_apprentissage.dart';
 import 'service_progression.dart';
+import 'session_tuteur.dart';
 
 /// Interrupteur local du module Apprendre (Kelasi). Désactivé
 /// (`--dart-define=JARVIS_APPRENTISSAGE=false`) : l'entrée du menu
@@ -54,12 +55,24 @@ class EspaceApprentissage {
     CatalogueApprentissage? catalogue,
     ServiceProgression? progression,
     this.lecteur,
+    this.tuteur,
+    this.voix,
   }) : catalogue = catalogue ?? CatalogueApprentissage(),
        progression = progression ?? ServiceProgression();
 
   final CatalogueApprentissage catalogue;
   final ServiceProgression progression;
   final LecteurEcoute? lecteur;
+
+  /// Professeur IA (backend unifié, MIA universel) ; null sans compte.
+  final AppelTuteur? tuteur;
+
+  /// Session vocale de JARVIS, réutilisée pour l'oral (aucun second
+  /// moteur) ; null : oral indisponible (tests, plateforme sans voix).
+  final VoiceSession? voix;
+
+  /// Nouvelle demande au professeur IA.
+  SessionTuteur session() => SessionTuteur(tuteur);
 
   Future<void>? _pret;
 

@@ -262,8 +262,12 @@ void main() {
       });
       final c = CatalogueApprentissage(bundle: bundle);
       await c.charger();
+      // Catalogue + situations (absentes ici : liste vide, sans erreur).
+      final premieres = bundle.lectures;
+      expect(premieres, 2);
+      expect(c.situations, isEmpty);
       await c.charger();
-      expect(bundle.lectures, 1);
+      expect(bundle.lectures, premieres);
     });
   });
 }

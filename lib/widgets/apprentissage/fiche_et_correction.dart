@@ -15,7 +15,11 @@ class PanneauCorrection extends StatelessWidget {
     required this.surContinuer,
     required this.surReessayer,
     this.fiche,
+    this.actions,
   });
+
+  /// Actions du professeur IA (Plus simplement, Mon erreur…), facultatives.
+  final Widget? actions;
 
   final Correction correction;
   final VoidCallback surContinuer;
@@ -73,6 +77,7 @@ class PanneauCorrection extends StatelessWidget {
               correction.exercice.explication,
               style: styleDiscret(context, taille: 14).copyWith(height: 1.4),
             ),
+            if (actions != null) ...[const SizedBox(height: 10), actions!],
             const SizedBox(height: 14),
             Row(
               children: [

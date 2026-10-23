@@ -9,6 +9,7 @@ import '../models/integrations/etat_gmail.dart';
 import '../models/importation/reference_whatsapp.dart';
 import '../models/utilisation/utilisation.dart';
 import '../utils/format_utilisation.dart';
+import '../models/apprentissage/tuteur.dart';
 import 'flux_sse.dart';
 
 /// Compte tel que le backend JARVIS (FastAPI) le reconnaît, d'après le
@@ -276,6 +277,123 @@ class ApiJarvis {
       ),
       ),
     );
+  }
+
+  /// Kelasi : tuteur pédagogique (`POST /api/v1/apprentissage/tuteur`,
+  /// SSE). Mêmes garanties que [discuter] : jeton renouvelé une fois,
+  /// annulation par [annulation], délais, erreurs typées, utilisation
+  /// actualisée à la fin. [surFragment] reçoit le texte (repères retirés
+  /// par le serveur) ; les sources n'arrivent qu'avec la réponse finale.
+  Future<ResultatApi<ReponseTuteur>> tuteur(
+    DemandeTuteur demande, {
+    Future<void>? annulation,
+    void Function(String fragment)? surFragment,
+  }) => _consommer(
+    () => _authentifie((j) => _tuteur(j, demande, annulation, surFragment)),
+  );
+
+  Future<_Reponse<ReponseTuteur>> _tuteur(
+    String j,
+    DemandeTuteur demande,
+    Future<void>? annulation,
+    void Function(String fragment)? surFragment,
+  ) async {
+    _Reponse<ReponseTuteur> echec(ErreurApi e, [String? detail]) =>
+        _Resultat(EchecApi(e, detail: detail));
+    final abandon = Completer<void>();
+    var annulee = false;
+    if (annulation != null) {
+      unawaited(
+        annulation.then((_) {
+          annulee = true;
+          if (!abandon.isCompleted) abandon.complete();
+        }),
+      );
+    }
+    final requete =
+        http.AbortableRequest(
+            'POST',
+            _route('api/v1/apprentissage/tuteur'),
+            abortTrigger: abandon.future,
+          )
+          ..headers.addAll({
+            'Authorization': 'Bearer $j',
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          })
+          ..body = jsonEncode(demande.versJson());
+    final http.StreamedResponse r;
+    try {
+      r = await _client.send(requete).timeout(delaiChat);
+    } on TimeoutException {
+      if (!abandon.isCompleted) abandon.complete();
+      return echec(ErreurApi.delaiDepasse);
+    } catch (_) {
+      return echec(annulee ? ErreurApi.annulee : ErreurApi.injoignable);
+    }
+    if (r.statusCode != 200) {
+      String corps;
+      try {
+        corps = await r.stream.bytesToString().timeout(delai);
+      } catch (_) {
+        corps = '';
+      }
+      return switch (r.statusCode) {
+        401 || 403 => _Refus(_detail(corps), j),
+        429 => echec(ErreurApi.quotaAtteint, messageLimite(corps)),
+        422 => echec(ErreurApi.serveur, _messageDetail(corps)),
+        503 => echec(ErreurApi.indisponible, _detail(corps)),
+        _ => echec(ErreurApi.serveur, 'HTTP ${r.statusCode}'),
+      };
+    }
+    final texte = StringBuffer();
+    var sources = const <SourceTuteur>[];
+    var memeVersion = true;
+    _Reponse<ReponseTuteur>? fin;
+    try {
+      await for (final e in decoderSse(r.stream.timeout(delaiInactivite))) {
+        if (annulee) break;
+        if (fin != null) continue;
+        final d = e.donnees.isEmpty
+            ? const <String, dynamic>{}
+            : jsonDecode(e.donnees) as Map<String, dynamic>;
+        switch (e.type) {
+          case 'meta':
+            memeVersion = d['meme_version'] != false;
+          case 'delta':
+            final f = d['text'];
+            if (f is String && f.isNotEmpty) {
+              texte.write(f);
+              surFragment?.call(f);
+            }
+          case 'sources':
+            sources = SourceTuteur.listeDepuisJson(d['sources']);
+          case 'done':
+            fin = texte.toString().trim().isEmpty
+                ? echec(ErreurApi.reponseVide)
+                : _Resultat(
+                    SuccesApi(
+                      ReponseTuteur(
+                        texte: texte.toString(),
+                        sources: sources,
+                        memeVersion: memeVersion,
+                      ),
+                    ),
+                  );
+          case 'error':
+            final m = d['message'];
+            fin = echec(ErreurApi.iaIndisponible, m is String ? m : null);
+        }
+      }
+    } on TimeoutException {
+      return fin ?? echec(ErreurApi.delaiDepasse);
+    } on FormatException {
+      return fin ?? echec(ErreurApi.serveur, 'flux illisible');
+    } catch (_) {
+      return fin ?? echec(annulee ? ErreurApi.annulee : ErreurApi.fluxInterrompu);
+    }
+    if (annulee) return fin ?? echec(ErreurApi.annulee);
+    return fin ?? echec(ErreurApi.fluxInterrompu);
   }
 
   /// Appelé après chaque opération IA qui a pu consommer le quota (réponse
