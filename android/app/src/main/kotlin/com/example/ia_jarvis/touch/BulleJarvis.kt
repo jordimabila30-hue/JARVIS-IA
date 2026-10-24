@@ -4,8 +4,10 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
+import android.graphics.RectF
 import android.graphics.Shader
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
@@ -30,9 +32,11 @@ interface RenduBulle {
 }
 
 /**
- * Bulle JARVIS dessinée à la main : disque sombre translucide, anneau
- * fin, cœur lumineux qui évoque la particule PIM (respiration lente
- * seulement quand la bulle est sollicitée).
+ * Bulle JARVIS dessinée à la main, à l'identité de JARVIS (K1-07) : disque
+ * plein dégradé indigo → lavande (couleurs de l'application), trois arcs
+ * lumineux façon réacteur (forme « Réacteur Arc » de PIM) et la perle
+ * au centre. Rien qui rappelle les anneaux gris d'AssistiveTouch. Respiration
+ * lente seulement quand la bulle est sollicitée.
  */
 class BulleJarvis(context: Context) : View(context), RenduBulle {
 
@@ -40,22 +44,24 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
 
     private val densite = resources.displayMetrics.density
 
-    private val fond = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(214, 28, 26, 38) }
-    private val anneau = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val fond = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bord = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = densite
-        color = Color.argb(70, 255, 255, 255)
+        color = Color.argb(150, 255, 255, 255)
     }
-    private val anneauInterieur = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val arcs = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.5f * densite
-        color = Color.argb(60, 221, 213, 239)
+        strokeWidth = 2.6f * densite
+        strokeCap = Paint.Cap.ROUND
+        color = Color.argb(235, 236, 232, 255)
     }
+    private val cadreArcs = RectF()
     private val halo = Paint(Paint.ANTI_ALIAS_FLAG)
     private val marqueVocal = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2.5f * densite
-        color = Color.rgb(0x7D, 0x8D, 0xF5)
+        color = Color.WHITE
     }
     private var vocal = false
     private val coeur = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -78,9 +84,16 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         val r = minOf(w, h) / 2f
+        fond.shader = LinearGradient(
+            0f, 0f, w.toFloat(), h.toFloat(),
+            intArrayOf(Color.rgb(0x4B, 0x4F, 0xB0), Color.rgb(0x8C, 0x7A, 0xD2)),
+            null, Shader.TileMode.CLAMP,
+        )
+        val a = r * 0.6f
+        cadreArcs.set(w / 2f - a, h / 2f - a, w / 2f + a, h / 2f + a)
         halo.shader = RadialGradient(
             w / 2f, h / 2f, r * 0.62f,
-            intArrayOf(Color.argb(150, 140, 122, 210), Color.argb(60, 85, 89, 184), Color.TRANSPARENT),
+            intArrayOf(Color.argb(120, 255, 255, 255), Color.argb(40, 236, 232, 255), Color.TRANSPARENT),
             floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
         )
         coeur.shader = RadialGradient(
@@ -95,8 +108,8 @@ class BulleJarvis(context: Context) : View(context), RenduBulle {
         val cy = height / 2f
         val r = minOf(width, height) / 2f
         canvas.drawCircle(cx, cy, r - densite, fond)
-        canvas.drawCircle(cx, cy, r - densite, anneau)
-        canvas.drawCircle(cx, cy, r * 0.56f, anneauInterieur)
+        canvas.drawCircle(cx, cy, r - densite, bord)
+        for (i in 0 until 3) canvas.drawArc(cadreArcs, -90f + 20f + i * 120f, 80f, false, arcs)
         val s = 0.9f + 0.14f * phase
         canvas.save()
         canvas.scale(s, s, cx, cy)

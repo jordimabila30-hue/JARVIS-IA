@@ -9,7 +9,10 @@ import 'panneau_gmail.dart';
 /// Ajouter un outil : une valeur ici, puis son logo, son statut et sa page
 /// dans [PanneauOutils] et `FenetreParametres` (aucun outil fictif).
 enum OutilJarvis {
-  gmail('Gmail', 'E-mails Google');
+  gmail('Gmail', 'E-mails Google'),
+
+  /// Entrée prévue : aucun fournisseur de calendrier n'est raccordé.
+  agenda('Agenda', 'Rendez-vous et rappels');
 
   const OutilJarvis(this.nom, this.description);
 
@@ -60,6 +63,15 @@ class _PanneauOutilsState extends State<PanneauOutils> {
                   surAppui: () => widget.surChoix(outil),
                 );
               },
+            ),
+            OutilJarvis.agenda => _LigneOutil(
+              outil: outil,
+              logo: const LogoAgenda(),
+              statut: StatutOutil(
+                libelle: PanneauAgenda.statut,
+                couleur: CouleursJarvis.texteSecondaire,
+              ),
+              surAppui: () => widget.surChoix(outil),
             ),
           },
       ],
@@ -147,6 +159,67 @@ class _LigneOutil extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// Pastille de l'Agenda (aucun logo de fournisseur).
+class LogoAgenda extends StatelessWidget {
+  const LogoAgenda({super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 34,
+    height: 34,
+    decoration: BoxDecoration(
+      color: CouleursJarvis.signal.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Icon(
+      Icons.calendar_month_rounded,
+      size: 20,
+      color: CouleursJarvis.signal,
+    ),
+  );
+}
+
+/// Paramètres › Outils › Agenda : présentation seulement. Aucun calendrier
+/// (Google, Outlook…) n'est raccordé, rien n'est lu.
+class PanneauAgenda extends StatelessWidget {
+  const PanneauAgenda({super.key});
+
+  static const statut = 'Bientôt disponible';
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 560),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const LogoAgenda(),
+        const SizedBox(height: 14),
+        Text(
+          'Agenda',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: CouleursJarvis.texte,
+          ),
+        ),
+        const SizedBox(height: 6),
+        StatutOutil(libelle: statut, couleur: CouleursJarvis.texteSecondaire),
+        const SizedBox(height: 14),
+        Text(
+          'JARVIS pourra bientôt consulter tes rendez-vous et te rappeler '
+          'tes échéances. Aucun calendrier n’est connecté pour le moment.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: CouleursJarvis.texteSecondaire,
+          ),
+        ),
+      ],
     ),
   );
 }

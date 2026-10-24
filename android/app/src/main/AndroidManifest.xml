@@ -145,6 +145,13 @@
              paquets, Android 11+). -->
         <package android:name="com.whatsapp"/>
         <package android:name="com.whatsapp.w4b"/>
+        <!-- Menu « + » : ouvrir Instagram, Messenger, l'appli e-mail. -->
+        <package android:name="com.instagram.android"/>
+        <package android:name="com.facebook.orca"/>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.APP_EMAIL"/>
+        </intent>
         <!-- Mode vocal : service de reconnaissance vocale (Android 11+). -->
         <intent>
             <action android:name="android.speech.RecognitionService"/>

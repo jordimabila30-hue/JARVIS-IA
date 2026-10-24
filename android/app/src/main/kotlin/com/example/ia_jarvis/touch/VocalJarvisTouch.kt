@@ -15,6 +15,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -45,7 +46,7 @@ import kotlin.math.sin
 class VocalJarvisTouch(
     private val contexte: Context,
     private val wm: WindowManager,
-    zone: Rect,
+    private val zone: Rect,
     private val surReduire: () -> Unit,
     private val surChat: () -> Unit,
     private val surQuitter: () -> Unit,
@@ -128,13 +129,10 @@ class VocalJarvisTouch(
             "coupe" -> "Micro coupé"
             else -> (e["statut"] as? String)?.takeIf { it.isNotBlank() } ?: "Prêt"
         }
-        val reponse = e["reponse"] as? String
+        // K1-10 : interface légère. La réponse est dite, jamais recopiée ici
+        // (elle reste entière dans le chat) ; seule la phrase entendue, une ligne.
         val entendu = e["transcription"] as? String
-        phrase.text = when {
-            etat == "parole" && !reponse.isNullOrBlank() -> reponse
-            !entendu.isNullOrBlank() -> "« $entendu »"
-            else -> ""
-        }
+        phrase.text = if (etat != "parole" && !entendu.isNullOrBlank()) "« $entendu »" else ""
         phrase.visibility = if (phrase.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         micro.alpha = if (actif) 1f else 0.45f
         libelleMicro.text = if (actif) "Micro" else "Micro coupé"
@@ -161,6 +159,41 @@ class VocalJarvisTouch(
         contextuel.animate().cancel()
         contextuel.alpha = 0f
         contextuel.animate().alpha(1f).setDuration(120).start()
+    }
+
+    /**
+     * K1-08 : la fenêtre se déplace en glissant son en-tête (ou la zone du
+     * symbole), sans jamais sortir de la zone utile de l'écran. Le bouton
+     * Réduire de l'en-tête reçoit ses touchers avant la poignée.
+     */
+    private fun deplacable(poignee: View) {
+        var depart = 0f to 0f
+        var origine = 0 to 0
+        var glisse = false
+        val seuil = dp(6)
+        poignee.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    depart = ev.rawX to ev.rawY
+                    origine = params.x to params.y
+                    glisse = false
+                    true      // suivre le geste (les boutons enfants gardent leurs touchers)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.rawX - depart.first
+                    val dy = ev.rawY - depart.second
+                    if (!glisse && maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy)) > seuil) glisse = true
+                    if (glisse && ajoutee) {
+                        val h = racine.height.takeIf { it > 0 } ?: dp(260)
+                        params.x = (origine.first + dx.roundToInt()).coerceIn(zone.left, max(zone.left, zone.right - largeur))
+                        params.y = (origine.second + dy.roundToInt()).coerceIn(zone.top, max(zone.top, zone.bottom - h))
+                        try { wm.updateViewLayout(racine, params) } catch (_: Exception) {}
+                    }
+                    glisse
+                }
+                else -> glisse
+            }
+        }
     }
 
     /** Amplitude réelle (0 à 1) du micro ou de la voix de JARVIS. */
@@ -201,8 +234,10 @@ class VocalJarvisTouch(
             setOnClickListener { surReduire() }
         }, LinearLayout.LayoutParams(dp(40), dp(36)))
         racine.addView(entete, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        deplacable(entete)
 
         racine.addView(symbole, LinearLayout.LayoutParams(dp(92), dp(92)).apply { topMargin = dp(4) })
+        deplacable(symbole)
         etatTexte.apply {
             textSize = 15f
             gravity = Gravity.CENTER
@@ -214,7 +249,7 @@ class VocalJarvisTouch(
             textSize = 12.5f
             gravity = Gravity.CENTER
             setTextColor(SECONDAIRE)
-            maxLines = 2
+            maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             visibility = View.GONE
             setPadding(dp(8), dp(4), dp(8), 0)

@@ -952,6 +952,9 @@ class _Contenu extends StatelessWidget {
                       OutilJarvis.gmail => Expanded(
                         child: Center(child: PanneauGmail(service: gmail)),
                       ),
+                      OutilJarvis.agenda => const Expanded(
+                        child: Center(child: PanneauAgenda()),
+                      ),
                     },
                     SectionParametres.chatVocal => PanneauChatVocal(
                       session: session,

@@ -860,6 +860,23 @@ void main() {
       c.dispose();
     });
 
+    test('K1-11 : réponse vocale entière dans le fil, jamais réécrite au '
+        'retour du mode vocal', () async {
+      final s = _ServeurPilote();
+      final c = _session(s);
+      final vocale = c.repondreVocal(_question);
+      await _attendreFlux(s);
+      s.meta();
+      s.delta('Lima est au Pérou.');
+      s.done();
+      await s.fermer();
+      await vocale;
+      final e = _deJarvis(c).single.ecriture;
+      expect(e?.immediat ?? true, isTrue);
+      expect(e == null || e.termine, isTrue);
+      c.dispose();
+    });
+
     test('mode vocal interrompu : le texte reçu puis l’explication', () async {
       final s = _ServeurPilote();
       final c = _session(s);

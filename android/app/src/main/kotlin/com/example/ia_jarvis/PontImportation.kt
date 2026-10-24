@@ -144,6 +144,29 @@ class PontImportation(
                 }
             }
 
+            // Menu « + » : Instagram, Messenger (paquets), Mail (appli e-mail
+            // par défaut). false : absente, l'appelant ouvre le site.
+            "ouvrirApplication" -> {
+                val pm = activite.packageManager
+                val cible = appel.arguments as? String
+                val intent = if (cible == "mail") {
+                    Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_EMAIL)
+                        .takeIf { it.resolveActivity(pm) != null }
+                } else {
+                    cible?.let { pm.getLaunchIntentForPackage(it) }
+                }
+                if (intent == null) {
+                    reponse.success(false)
+                } else {
+                    try {
+                        activite.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        reponse.success(true)
+                    } catch (e: ActivityNotFoundException) {
+                        reponse.success(false)
+                    }
+                }
+            }
+
             "ouvrirLecture" -> {
                 val uri = references[appel.arguments as String]
                 if (uri == null) {

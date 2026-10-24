@@ -960,7 +960,9 @@ class ConversationSession extends ChangeNotifier {
     final flux = TexteEnDirect(
       nettoyer: MoteurConversationIA.texteSimpleProvisoire,
     );
-    final ecriture = EcritureProgressive(flux);
+    // Échange vocal : la réponse est dite, pas écrite sous les yeux. Le fil
+    // la montre entière (au retour du mode vocal, rien ne se réécrit).
+    final ecriture = EcritureProgressive(flux)..immediat = vocal;
     int? idBulle;
     DateTime? heureBulle;
     var attente = true;

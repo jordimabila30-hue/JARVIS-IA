@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/theme_jarvis.dart';
 import 'feuille_ajout.dart';
+import '../services/ouverture_messageries.dart';
 import 'importation/logo_whatsapp.dart';
 import 'bouton_vocal.dart';
 
@@ -93,6 +94,7 @@ class LigneDeCommande extends StatefulWidget {
     this.surLecture,
     this.surImporterWhatsApp,
     this.surAjouterMessageWhatsApp,
+    this.surAiderARepondre,
     this.pieceJointe,
   });
 
@@ -120,6 +122,9 @@ class LigneDeCommande extends StatefulWidget {
   /// Phase 5 : « Ajouter une réponse reçue » (actualiser un contexte
   /// WhatsApp par copier-coller) ; null : indisponible (sans compte).
   final VoidCallback? surAjouterMessageWhatsApp;
+
+  /// « Répondre à un message reçu » (hors WhatsApp) : volet de saisie.
+  final VoidCallback? surAiderARepondre;
 
   /// Pièce jointe en attente d'envoi, posée au-dessus du texte dans la
   /// barre (dépliée tant qu'elle est là). Null : aucune.
@@ -343,6 +348,7 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
         surColler: _coller,
         surImporter: widget.surImporterWhatsApp,
         surAjouterMessage: widget.surAjouterMessageWhatsApp,
+        surAiderARepondre: widget.surAiderARepondre,
         feuille: compacte,
       ),
     );
@@ -576,9 +582,14 @@ class _BoutonAjouter extends StatefulWidget {
     required this.surColler,
     this.surImporter,
     this.surAjouterMessage,
+    this.surAiderARepondre,
     this.feuille = false,
   });
 
+  /// Ouverture des messageries (remplaçable dans les tests).
+  static OuvertureMessageries ouverture = OuvertureMessageries();
+
+  final VoidCallback? surAiderARepondre;
   final VoidCallback surColler;
   final VoidCallback? surImporter;
   final VoidCallback? surAjouterMessage;
@@ -605,10 +616,16 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
         widget.surImporter?.call();
       case ChoixAjout.ajouterMessageWhatsApp:
         widget.surAjouterMessage?.call();
+      case ChoixAjout.aiderARepondre:
+        widget.surAiderARepondre?.call();
+      case final ChoixAjout c?:
+        _ouvrir(c.messagerie!);
       case null:
         break;
     }
   }
+
+  void _ouvrir(Messagerie m) => _BoutonAjouter.ouverture.ouvrir(m);
 
   @override
   Widget build(BuildContext context) {
@@ -656,18 +673,21 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
               style: TextStyle(fontSize: 13),
             ),
           ),
-        for (final (titre, visuel) in FeuilleAjout.bientot)
+        if (widget.surAiderARepondre case final aider?)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.reply_rounded, size: 18),
+            onPressed: aider,
+            child: const Text(FeuilleAjout.aiderTitre),
+          ),
+        for (final (choix, visuel) in FeuilleAjout.messageries)
           MenuItemButton(
             leadingIcon: SizedBox.square(
               dimension: 18,
               child: FittedBox(child: visuel),
             ),
-            onPressed: null,
-            trailingIcon: const Text(
-              FeuilleAjout.bientotDisponible,
-              style: TextStyle(fontSize: 12),
-            ),
-            child: Text(titre),
+            trailingIcon: const Icon(Icons.open_in_new_rounded, size: 16),
+            onPressed: () => _ouvrir(choix.messagerie!),
+            child: Text(choix.messagerie!.libelle),
           ),
       ],
       builder: (context, menu, _) => Listener(

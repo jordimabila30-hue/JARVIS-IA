@@ -35,6 +35,7 @@ import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
 import '../utils/local_date_time.dart';
 import '../utils/chrono_perf.dart';
+import '../widgets/conversation/volet_aide_reponse.dart';
 import '../widgets/bouton_vocal.dart';
 import '../widgets/conversation/carte_piece_jointe.dart';
 import '../widgets/defilement_sans_barre.dart';
@@ -743,6 +744,15 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     });
   }
 
+  /// Message reçu hors WhatsApp : JARVIS propose une réponse dans le chat
+  /// (moteur habituel), rien n'est envoyé dans la messagerie.
+  Future<void> _aiderARepondre() async {
+    final demande = await afficherVoletAideReponse(context);
+    if (demande == null || !mounted) return;
+    _pim.surEnvoi();
+    _conversation.envoyer(demande.question);
+  }
+
   void _envoyer(String message) {
     // Petite impulsion des particules le long de la barre, puis le
     // message part dans la conversation.
@@ -1013,6 +1023,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
                                       surLecture: _basculerLecture,
                                       surImporterWhatsApp:
                                           _ouvrirImportationWhatsApp,
+                                      surAiderARepondre: _aiderARepondre,
                                       surAjouterMessageWhatsApp:
                                           _actualisation == null
                                           ? null
@@ -1195,7 +1206,8 @@ class _Accueil extends StatelessWidget {
                 fontSize: g.tailleMission,
                 height: 1.5,
                 letterSpacing: 0.1,
-                color: titre?.withValues(alpha: 0.88) ??
+                color:
+                    titre?.withValues(alpha: 0.88) ??
                     CouleursJarvis.texteSecondaire,
                 shadows: ombres,
               ),

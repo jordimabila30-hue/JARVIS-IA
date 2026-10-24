@@ -5,10 +5,27 @@ import 'package:flutter/services.dart';
 
 import '../theme/theme_jarvis.dart';
 import '../models/conversations/source_conversation.dart';
+import '../services/ouverture_messageries.dart';
 import 'importation/logo_whatsapp.dart';
 
 /// Ce que l'utilisateur a choisi dans la feuille « Ajouter à JARVIS ».
-enum ChoixAjout { coller, importerWhatsApp, ajouterMessageWhatsApp }
+enum ChoixAjout {
+  coller,
+  importerWhatsApp,
+  ajouterMessageWhatsApp,
+  aiderARepondre,
+  instagram,
+  messenger,
+  mail;
+
+  /// Messagerie à ouvrir (application ou site) ; null : action de JARVIS.
+  Messagerie? get messagerie => switch (this) {
+    instagram => Messagerie.instagram,
+    messenger => Messagerie.messenger,
+    mail => Messagerie.mail,
+    _ => null,
+  };
+}
 
 /// Feuille « Ajouter à JARVIS » (téléphone) : remplace le petit menu du
 /// bouton « + », qui pouvait passer sous le clavier. Renvoie le choix, ou
@@ -20,6 +37,9 @@ Future<ChoixAjout?> afficherFeuilleAjout(
   return showModalBottomSheet<ChoixAjout>(
     context: context,
     useSafeArea: true,
+    // Petit écran (paysage, grande police) : la feuille défile au lieu de
+    // déborder.
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: CouleursJarvis.texte.withValues(alpha: 0.16),
     elevation: 0,
@@ -32,13 +52,21 @@ class FeuilleAjout extends StatelessWidget {
 
   static const titre = 'Ajouter à JARVIS';
 
-  static const bientotDisponible = 'Bientôt disponible';
+  static const ouvrirDetail = 'Ouvrir l’application';
+  static const aiderTitre = 'Répondre à un message reçu';
+  static const aiderDetail = 'Instagram, Messenger, e-mail, SMS…';
 
-  /// Entrées affichées sans action (aucune intégration encore).
-  static const bientot = [
-    ('Instagram', LogoSource(SourceConversation.instagram, taille: 30)),
-    ('Messenger', LogoSource(SourceConversation.messenger, taille: 30)),
-    ('Mail', Icon(Icons.mail_outline_rounded, size: 26)),
+  /// Messageries ouvertes depuis la feuille (application, sinon site).
+  static const messageries = [
+    (
+      ChoixAjout.instagram,
+      LogoSource(SourceConversation.instagram, taille: 30),
+    ),
+    (
+      ChoixAjout.messenger,
+      LogoSource(SourceConversation.messenger, taille: 30),
+    ),
+    (ChoixAjout.mail, Icon(Icons.mail_outline_rounded, size: 26)),
   ];
 
   /// Phase 5 : « Ajouter une réponse reçue » disponible (compte connecté),
@@ -68,60 +96,70 @@ class FeuilleAjout extends StatelessWidget {
         20,
         20 + MediaQuery.viewPaddingOf(context).bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: CouleursJarvis.trait,
-                borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: CouleursJarvis.trait,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              titre,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-                color: CouleursJarvis.texte,
+            const SizedBox(height: 16),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                titre,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: CouleursJarvis.texte,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _Choix(
-            icone: Icons.content_paste_rounded,
-            titre: 'Coller une conversation',
-            detail: 'Depuis le presse-papiers',
-            surChoix: () => Navigator.of(context).pop(ChoixAjout.coller),
-          ),
-          const SizedBox(height: 6),
-          LigneImportGlissante(
-            surImporter: () =>
-                Navigator.of(context).pop(ChoixAjout.importerWhatsApp),
-            surAjouterMessage: actualisation
-                ? () => Navigator.of(
-                    context,
-                  ).pop(ChoixAjout.ajouterMessageWhatsApp)
-                : null,
-          ),
-          // Prochaines messageries : visibles, pas encore disponibles.
-          for (final (titre, visuel) in FeuilleAjout.bientot) ...[
+            const SizedBox(height: 12),
+            _Choix(
+              icone: Icons.content_paste_rounded,
+              titre: 'Coller une conversation',
+              detail: 'Depuis le presse-papiers',
+              surChoix: () => Navigator.of(context).pop(ChoixAjout.coller),
+            ),
+            const SizedBox(height: 6),
+            LigneImportGlissante(
+              surImporter: () =>
+                  Navigator.of(context).pop(ChoixAjout.importerWhatsApp),
+              surAjouterMessage: actualisation
+                  ? () => Navigator.of(
+                      context,
+                    ).pop(ChoixAjout.ajouterMessageWhatsApp)
+                  : null,
+            ),
             const SizedBox(height: 6),
             _Choix(
-              visuel: visuel,
-              titre: titre,
-              detail: FeuilleAjout.bientotDisponible,
+              icone: Icons.reply_rounded,
+              titre: FeuilleAjout.aiderTitre,
+              detail: FeuilleAjout.aiderDetail,
+              surChoix: () =>
+                  Navigator.of(context).pop(ChoixAjout.aiderARepondre),
             ),
+            for (final (choix, visuel) in FeuilleAjout.messageries) ...[
+              const SizedBox(height: 6),
+              _Choix(
+                visuel: visuel,
+                titre: choix.messagerie!.libelle,
+                detail: FeuilleAjout.ouvrirDetail,
+                surChoix: () => Navigator.of(context).pop(choix),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

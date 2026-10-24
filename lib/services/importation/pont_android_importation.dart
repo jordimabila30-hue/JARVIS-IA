@@ -95,6 +95,17 @@ class PontAndroidImportation implements ReceptionPartages {
     }
   }
 
+  /// Ouvre une application installée (nom de paquet, ou `mail` : l'appli
+  /// e-mail par défaut) ; false si elle est absente.
+  Future<bool> ouvrirApplication(String cible) async {
+    try {
+      return await _canal.invokeMethod<bool>('ouvrirApplication', cible) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Sélecteur de documents Android ; null si fermé sans choix.
   Future<FichierBrut?> choisirFichier() async {
     final brut = await _canal.invokeMapMethod<Object?, Object?>(
