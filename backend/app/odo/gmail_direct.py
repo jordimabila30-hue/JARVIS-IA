@@ -83,4 +83,10 @@ def reconnaitre(question: str) -> dict | None:
                 return None
             args["max"] = n
         return args
+    # « résume le fil / le mail / la discussion sur la réunion de projet » : sujet explicite (1 à 5 mots).
+    m = re.fullmatch(rf"{_VERBE} (?:le|la) (?:dernier |derniere )?(?:fil|discussion|conversation|{_MAILS}) "
+                     r"(?:sur|a propos de) (?:le |la |les |l'|mon |ma |mes )?([a-z0-9'-]+(?: [a-z0-9'-]+){0,4})", t)
+    if m:
+        mots = [x for x in re.split(r"[ ']", m.group(1)) if len(x) > 2 and x not in ("des", "les", "pour", "avec")]
+        return {"lire": True, "termes": [" ".join(mots)] + mots[:4], "max": 1} if mots else None
     return None

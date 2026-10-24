@@ -62,10 +62,14 @@ CONSIGNE_REPONDRE = (
     "selon la demande : question précise → la réponse et sa raison, 1 à 2 phrases (≤ 50 mots), sans parler "
     "des autres e-mails ; « résume » un e-mail → 2 à 4 phrases (≤ 70 mots) ; « résume rapidement » ou point sur "
     "plusieurs e-mails → un seul paragraphe de 3 à 6 phrases (≤ 120 mots) qui commence par ce qui demande une "
-    "action ou a changé, regroupe le reste et cite brièvement ce qui est sans importance ; « explique » ou « en "
-    "détail » → autant que nécessaire. Garde les dates, décisions, demandes, changements et réserves "
+    "action ou a changé, regroupe le reste et cite brièvement ce qui est sans importance ; « que dois-je faire ? » → seulement ce que les e-mails "
+    "DEMANDENT, en une à trois phrases, puis ce qui est seulement possible en une phrase à part (jamais "
+    "présenté comme obligatoire) ; « explique » ou « en détail » → autant que nécessaire. Garde les dates, décisions, demandes, changements et réserves "
     "indispensables ; pas de préambule, pas de « en résumé », pas de répétition. Jamais de rubriques ou d'étiquettes (« Faits », « Interprétation », "
-    "« Conclusion »…), de titres, de tableaux ni de gras, sauf si l'utilisateur demande une structure."
+    "« Conclusion »…), de titres, de tableaux ni de gras, sauf si l'utilisateur demande une structure. Écris en "
+    "prose, comme on le dirait à voix haute ; une liste seulement si elle est demandée ou s'il y a plus de quatre "
+    "éléments indépendants. Exemple de ton juste : « Le lycée a reçu ta demande, mais il manque encore ton "
+    "attestation, à envoyer avant vendredi. »"
 )
 CONSIGNE_GMAIL = CONSIGNE_CHERCHER + CONSIGNE_COMPRENDRE + CONSIGNE_REPONDRE
 # Chemin direct (gmail_direct) : ODO a déjà cherché et lu ; ni recherche, ni outils.
@@ -220,12 +224,16 @@ class GmailRechercher(_OutilGmail):
             return ResultatOutil("\n".join(lignes), donnees=donnees)
         # Lus dans le MÊME tour : textes réunis (budget partagé), aucun nouvel appel du modèle.
         par_email = max(600, LECTURE_TOTAL // len(a_lire))
-        lus = await asyncio.gather(*(self.client.message(contexte.user_id, x.email.id, par_email * BRUT)
-                                     for x in a_lire), return_exceptions=True)
+        # Discussion de plusieurs messages trouvés : lue entière (réponses,
+        # corrections, reports), citations répétées retirées par `dossier`.
+        lus = await asyncio.gather(*(
+            self.client.fil(contexte.user_id, x.email.fil, self.reglages.gmail_fil_max_messages, par_email * BRUT)
+            if x.dans_fil > 1 else self.client.message(contexte.user_id, x.email.id, par_email * BRUT)
+            for x in a_lire), return_exceptions=True)
         for r in lus:
             if isinstance(r, (NonConnecte, ConnexionARenouveler)):
                 return _erreur(r)
-        emails = [r for r in lus if not isinstance(r, Exception)]
+        emails = [e for r in lus if not isinstance(r, Exception) for e in (r if isinstance(r, list) else [r])]
         donnees["requetes_gmail"] += len(a_lire)
         autres = [x for x in montres if x not in a_lire]
         if autres:

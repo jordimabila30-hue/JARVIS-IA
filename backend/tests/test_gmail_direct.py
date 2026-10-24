@@ -122,3 +122,26 @@ async def test_n_derniers_mails_lecture_minimale(env):
     boite(env)
     r = await GmailRechercher(ClientGmail(env.google)).executer(reconnaitre("Résume mes 2 derniers mails"), ctx())
     assert r.donnees["requetes_gmail"] == 1 + 2 + 2                  # liste de 2, en-têtes, textes
+
+
+@pytest.mark.parametrize("question,termes", [
+    ("Résume le fil sur la réunion de projet", ["reunion projet", "reunion", "projet"]),
+    ("Résume le mail sur les informations de rentrée", ["informations rentree", "informations", "rentree"]),
+])
+def test_sujet_explicite_chemin_direct(question, termes):
+    assert reconnaitre(question) == {"lire": True, "termes": termes, "max": 1}
+
+
+async def test_discussion_lue_entiere_dans_le_chemin_direct(env):
+    from app.integrations.gmail import ClientGmail
+    from app.odo.outils_gmail import GmailRechercher
+    from scenarios_resumes import BOITE
+    from test_gmail_recherche import ctx
+    await connecter(env)
+    env.faux.filtrer = True
+    env.faux.messages = {i: message(i, de=BOITE[i]["de"], objet=BOITE[i]["objet"], date=BOITE[i]["date"],
+                                    texte=BOITE[i]["texte"], fil=BOITE[i]["fil"]) for i in ("b03aaaa", "b04aaaa")}
+    r = await GmailRechercher(ClientGmail(env.google)).executer(
+        reconnaitre("Résume le fil sur la réunion de projet"), ctx())
+    assert "Message 2/2 (le plus récent)" in r.contenu and "27 octobre" in r.contenu
+    assert r.contenu.count("aura lieu mardi 20 octobre") == 1               # ancien message, une seule fois

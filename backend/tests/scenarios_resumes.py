@@ -143,3 +143,15 @@ DEMANDES += [
             doit=[r"27 octobre|mardi 27"], interdit=[r"(?:aura lieu|est prévue?|a lieu)[^.]{0,20}20 octobre"], mots_max=70),
     Demande("d03_non_lus", "Lis mes mails non lus.", doit=[r"\w"], interdit=[r"482|913|zz9"], mots_max=160),
 ]
+
+# GMAIL 2 : fil et long mail sur le chemin direct ; suivi et style (critères fixés avant les mesures).
+DEMANDES += [
+    Demande("d04_fil_direct", "Résume le fil sur la réunion de projet.",
+            doit=[r"27 octobre|mardi 27", r"report|déplac|décal|finalement"],
+            interdit=[r"(?:aura lieu|est prévue?|a lieu|se tiendra)[^.]{0,20}20 octobre"], mots_max=70),
+    Demande("d05_long_direct", "Résume le mail sur les informations de rentrée.",
+            doit=[r"2 novembre", r"carte"], mots_max=110),
+    Demande("d06_suivi_actions", "Et qu'est-ce que je dois faire maintenant ?", suite_de="d05_long_direct",
+            doit=[r"carte|cantine|30 octobre"], interdit=[r"(?<!pas )obligatoire[^.]{0,30}(?:réunion|CDI)"],
+            mots_max=90),
+]
