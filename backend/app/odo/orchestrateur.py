@@ -143,6 +143,15 @@ class ExecutionODO:
         yield EtatOutil(outil.nom, "erreur" if r.erreur else "termine", r.erreur)
         if r.donnees:
             self.donnees.append((outil.nom, r.donnees))
+        if not r.erreur and (r.donnees or {}).get("reponse"):
+            # Réponse exacte calculée par ODO (compteur) : aucun appel IA.
+            yield Texte(r.donnees["reponse"])
+            journaliser("fin", demande=self.contexte.demande_id, tours=0, appels=self.appels,
+                        duree_ms=(time.perf_counter() - self._debut) * 1000, premier_outil_ms=self._premier_outil_ms,
+                        entree=0, sortie=0, direct=1, requetes_gmail=r.donnees.get("requetes_gmail"),
+                        fournisseur="odo")
+            yield Fin(RaisonArret.FIN, Usage(), modele="odo")
+            return
         if r.erreur or not (r.donnees or {}).get("lus"):
             self.direct_abandonne = True
             return

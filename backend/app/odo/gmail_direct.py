@@ -34,6 +34,12 @@ _REFUS = re.compile(
     r"deuxieme|second|troisieme|precedent|reponse|repondu|important|importants|urgent|accept|refus|pourquoi|"
     r"si |pas |sauf|sans |prof|ecole|dossier|inscription|candidature|concernant|sujet|ou )", re.I)
 
+# « combien de mails non lus ai-je ? » (sans expéditeur, sujet ni période).
+_COMPTER = re.compile(
+    rf"(?:dis-moi |tu peux me dire |j'ai |est-ce que j'ai )?combien (?:de |d')?(?:{_MAILS} )?non lus?"
+    r"(?: (?:ai-je|j'ai|il y a|y a-t-il|me reste-t-il|est-ce que j'ai|en ce moment|actuellement|"
+    r"dans (?:ma|la) boite(?: de reception| mail| gmail)?|sur gmail|dans gmail|sur ma boite))*")
+
 
 def _plat(texte: str) -> str:
     t = unicodedata.normalize("NFD", texte.lower())
@@ -47,6 +53,8 @@ def reconnaitre(question: str) -> dict | None:
     """Arguments de `gmail_rechercher` (avec `lire`) si la demande est simple
     et sûre ; sinon None (chemin habituel)."""
     t = _plat(question)
+    if _COMPTER.fullmatch(t):
+        return {"compter_non_lus": True}
     if not t or len(t.split()) > 12 or _REFUS.search(t + " "):
         return None
     # « résume mes 3 derniers mails », « lis mes derniers messages », « mes mails non lus »

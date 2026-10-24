@@ -179,10 +179,11 @@ def bloc_email(e: Email, maximum: int, decalage_minutes: int | None, rang: str =
     nouveau, transfere = masquer_secrets(alleger(nouveau)), masquer_secrets(alleger(transfere))
     lignes = [f"{rang}id={e.id} fil={e.fil}",
               f"De : {e.de}" + (" [expéditeur automatique]" if expediteur_automatique(e.de) else ""),
-              f"À : {e.a}", f"Date : {date_locale(e.date, decalage_minutes)}",
+              f"À : {e.a}", f"Reçu le : {date_locale(e.date, decalage_minutes)}",
               f"Objet : {masquer_secrets(e.objet) or '(sans objet)'}"]
     if e.pieces_jointes:
-        lignes.append("Pièces jointes (présentes, contenu NON lu) : " + masquer_secrets(", ".join(e.pieces_jointes)))
+        lignes.append("Pièces jointes (présentes, contenu NON lu : rien à en affirmer) : "
+                      + masquer_secrets(", ".join(e.pieces_jointes)))
     indices = reperes(nouveau + ("\n" + transfere if transfere else ""))
     if indices:
         lignes.append("Repères automatiques (indices à vérifier dans le texte) : " + " ; ".join(indices))
@@ -207,6 +208,11 @@ def chronologie(emails: list[Email]) -> list[Email]:
     return sorted(uniques, key=lambda e: date_email(e.date) or datetime.min.replace(tzinfo=timezone.utc))
 
 
+def _adresse(de: str) -> str:
+    m = re.search(r"<([^>]+)>", de)
+    return (m.group(1) if m else de).strip().lower()
+
+
 def dossier(emails: list[Email], maximum: int, decalage_minutes: int | None) -> str:
     """Plusieurs e-mails en ordre chronologique, le plus récent signalé."""
     ordre = chronologie(emails)
@@ -216,6 +222,11 @@ def dossier(emails: list[Email], maximum: int, decalage_minutes: int | None) -> 
         rang = f"Message {i}/{n}" + (" (le plus récent)" if i == n and n > 1 else
                                      " (le plus ancien)" if i == 1 and n > 1 else "") + " · "
         meme_fil = any(x.fil == e.fil for x in ordre[:i - 1])
+        # Même expéditeur plus tôt dans le dossier : l'état le plus récent fait
+        # foi pour la même chose (alerte puis suspension, 80 % puis 100 %…).
+        avant = [j for j, x in enumerate(ordre[:i - 1], 1) if _adresse(x.de) == _adresse(e.de) and not meme_fil]
+        if avant:
+            rang += f"suite du message {avant[-1]} du même expéditeur (le plus récent fait foi pour la même chose) · "
         blocs.append(bloc_email(e, maximum, decalage_minutes, rang, cite_deja_donne=meme_fil))
     return "\n\n---\n\n".join(blocs)
 

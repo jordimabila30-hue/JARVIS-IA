@@ -92,6 +92,9 @@ from ...llm import (
 from ...llm.base import MESSAGES as MESSAGES_LLM
 from ...odo.contrat import DemandeConfirmation, EtatOutil
 from ...odo.service import ServiceODO, get_odo
+
+# Marqueur de source (dans `messages.attachments` de la réponse, sans migration).
+SOURCE_GMAIL = {"type": "source", "source": "gmail"}
 from ...comprehension.instructions import NOTE_PIECE_SUPPRIMEE
 from ...comprehension import ciblage, controle, etat, generation, memoire, propositions as aide, reperes, restauration
 from ...comprehension.attribution import CorrecteurAttributions
@@ -1046,6 +1049,10 @@ async def chat_stream(
                 prompt_tokens, completion_tokens = _token_counts(fin.usage if fin else None, prompt, text)
             prompt_tokens += lots[0]
             completion_tokens += lots[1]
+            if execution is not None and any(nom.startswith("gmail_") for nom, _ in execution.donnees):
+                # Gmail a réellement servi : la conversation est classée sous
+                # Gmail (menu latéral), sur tous les appareils.
+                stockees = [*stockees, SOURCE_GMAIL]
             _spawn(_finalize_safely(
                 quota_service=quota_service,
                 supabase=supabase,

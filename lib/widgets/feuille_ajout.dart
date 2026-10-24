@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/theme_jarvis.dart';
+import '../models/conversations/source_conversation.dart';
 import 'importation/logo_whatsapp.dart';
 
 /// Ce que l'utilisateur a choisi dans la feuille « Ajouter à JARVIS ».
@@ -30,6 +31,15 @@ class FeuilleAjout extends StatelessWidget {
   const FeuilleAjout({super.key, this.actualisation = false});
 
   static const titre = 'Ajouter à JARVIS';
+
+  static const bientotDisponible = 'Bientôt disponible';
+
+  /// Entrées affichées sans action (aucune intégration encore).
+  static const bientot = [
+    ('Instagram', LogoSource(SourceConversation.instagram, taille: 30)),
+    ('Messenger', LogoSource(SourceConversation.messenger, taille: 30)),
+    ('Mail', Icon(Icons.mail_outline_rounded, size: 26)),
+  ];
 
   /// Phase 5 : « Ajouter une réponse reçue » disponible (compte connecté),
   /// révélé en glissant « Importer une conversation » vers la gauche.
@@ -102,6 +112,15 @@ class FeuilleAjout extends StatelessWidget {
                   ).pop(ChoixAjout.ajouterMessageWhatsApp)
                 : null,
           ),
+          // Prochaines messageries : visibles, pas encore disponibles.
+          for (final (titre, visuel) in FeuilleAjout.bientot) ...[
+            const SizedBox(height: 6),
+            _Choix(
+              visuel: visuel,
+              titre: titre,
+              detail: FeuilleAjout.bientotDisponible,
+            ),
+          ],
         ],
       ),
     );

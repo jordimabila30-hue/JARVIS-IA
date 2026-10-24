@@ -220,7 +220,7 @@ async def test_lecture_message_html_pieces_jointes_jamais_telechargees(env):
                                           pieces=["bulletin.pdf"])
     r = await GmailLireMessage(ClientGmail(env.google)).executer({"id": "m1aaaa"}, ctx())
     assert "Rendez-vous lundi" in r.contenu and "x()" not in r.contenu
-    assert "Pièces jointes (présentes, contenu NON lu) : bulletin.pdf" in r.contenu
+    assert "Pièces jointes (présentes, contenu NON lu : rien à en affirmer) : bulletin.pdf" in r.contenu
     assert not any("attachments" in str(q.url) for q in env.faux.gmail)
 
 

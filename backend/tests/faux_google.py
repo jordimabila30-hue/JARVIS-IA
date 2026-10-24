@@ -54,6 +54,7 @@ class FauxGoogle:
         # en secondes, has:attachment, is:unread, is:important, in:sent).
         self.filtrer = False
         self.panne_recherche: Exception | None = None       # ex. httpx.ReadTimeout
+        self.corps_charges: dict[str, str] = {}              # attachmentId → corps (gros HTML)
 
     @property
     def gmail(self) -> list[httpx.Request]:
@@ -95,6 +96,14 @@ class FauxGoogle:
                 ids = ids[:n]
                 return httpx.Response(200, json={"messages": [{"id": i, "threadId": self.messages[i]["threadId"]}
                                                               for i in ids]} if ids else {"resultSizeEstimate": 0})
+            if chemin == "labels/INBOX":
+                boite = [m for m in self.messages.values() if "INBOX" in m["labelIds"]]
+                non_lus = [m for m in boite if "UNREAD" in m["labelIds"]]
+                return httpx.Response(200, json={"id": "INBOX", "messagesUnread": len(non_lus),
+                                                 "threadsUnread": len({m["threadId"] for m in non_lus})})
+            if "/attachments/" in chemin:
+                d = self.corps_charges.get(chemin.split("/")[-1])
+                return httpx.Response(200, json={"data": d}) if d else httpx.Response(404)
             if chemin.startswith("messages/"):
                 m = self.messages.get(chemin.split("/")[1])
                 return httpx.Response(200, json=m) if m else httpx.Response(404)

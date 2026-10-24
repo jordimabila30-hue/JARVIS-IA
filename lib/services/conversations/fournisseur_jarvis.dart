@@ -7,7 +7,6 @@ import '../../models/conversations/source_conversation.dart';
 import '../../models/message_conversation.dart';
 import '../conversation/conversation_session.dart';
 import '../api_jarvis.dart';
-import 'depot_conversations.dart';
 import 'fournisseur_conversations.dart';
 import 'synchro_echanges_locaux.dart';
 import 'synchronisation_conversations.dart';
@@ -168,9 +167,11 @@ class FournisseurJarvis extends ChangeNotifier
     return ApercuConversation(
       // Une pièce jointe WhatsApp enregistrée : classée sous WhatsApp
       // (titre déjà au nom du contact), sur tous les appareils.
-      source: c.contextes.isEmpty
-          ? SourceConversation.jarvis
-          : SourceConversation.whatsapp,
+      source: c.contextes.isNotEmpty
+          ? SourceConversation.whatsapp
+          : c.gmail
+          ? SourceConversation.gmail
+          : SourceConversation.jarvis,
       id: id,
       titre: c.titre.isEmpty ? 'Conversation' : _uneLigne(c.titre),
       apercu: _uneLigne(c.apercu),
@@ -198,14 +199,17 @@ class FournisseurJarvis extends ChangeNotifier
     // Classée par une pièce jointe : sa source et le nom du contact
     // (envoyée ici, ou relue du serveur).
     final classement = _session.classement(id);
-    final contextesServeur = serveur == null
-        ? const <ContexteServeur>[]
-        : synchronisation?.conversation(serveur)?.contextes ?? const [];
+    final enregistree = serveur == null
+        ? null
+        : synchronisation?.conversation(serveur);
+    final contextesServeur = enregistree?.contextes ?? const [];
     final source =
         classement?.source ??
-        (contextesServeur.isEmpty
-            ? SourceConversation.jarvis
-            : SourceConversation.whatsapp);
+        (contextesServeur.isNotEmpty
+            ? SourceConversation.whatsapp
+            : enregistree?.gmail == true
+            ? SourceConversation.gmail
+            : SourceConversation.jarvis);
     final titreClasse =
         classement?.titre ??
         (contextesServeur.isEmpty ? null : contextesServeur.last.contact);

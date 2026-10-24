@@ -19,3 +19,24 @@ class LogoWhatsApp extends StatelessWidget {
     ),
   );
 }
+
+/// Logo d'une messagerie (SVG local) ; sans logo : une icône d'enveloppe.
+class LogoSource extends StatelessWidget {
+  const LogoSource(this.source, {super.key, this.taille = 24});
+
+  final SourceConversation source;
+  final double taille;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: taille,
+    child: switch (source.logo) {
+      final logo? => SvgPicture.asset(
+        logo,
+        fit: BoxFit.contain,
+        semanticsLabel: source.libelle,
+      ),
+      null => Icon(Icons.mail_outline_rounded, size: taille),
+    },
+  );
+}

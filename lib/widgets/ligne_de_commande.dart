@@ -656,6 +656,19 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
               style: TextStyle(fontSize: 13),
             ),
           ),
+        for (final (titre, visuel) in FeuilleAjout.bientot)
+          MenuItemButton(
+            leadingIcon: SizedBox.square(
+              dimension: 18,
+              child: FittedBox(child: visuel),
+            ),
+            onPressed: null,
+            trailingIcon: const Text(
+              FeuilleAjout.bientotDisponible,
+              style: TextStyle(fontSize: 12),
+            ),
+            child: Text(titre),
+          ),
       ],
       builder: (context, menu, _) => Listener(
         onPointerDown: (_) => setState(() => _appui = true),

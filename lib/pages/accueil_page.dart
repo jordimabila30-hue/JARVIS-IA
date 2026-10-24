@@ -274,9 +274,12 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       fournisseurs: [
         jarvis,
         FournisseurSourceClassee(SourceConversation.whatsapp, jarvis),
+        // Conversations où Gmail a réellement servi (marquées par le serveur).
+        FournisseurSourceClassee(SourceConversation.gmail, jarvis),
         for (final s in SourceConversation.values)
           if (s != SourceConversation.jarvis &&
-              s != SourceConversation.whatsapp)
+              s != SourceConversation.whatsapp &&
+              s != SourceConversation.gmail)
             FournisseurNonIntegre(s),
       ],
       epingles: epingles,

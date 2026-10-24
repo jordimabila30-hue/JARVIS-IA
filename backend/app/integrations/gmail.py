@@ -3,7 +3,9 @@
 Uniquement des requêtes GET : rechercher, lire un message, lire un fil.
 Aucune écriture (ni envoi, ni suppression, ni libellé, ni « lu »).
 Coûts bornés : nombre de résultats, messages d'un fil, taille du texte ;
-les pièces jointes ne sont jamais téléchargées (seulement leur nom).
+les pièces jointes ne sont jamais téléchargées (seulement leur nom) ; un gros
+corps texte ou HTML (rangé par Gmail comme `attachmentId`) est lu, ce n'est
+pas une pièce jointe.
 Un jeton expiré est renouvelé une fois ; une autorisation retirée chez
 Google rend la connexion « à renouveler ».
 """
@@ -79,46 +81,84 @@ def _entetes(message: dict) -> dict[str, str]:
     return {h.get("name", ""): h.get("value", "") for h in (message.get("payload") or {}).get("headers") or []}
 
 
-def _decoder(donnees: str | None) -> str:
+def _charset(partie: dict) -> str:
+    for h in partie.get("headers") or []:
+        if h.get("name", "").lower() == "content-type":
+            m = re.search(r'charset="?([A-Za-z0-9_.:-]+)', h.get("value", ""), re.I)
+            if m:
+                return m.group(1)
+    return "utf-8"
+
+
+def _decoder(donnees: str | None, charset: str = "utf-8") -> str:
     if not donnees:
         return ""
     try:
-        return base64.urlsafe_b64decode(donnees + "=" * (-len(donnees) % 4)).decode("utf-8", errors="replace")
+        brut = base64.urlsafe_b64decode(donnees + "=" * (-len(donnees) % 4))
     except (ValueError, TypeError):
         return ""
+    try:
+        return brut.decode(charset, errors="replace")
+    except LookupError:                     # jeu de caractères inconnu
+        return brut.decode("utf-8", errors="replace")
 
 
-_BALISES = re.compile(r"<(script|style)[^>]*>.*?</\1>|<[^>]+>", re.S | re.I)
+_BALISES = re.compile(r"<!--.*?-->|<(script|style|head|title|noscript)\b[^>]*>.*?</\1\s*>|<[^>]+>", re.S | re.I)
+_BLOCS = re.compile(r"<\s*(?:br|/?p|/?div|/?li|/?tr|/?h[1-6]|/?table|/?ul|/?ol|/?blockquote|hr)\b[^>]*>", re.I)
 
 
 def _texte_html(contenu: str) -> str:
-    contenu = re.sub(r"<\s*(br|/p|/div|/li|/tr)[^>]*>", "\n", contenu, flags=re.I)
-    return html.unescape(_BALISES.sub(" ", contenu))
+    contenu = _BLOCS.sub("\n", contenu)
+    contenu = re.sub(r"<\s*/?t[dh]\b[^>]*>", " ", contenu, flags=re.I)
+    texte = html.unescape(_BALISES.sub(" ", contenu)).replace(" ", " ").replace("‌", "")
+    return texte
 
 
-def extraire(payload: dict) -> tuple[str, list[str]]:
-    """Texte lisible (text/plain de préférence, sinon HTML nettoyé) et noms
-    des pièces jointes (jamais leur contenu)."""
-    plain, html_, pieces = [], [], []
+def _utile(texte: str) -> int:
+    return len(re.sub(r"\s+", "", texte))
+
+
+def _parties(payload: dict) -> tuple[list[str], list[str], list[str], list[tuple[str, str]]]:
+    """(textes plain, textes HTML, pièces jointes, corps texte à télécharger :
+    (type, attachmentId) — Gmail ne joint pas les gros corps au message)."""
+    plain, html_, pieces, a_charger = [], [], [], []
 
     def parcourir(p: dict) -> None:
-        mime = p.get("mimeType", "")
+        mime = (p.get("mimeType") or "").lower()
         nom = p.get("filename") or ""
         corps = p.get("body") or {}
         if nom and (corps.get("attachmentId") or not mime.startswith("text/")):
             pieces.append(nom[:120])
-        elif mime == "text/plain":
-            plain.append(_decoder(corps.get("data")))
-        elif mime == "text/html":
-            html_.append(_decoder(corps.get("data")))
+        elif mime in ("text/plain", "text/html"):
+            if corps.get("data"):
+                (plain if mime == "text/plain" else html_).append(_decoder(corps.get("data"), _charset(p)))
+            elif corps.get("attachmentId"):
+                a_charger.append((mime, corps["attachmentId"]))
         for sous in p.get("parts") or []:
             parcourir(sous)
 
     parcourir(payload or {})
-    texte = "\n".join(plain) if any(t.strip() for t in plain) else _texte_html("\n".join(html_))
+    return plain, html_, pieces, a_charger
+
+
+def _assembler(plain: list[str], html_: list[str]) -> str:
+    """text/plain de préférence ; HTML si le texte brut manque ou n'est
+    qu'un reste (« votre messagerie n'affiche pas le HTML », lien seul…)."""
+    texte_plain = "\n".join(plain)
+    texte_html = _texte_html("\n".join(html_)) if html_ else ""
+    if _utile(texte_html) > max(2 * _utile(texte_plain), _utile(texte_plain) + 60):
+        texte = texte_html
+    else:
+        texte = texte_plain if _utile(texte_plain) else texte_html
     texte = re.sub(r"[ \t\r\f\v]+", " ", texte)
-    texte = re.sub(r"\n\s*\n+", "\n\n", texte).strip()
-    return texte, pieces
+    texte = re.sub(r" *\n *", "\n", texte)
+    return re.sub(r"\n{3,}", "\n\n", texte).strip()
+
+
+def extraire(payload: dict) -> tuple[str, list[str]]:
+    """Texte lisible et noms des pièces jointes (jamais leur contenu)."""
+    plain, html_, pieces, _ = _parties(payload)
+    return _assembler(plain, html_), pieces
 
 
 def _apercu(m: dict) -> ApercuEmail:
@@ -130,9 +170,12 @@ def _apercu(m: dict) -> ApercuEmail:
                        non_lu="UNREAD" in libelles, important="IMPORTANT" in libelles)
 
 
-def _email(m: dict, maximum: int) -> Email:
+def _email(m: dict, maximum: int, charges: list[tuple[str, str]] = ()) -> Email:
     a = _apercu(m)
-    texte, pieces = extraire(m.get("payload") or {})
+    plain, html_, pieces, _ = _parties(m.get("payload") or {})
+    for mime, contenu in charges:
+        (plain if mime == "text/plain" else html_).append(contenu)
+    texte = _assembler(plain, html_)
     tronque = len(texte) > maximum
     return Email(**a.__dict__, a=_entetes(m).get("To", "")[:300], texte=texte[:maximum],
                  pieces_jointes=pieces[:10], tronque=tronque)
@@ -179,15 +222,37 @@ class ClientGmail:
         details = await asyncio.gather(*(self._get(user_id, f"messages/{i}", params) for i in ids))
         return [_apercu(m) for m in details]
 
+    async def non_lus(self, user_id: str) -> tuple[int, int]:
+        """Compteurs EXACTS de Gmail pour la boîte de réception : (conversations
+        non lues, messages non lus). Aucune liste parcourue, aucune estimation."""
+        d = await self._get(user_id, "labels/INBOX")
+        return int(d.get("threadsUnread") or 0), int(d.get("messagesUnread") or 0)
+
     async def message(self, user_id: str, message_id: str, maximum: int) -> Email:
         if not _ID.match(message_id):
             raise ErreurGoogle("introuvable")
-        return _email(await self._get(user_id, f"messages/{message_id}", {"format": "full"}), maximum)
+        return await self._complet(user_id, await self._get(user_id, f"messages/{message_id}", {"format": "full"}),
+                                   maximum)
+
+    async def _complet(self, user_id: str, m: dict, maximum: int) -> Email:
+        """Message lu, gros corps texte/HTML compris (téléchargés : ce ne sont
+        pas des pièces jointes) ; jamais plus de 2 corps."""
+        a_charger = _parties(m.get("payload") or {})[3][:2]
+        charges = []
+        for mime, piece in a_charger:
+            if not _ID.match(m.get("id", "")) or not re.fullmatch(r"[A-Za-z0-9_-]{6,1024}", piece):
+                continue
+            try:
+                d = await self._get(user_id, f"messages/{m['id']}/attachments/{piece}")
+            except ErreurGoogle:
+                continue
+            charges.append((mime, _decoder(d.get("data"))))
+        return _email(m, maximum, charges)
 
     async def fil(self, user_id: str, fil_id: str, maximum_messages: int, maximum: int) -> list[Email]:
         if not _ID.match(fil_id):
             raise ErreurGoogle("introuvable")
         d = await self._get(user_id, f"threads/{fil_id}", {"format": "full"})
         messages = (d.get("messages") or [])[-maximum_messages:]
-        return [_email(m, maximum) for m in messages]
+        return list(await asyncio.gather(*(self._complet(user_id, m, maximum) for m in messages)))
 

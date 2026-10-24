@@ -72,7 +72,13 @@ class ConversationServeur {
     required this.derniereActivite,
     this.apercu = '',
     this.contextes = const [],
+    this.gmail = false,
   });
+
+  /// Gmail a réellement servi dans au moins une réponse (marqueur
+  /// `{"type": "source", "source": "gmail"}` posé par le serveur) : la
+  /// conversation est classée sous Gmail.
+  final bool gmail;
 
   /// Pièces jointes WhatsApp de la conversation, de la plus ancienne à la
   /// plus récente. Au moins une : la conversation est classée sous
@@ -211,13 +217,16 @@ class DepotConversationsSupabase implements DepotConversations {
             .from('conversations')
             .select(
               'id, title, last_message_at, messages(content, created_at), '
-              'conversation_contexts(${ContexteServeur.colonnes})',
+              'conversation_contexts(${ContexteServeur.colonnes}), '
+              'gmail:messages(id)',
             )
             .eq('user_id', uid)
             .eq('archived', false)
+            .filter('gmail.attachments', 'cs', _marqueurGmail)
             .order('last_message_at', ascending: false)
             .order('created_at', referencedTable: 'messages', ascending: false)
             .limit(1, referencedTable: 'messages')
+            .limit(1, referencedTable: 'gmail')
             .limit(limite)
             .timeout(delai);
         return [
@@ -232,6 +241,7 @@ class DepotConversationsSupabase implements DepotConversations {
                 _ => '',
               },
               contextes: _contextes(l['conversation_contexts']),
+              gmail: l['gmail'] is List && (l['gmail'] as List).isNotEmpty,
             ),
         ];
       });
@@ -354,6 +364,8 @@ class DepotConversationsSupabase implements DepotConversations {
       );
     }
   }
+
+  static const _marqueurGmail = '[{"type":"source","source":"gmail"}]';
 
   static List<ContexteServeur> _contextes(Object? brut) {
     final liste = [
