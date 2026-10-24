@@ -33,7 +33,8 @@ class DemandeAideReponse {
     final de = origine == OrigineMessage.autre ? '' : ' sur ${origine.libelle}';
     final suite = intention.trim().isEmpty
         ? ''
-        : '\nCe que je veux répondre : ${intention.trim()}';
+        // En phrase, jamais « X : y » (lu comme une conversation collée).
+        : '\nEn gros, je voudrais lui dire ceci, ${intention.trim()}.';
     return 'Aide-moi à répondre à ce message que j’ai reçu$de. Propose une '
         'réponse naturelle que je pourrai copier.\n'
         '« ${message.trim()} »$suite';

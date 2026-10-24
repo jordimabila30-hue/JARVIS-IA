@@ -159,12 +159,13 @@ class ConversationSession extends ChangeNotifier {
   bool _ferme = false;
 
   /// Envoie un message de l'utilisateur (texte libre, conversation collée,
-  /// ou les deux).
-  Future<void> envoyer(String texte) {
+  /// ou les deux). [versIA] : demande à comprendre (aide à répondre à un
+  /// message reçu) : seules les commandes restent locales.
+  Future<void> envoyer(String texte, {bool versIA = false}) {
     final t = texte.trim();
     if (t.isEmpty) return Future<void>.value();
     final generation = _generation;
-    return _file = _file.then((_) => _traiter(t, generation));
+    return _file = _file.then((_) => _traiter(t, generation, versIA: versIA));
   }
 
   // Interruption vocale : génération vocale en cours (annulable) et ce que
@@ -887,6 +888,7 @@ class ConversationSession extends ChangeNotifier {
     String texte,
     int generation, {
     bool vocal = false,
+    bool versIA = false,
     CaptureJointe? capture,
     ImageAEnvoyer? image,
     void Function(String fragment)? surFragmentVocal,
@@ -933,7 +935,7 @@ class ConversationSession extends ChangeNotifier {
         conversationNouvelle: nouvelle != null,
         vocale: vocal,
         idConversation: _idCourant,
-        contexteImporte: _contexteImporte(_idCourant),
+        contexteImporte: versIA || _contexteImporte(_idCourant),
         tonPropose: _tonsRegardes[_idCourant],
         longueurPropose: _longueursRegardees[_idCourant]?.name,
         propositionsMessage: _dernieresPropositions()?.idServeur,

@@ -81,7 +81,7 @@ void main() {
       expect(d.question, contains('« Tu viens samedi ? »'));
       expect(
         d.question,
-        contains('Ce que je veux répondre : non, je travaille'),
+        contains('je voudrais lui dire ceci, non, je travaille.'),
       );
     });
 

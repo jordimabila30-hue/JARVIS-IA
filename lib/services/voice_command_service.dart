@@ -304,7 +304,7 @@ class VoiceCommandService {
         'Hier, ${dateEnFrancais(hier).replaceFirst('Nous sommes', 'nous étions')}',
       );
     }
-    if (dit([
+    const questionsDate = [
       'quelle est la date',
       'quelle date',
       'quel jour',
@@ -312,8 +312,25 @@ class VoiceCommandService {
       'nous sommes quel jour',
       'on est le combien',
       'la date d aujourd hui',
+      'c est quoi la date',
+      'donne moi la date',
+      'dis moi la date',
       'date du jour',
-    ], marge: 4)) {
+    ];
+    if (dit(questionsDate, marge: 4)) {
+      // « Quelle est la date de demain ? » : demain, pas aujourd'hui.
+      if (contient(['demain'])) {
+        final demain = maintenant.add(const Duration(days: 1));
+        return _dire(
+          'Demain, ${dateEnFrancais(demain).replaceFirst('Nous sommes', 'nous serons')}',
+        );
+      }
+      if (contient(['hier'])) {
+        final hier = maintenant.subtract(const Duration(days: 1));
+        return _dire(
+          'Hier, ${dateEnFrancais(hier).replaceFirst('Nous sommes', 'nous étions')}',
+        );
+      }
       return _dire(dateEnFrancais(maintenant));
     }
     if (dit([

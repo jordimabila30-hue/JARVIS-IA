@@ -750,7 +750,7 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     final demande = await afficherVoletAideReponse(context);
     if (demande == null || !mounted) return;
     _pim.surEnvoi();
-    _conversation.envoyer(demande.question);
+    _conversation.envoyer(demande.question, versIA: true);
   }
 
   void _envoyer(String message) {

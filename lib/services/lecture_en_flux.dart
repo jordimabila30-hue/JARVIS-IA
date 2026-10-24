@@ -11,7 +11,7 @@ import 'tts_service.dart';
 ///   un fragment répété) ; chacune passe par [TexteOral].
 /// - Démarrage adaptatif, sans connaître la longueur finale : réponse
 ///   courte reçue d'un coup → lue entière ; sinon la lecture commence dès
-///   qu'une petite réserve est prête (deux phrases, ou ~140 caractères, ou
+///   qu'une petite réserve est prête (deux phrases, ou ~100 caractères, ou
 ///   une phrase après [attenteMax] : jamais d'attente sans fin).
 /// - Réseau lent : les phrases prêtes sont lues dans l'ordre ; réserve
 ///   vide → on attend la suite sans rien inventer.
@@ -26,8 +26,8 @@ class LectureEnFlux {
   LectureEnFlux({
     required this.dire,
     this.surDebut,
-    this.attenteMax = const Duration(milliseconds: 1800),
-    this.reserveCaracteres = 140,
+    this.attenteMax = const Duration(milliseconds: 900),
+    this.reserveCaracteres = 100,
     DateTime Function()? horloge,
   }) : _horloge = horloge ?? DateTime.now;
 
