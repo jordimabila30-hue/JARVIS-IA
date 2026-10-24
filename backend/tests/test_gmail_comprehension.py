@@ -222,3 +222,33 @@ async def test_lot_de_dix_mails_budget_reparti(env):
                          for i in range(10)}
     r = await GmailPreparerResume(ClientGmail(env.google)).executer({"ids": list(env.faux.messages)}, ctx())
     assert r.contenu.count("Message ") == 10 and len(r.contenu) < 6000 * 1.6
+
+
+# --- Obligation ≠ possibilité avec date limite (correction d06) ------------------------------
+
+POSSIBLE = "démarche possible jusqu'à une date"
+
+
+@pytest.mark.parametrize("texte,attendus,absents", [
+    ("Les inscriptions à la cantine se font en ligne jusqu'au 30 octobre.", [POSSIBLE], ["demande"]),
+    ("Les réservations sont ouvertes jusqu'au 12 novembre.", [POSSIBLE], ["demande"]),
+    ("You can register for the trip until 30 October.", [POSSIBLE], ["demande"]),
+    ("Die Anmeldung ist bis zum 30. Oktober möglich.", [POSSIBLE], ["demande"]),
+    ("Merci de transmettre l'attestation avant le 23 octobre.", ["demande", "échéance"], [POSSIBLE]),
+    ("Please send your certificate by 30 October.", ["demande", "échéance"], [POSSIBLE]),
+    # Même e-mail : une obligation ET une possibilité.
+    ("Vous devez présenter votre carte le 2 novembre. Les inscriptions à la cantine se font en ligne "
+     "jusqu'au 30 octobre.", ["demande", POSSIBLE], []),
+])
+def test_obligation_et_possibilite_avec_date(texte, attendus, absents):
+    trouves = reperes(texte, avec_phrases=False)
+    for a in attendus:
+        assert any(x.startswith(a) for x in trouves), (a, trouves)
+    for a in absents:
+        assert not any(x.startswith(a) for x in trouves), (a, trouves)
+
+
+def test_consigne_date_limite_n_oblige_pas():
+    assert "Une date limite ne rend pas une démarche obligatoire" in CONSIGNE_GMAIL
+    from app.odo.outils_gmail import CONSIGNE_DIRECTE
+    assert "Une date limite ne rend pas une démarche obligatoire" in CONSIGNE_DIRECTE   # chemin direct aussi

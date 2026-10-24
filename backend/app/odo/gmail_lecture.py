@@ -130,6 +130,12 @@ REPERES: tuple[tuple[str, re.Pattern], ...] = tuple((nom, re.compile(motif, re.I
     ("échéance", r"avant le|au plus tard|d'ici (?:le|au|à)|jusqu'au|date limite|no later than|before (?:the )?"
                  r"\d|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d)|deadline|due (?:date|by)|"
                  r"bis (?:zum|spätestens)|spätestens|antes del|fecha límite"),
+    # Démarche ouverte jusqu'à une date : la date n'oblige pas à la faire.
+    ("démarche possible jusqu'à une date (pas une obligation sauf mention)",
+     r"(?:inscriptions?|candidatures?|réservations?|demandes?)[^.\n]{0,30}?\s(?:se font|sont (?:ouvertes|possibles)|"
+     r"possibles?|ouvertes?|peuvent être faites?)[^.\n]{0,40}(?:jusqu'au|avant le)|"
+     r"(?:you can|you may|registration is open|sign-?ups? (?:are|is) open)[^.\n]{0,40}(?:until|by)|"
+     r"(?:anmeldung|registrierung)[^\n]{0,40}(?:möglich|offen)|(?:möglich|offen) bis|bis zum [^\n]{0,25}möglich"),
     ("simple possibilité", r"si vous le souhaitez|si vous voulez|vous pouvez(?! pas)|facultati|optionnel|"
                            r"if you (?:wish|like|want)|you (?:may|can) (?!not)|optional|falls sie möchten|"
                            r"können sie gerne|opcional|si lo desea"),

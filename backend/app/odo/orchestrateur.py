@@ -49,6 +49,7 @@ from .validation import valider
 
 EvenementODO = Texte | Fin | EtatOutil | DemandeConfirmation
 
+PLAFOND_DIRECT = 2048
 MESSAGE_LIMITE = "La demande a demandé trop d'étapes d'outils. Reformule-la plus simplement."
 MESSAGE_BUDGET = "Ta limite quotidienne de tokens serait dépassée pour terminer cette demande."
 
@@ -152,7 +153,10 @@ class ExecutionODO:
                     {**prompt[-1], "content": f"{prompt[-1]['content']}\n\n{donnees}"}]
         self.prompt_courant, self.texte_tour = messages, ""
         fin: Fin | None = None
-        async for ev in self.llm.flux(messages, max_sortie=max_sortie):
+        # Plafond (pas une consommation) : le raisonnement interne de certains
+        # modèles (gpt-oss) est compté dans la sortie ; sur un long e-mail, 1 024
+        # tokens pouvaient être épuisés avant le texte (réponse vide).
+        async for ev in self.llm.flux(messages, max_sortie=max(max_sortie, PLAFOND_DIRECT)):
             if isinstance(ev, Texte):
                 self.texte_tour += ev.texte
                 yield ev

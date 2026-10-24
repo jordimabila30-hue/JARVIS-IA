@@ -152,6 +152,9 @@ DEMANDES += [
     Demande("d05_long_direct", "Résume le mail sur les informations de rentrée.",
             doit=[r"2 novembre", r"carte"], mots_max=110),
     Demande("d06_suivi_actions", "Et qu'est-ce que je dois faire maintenant ?", suite_de="d05_long_direct",
-            doit=[r"carte|cantine|30 octobre"], interdit=[r"(?<!pas )obligatoire[^.]{0,30}(?:réunion|CDI)"],
+            doit=[r"carte"],
+            interdit=[r"(?<!pas )obligatoire[^.]{0,30}(?:réunion|CDI)",
+                      r"(?:devez|dois|il (?:vous )?faut|faut|à faire|n'oubliez pas)[^.]{0,80}cantine",
+                      r"cantine[^.]{0,60}(?:obligatoire|à faire avant)"],
             mots_max=90),
 ]

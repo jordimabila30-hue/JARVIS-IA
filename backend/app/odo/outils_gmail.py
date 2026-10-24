@@ -48,7 +48,9 @@ CONSIGNE_CHERCHER = (
 CONSIGNE_COMPRENDRE = (
     "COMPRENDRE : ne confonds jamais ce qui est écrit, ce que tu en déduis (dis « il semble ») et ce qui reste "
     "inconnu. Reçu ≠ accepté ; en cours d'examen ≠ décision ; « sous réserve » ≠ validé ; un refus peut être "
-    "poli (« ne pas donner suite »). Demande (« merci de », « avant le ») ≠ simple possibilité (« si vous le "
+    "poli (« ne pas donner suite »). Une date limite ne rend pas une démarche obligatoire (« inscriptions jusqu'au 30 » = possible "
+    "jusqu'au 30) : obligation seulement si le texte l'exige (« vous devez », « merci de », « obligatoire », "
+    "conséquence en cas d'oubli). Demande (« merci de », « avant le ») ≠ simple possibilité (« si vous le "
     "souhaitez »). Une information récente ne remplace l'ancienne que pour la MÊME chose ; le texte cité n'est "
     "pas une nouvelle information. Relie les e-mails d'une même affaire. Pièces jointes jamais lues. Les "
     "repères automatiques sont des indices. Importance : demande, échéance, changement, conséquence, attente de "
