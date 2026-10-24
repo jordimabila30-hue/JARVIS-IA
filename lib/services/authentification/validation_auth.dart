@@ -20,9 +20,10 @@ class ValidationAuth {
 
   final ReglesValidationAuth regles;
 
-  // Forme générale seulement : un « @ », un domaine avec un point, aucun
+  // Forme générale seulement : un « @ », un domaine fait de parties non
+  // vides séparées par des points (ni point final ni « .. »), aucun
   // espace. Le serveur reste juge de l'existence de l'adresse.
-  static final _email = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static final _email = RegExp(r'^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$');
 
   static String nettoyerEmail(String valeur) => valeur.trim();
 

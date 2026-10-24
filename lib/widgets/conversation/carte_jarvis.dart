@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/importation/reference_whatsapp.dart';
@@ -428,10 +429,14 @@ class PreparationPropositions extends StatelessWidget {
 
 /// JARVIS prépare sa réponse : trois points qui respirent doucement.
 class ReflexionJarvis extends StatefulWidget {
-  const ReflexionJarvis({super.key, this.cadre = true});
+  const ReflexionJarvis({super.key, this.cadre = true, this.reveilServeur});
 
   /// Faux : les points seuls (sous un texte déjà affiché).
   final bool cadre;
+
+  /// Vrai pendant le réveil du serveur hébergé : « Connexion au serveur
+  /// JARVIS… » à côté des points.
+  final ValueListenable<bool>? reveilServeur;
 
   @override
   State<ReflexionJarvis> createState() => _ReflexionJarvisState();
@@ -483,11 +488,35 @@ class _ReflexionJarvisState extends State<ReflexionJarvis>
         ),
       ),
     );
+    final reveil = widget.reveilServeur;
+    final contenu = reveil == null
+        ? points
+        : ValueListenableBuilder<bool>(
+            valueListenable: reveil,
+            builder: (context, enCours, _) => enCours
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      points,
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Connexion au serveur JARVIS…',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: CouleursJarvis.texteSecondaire,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : points,
+          );
     return Semantics(
       label: widget.cadre
           ? 'JARVIS réfléchit'
           : 'JARVIS prépare les propositions',
-      child: widget.cadre ? _CadreJarvis(child: points) : points,
+      child: widget.cadre ? _CadreJarvis(child: contenu) : contenu,
     );
   }
 }

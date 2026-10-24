@@ -59,9 +59,13 @@ class MenuLateral extends StatefulWidget {
     this.surOuvrir,
     this.compte,
     this.surCompte,
+    this.surApprendre,
   });
 
   final bool ouvert;
+
+  /// Module Apprendre (null : module désactivé, entrée absente).
+  final VoidCallback? surApprendre;
 
   /// Ouverture par le glissement depuis le bord gauche (null : geste
   /// désactivé, seul le bouton ouvre le menu).
@@ -250,6 +254,7 @@ class _MenuLateralState extends State<MenuLateral>
         surSupprimerConversation: widget.surSupprimerConversation,
         compte: widget.compte,
         surCompte: widget.surCompte,
+        surApprendre: widget.surApprendre,
       ),
     );
     // Bande invisible le long du bord gauche, menu fermé : translucide (les
@@ -348,10 +353,12 @@ class _Panneau extends StatelessWidget {
     this.conversationEnCours,
     this.compte,
     this.surCompte,
+    this.surApprendre,
   });
 
   final AuthService? compte;
   final VoidCallback? surCompte;
+  final VoidCallback? surApprendre;
   final VoidCallback surFermer;
   final VoidCallback surNouvelle;
   final VoidCallback surChatVocal;
@@ -458,6 +465,12 @@ class _Panneau extends StatelessWidget {
                         libelle: 'Chat vocal',
                         surChoix: surChatVocal,
                       ),
+                      if (surApprendre != null)
+                        _Entree(
+                          icone: Icons.school_outlined,
+                          libelle: 'Apprendre',
+                          surChoix: surApprendre!,
+                        ),
                       if (conversation != null) ...[
                         const SizedBox(height: 22),
                         Padding(

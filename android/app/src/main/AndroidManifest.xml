@@ -50,6 +50,15 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="jarvis" android:host="gmail"/>
             </intent-filter>
+            <!-- Liens Supabase reçus par e-mail (confirmation, mot de passe
+                 oublié) : jarvis://auth, lu par supabase_flutter (app_links),
+                 jamais par la navigation Flutter. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="jarvis" android:host="auth"/>
+            </intent-filter>
             <!-- Le lien ne doit pas devenir une navigation Flutter. -->
             <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
             <!-- Import WhatsApp : « Exporter la discussion » → JARVIS dans le

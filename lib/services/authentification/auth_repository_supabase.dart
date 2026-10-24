@@ -34,8 +34,8 @@ class AuthRepositorySupabase implements AuthRepository {
 
   final SupabaseClient _client;
 
-  /// Adresse où renvoient les liens envoyés par e-mail (récupération) ;
-  /// null : l'adresse du site configurée dans Supabase.
+  /// Adresse où renvoient les liens envoyés par e-mail (confirmation,
+  /// récupération) ; null : l'adresse du site configurée dans Supabase.
   final String? redirection;
 
   /// Durée de vie des jetons, indépendante de l'heure de l'appareil.
@@ -117,6 +117,7 @@ class AuthRepositorySupabase implements AuthRepository {
           // Repris par le déclencheur SQL `handle_new_user` dans
           // `public.users.display_name`.
           data: {'display_name': demande.nom},
+          emailRedirectTo: redirection,
         );
         final u = r.user;
         if (r.session case final s? when u != null) {
@@ -337,7 +338,7 @@ class AuthRepositorySupabase implements AuthRepository {
         'refresh_token_already_used' ||
         'bad_jwt' ||
         'user_not_found' => TypeErreurAuth.sessionExpiree,
-        'email_address_invalid' ||
+        'email_address_invalid' => null,
         'validation_failed' ||
         'same_password' => TypeErreurAuth.donneesRefusees,
         'signup_disabled' => null,
@@ -351,9 +352,12 @@ class AuthRepositorySupabase implements AuthRepository {
         },
       };
       if (type == null) {
-        return const ErreurAuth(
+        return ErreurAuth(
           TypeErreurAuth.donneesRefusees,
-          'Les inscriptions sont fermées pour le moment.',
+          e.code == 'email_address_invalid'
+              ? 'Cette adresse e-mail est refusée. Vérifiez-la (sans point '
+                    'ni espace à la fin).'
+              : 'Les inscriptions sont fermées pour le moment.',
         );
       }
       return ErreurAuth(type);

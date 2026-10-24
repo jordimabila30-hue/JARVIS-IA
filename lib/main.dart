@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +8,7 @@ import 'pages/authentification/authentification_page.dart';
 import 'pages/ecran_de_lancement.dart';
 import 'services/api_jarvis.dart';
 import 'services/apparence/service_apparence.dart';
+import 'services/apparence/service_fonds.dart';
 import 'services/authentification/auth_service.dart';
 import 'services/authentification/config_auth.dart';
 import 'services/integrations/service_gmail.dart';
@@ -69,6 +72,9 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
         luminositeSysteme:
             WidgetsBinding.instance.platformDispatcher.platformBrightness,
       )..charger());
+
+  /// Fonds par conversation et photos de fond (dépôt local seulement).
+  late final _fonds = ServiceFonds(apparence: _apparence)..charger();
   late final _config = widget.config ?? ConfigAuth.compilation();
   late final _auth = widget.auth ?? AuthService(_config.creerRepository());
   late final _api =
@@ -77,6 +83,9 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
         adresse: _config.adresseApi,
         jeton: _auth.jetonAcces,
         renouveler: _auth.renouvelerJeton,
+        // Serveur hébergé (Render Free) : endormi après ~15 min sans
+        // requête ; marge prise à 10 min.
+        veille: _config.serveurDistant ? const Duration(minutes: 10) : null,
       );
   late final _depotConversations = _config.creerDepotConversations(
     jeton: _auth.jetonAcces,
@@ -104,6 +113,16 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _auth.addListener(_surAuth);
     _api.surConsommation = _utilisation.signalerConsommation;
+    debugPrint('[JARVIS] Serveur : ${_api.adresse}');
+    if (!_config.supabaseConfigure) {
+      debugPrint(
+        '[JARVIS] Supabase non configuré : lancer avec '
+        '--dart-define-from-file=config_locale.json',
+      );
+    }
+    // Serveur hébergé endormi : il se réveille pendant l'animation de
+    // lancement plutôt qu'à la première question.
+    unawaited(_api.reveiller());
   }
 
   /// Mode « Système » : suit le clair / sombre du système d'exploitation.
@@ -116,6 +135,7 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _fonds.dispose();
     if (widget.apparence == null) _apparence.dispose();
     _auth.removeListener(_surAuth);
     _api.surConsommation = null;
@@ -214,14 +234,17 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
           theme: themeJarvis(palette),
           builder: (context, enfant) => PorteeApparence(
             service: _apparence,
-            child: TransitionApparence(
-              service: _apparence,
-              child: palette.sombre
-                  ? AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: SystemUiOverlayStyle.light,
-                      child: enfant!,
-                    )
-                  : enfant!,
+            child: PorteeFonds(
+              service: _fonds,
+              child: TransitionApparence(
+                service: _apparence,
+                child: palette.sombre
+                    ? AnnotatedRegion<SystemUiOverlayStyle>(
+                        value: SystemUiOverlayStyle.light,
+                        child: enfant!,
+                      )
+                    : enfant!,
+              ),
             ),
           ),
           home: EcranDeLancement(onTermine: _apresLancement),

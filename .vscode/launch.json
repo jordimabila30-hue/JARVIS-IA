@@ -1,0 +1,38 @@
+{
+  // Lancement depuis VS Code (F5) : toujours avec config_locale.json
+  // (Supabase), sinon l'authentification est « non configurée ».
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "JARVIS · serveur Render",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define-from-file=config_locale.json",
+        "--dart-define=JARVIS_SERVEUR=distant"
+      ]
+    },
+    {
+      "name": "JARVIS · serveur Render (profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define-from-file=config_locale.json",
+        "--dart-define=JARVIS_SERVEUR=distant"
+      ]
+    },
+    {
+      "name": "JARVIS · Docker local (USB : adb reverse tcp:8000 tcp:8000)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define-from-file=config_locale.json",
+        "--dart-define=JARVIS_API_URL=http://127.0.0.1:8000"
+      ]
+    }
+  ]
+}

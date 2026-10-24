@@ -70,5 +70,16 @@
 	<string>JARVIS utilise le microphone pour vous écouter en mode vocal.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>JARVIS transforme votre voix en texte pour comprendre vos demandes.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>jarvis</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>jarvis</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

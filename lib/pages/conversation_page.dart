@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/importation/conversation_whatsapp.dart';
@@ -96,9 +97,13 @@ class ConversationPage extends StatefulWidget {
     required this.gabarit,
     required this.surPoserQuestion,
     this.cleZonePim,
+    this.reveilServeur,
   });
 
   final ConversationSession session;
+
+  /// Réveil du serveur hébergé en cours (`ApiJarvis.reveilEnCours`).
+  final ValueListenable<bool>? reveilServeur;
   final GabaritJarvis gabarit;
 
   /// « Poser une question » : la page rend le focus au champ de saisie.
@@ -440,12 +445,12 @@ class _ConversationPageState extends State<ConversationPage> {
             itemBuilder: (context, i) {
               // Liste inversée : l'élément 0 est le plus récent.
               if (reflexion && i == 0) {
-                return const Padding(
-                  key: ValueKey('reflexion'),
-                  padding: EdgeInsets.symmetric(
+                return Padding(
+                  key: const ValueKey('reflexion'),
+                  padding: const EdgeInsets.symmetric(
                     vertical: MesuresConversation.ecartMessages,
                   ),
-                  child: ReflexionJarvis(),
+                  child: ReflexionJarvis(reveilServeur: widget.reveilServeur),
                 );
               }
               if (precedents && i == total - 1) {

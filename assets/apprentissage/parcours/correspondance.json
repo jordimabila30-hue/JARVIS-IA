@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "parcours": "correspondance",
+  "version": 1,
+  "fiches": [
+    {
+      "id": "cor-f-appel",
+      "titre": "S'adresser à la personne",
+      "niveau": 1,
+      "explication": "La formule d'appel ouvre le message. « Madame, », « Monsieur, » ou « Bonjour, » conviennent à un professeur. Le prénom seul est réservé aux proches, et « Cher » ou « Chère » aux personnes que l'on connaît très bien. La formule est suivie d'une virgule.",
+      "exemples": ["Madame,", "Bonjour Monsieur,"],
+      "a_eviter": ["Salut !", "Coucou Aminata,"],
+      "sources": [
+        {
+          "titre": "Formules d'appel dans le courriel",
+          "editeur": "Office québécois de la langue française, Banque de dépannage linguistique",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/24944/la-redaction-et-la-communication/redaction-administrative-et-commerciale/correspondance/courriel/formules-dappel-dans-le-courriel",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 1
+    },
+    {
+      "id": "cor-f-objet",
+      "titre": "Un objet clair",
+      "niveau": 1,
+      "explication": "L'objet résume le message avant même son ouverture. Il doit être précis, commencer par une majuscule et ne pas finir par un point. Placez l'information importante au début. Sans objet, un courriel peut être jugé sans intérêt, ou classé comme indésirable.",
+      "exemples": ["Absence au cours du 12 mars – devoir à rendre"],
+      "a_eviter": ["Question", "URGENT !!!"],
+      "sources": [
+        {
+          "titre": "Objet du courriel",
+          "editeur": "Office québécois de la langue française, Banque de dépannage linguistique",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/25514/la-redaction-et-la-communication/redaction-administrative-et-commerciale/correspondance/courriel/objet-du-courriel",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 1
+    },
+    {
+      "id": "cor-f-corps",
+      "titre": "Un message court, poli et complet",
+      "niveau": 1,
+      "explication": "Après la formule d'appel, situez brièvement la demande, puis dites clairement ce que vous attendez. Un sujet par courriel, des phrases courtes, peu d'abréviations, et une relecture. Terminez par une formule de salutation brève, comme « Meilleures salutations, » ou « Bonne journée, », puis votre nom.",
+      "exemples": ["Bonjour Monsieur,\nJ'étais absent au cours de mardi. Pourriez-vous m'indiquer le devoir à faire ?\nMerci de votre aide.\nBonne journée,\nSamuel Mbala"],
+      "a_eviter": ["jé raté le cour tu peu menvoyer le devoir"],
+      "sources": [
+        {
+          "titre": "Corps du message dans le courriel",
+          "editeur": "Office québécois de la langue française, Banque de dépannage linguistique",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/24945/la-redaction-et-la-communication/redaction-administrative-et-commerciale/correspondance/courriel/corps-du-message-dans-le-courriel",
+          "consulte_le": "2026-10-20"
+        },
+        {
+          "titre": "Formules de salutation dans le courriel",
+          "editeur": "Office québécois de la langue française, Banque de dépannage linguistique",
+          "url": "https://vitrinelinguistique.oqlf.gouv.qc.ca/24946/la-redaction-et-la-communication/redaction-administrative-et-commerciale/correspondance/courriel/formules-de-salutation-dans-le-courriel",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 1
+    }
+  ],
+  "unites": [
+    {
+      "id": "cor-u1",
+      "titre": "Écrire un courriel",
+      "lecons": [
+        {
+          "id": "cor-l1",
+          "titre": "Écrire à un professeur",
+          "niveau": 1,
+          "duree_minutes": 3,
+          "objectif": "Écrire un courriel clair et poli à un professeur.",
+          "fiches": ["cor-f-appel", "cor-f-objet", "cor-f-corps"],
+          "exercices": [
+            {
+              "id": "cor-l1-e1",
+              "type": "choix",
+              "fiche": "cor-f-appel",
+              "consigne": "Premier courriel à votre professeure, Mme Diallo. Quelle formule d'appel ?",
+              "options": ["Salut !", "Madame,", "Coucou Aminata,", "Hé,"],
+              "bonne": 1,
+              "explication": "« Madame, » est respectueux. Le prénom seul est réservé aux proches."
+            },
+            {
+              "id": "cor-l1-e2",
+              "type": "vrai_faux",
+              "fiche": "cor-f-objet",
+              "consigne": "Vrai ou faux ?",
+              "affirmation": "Un courriel sans objet est aussi bien reçu qu'un courriel avec un objet.",
+              "reponse": false,
+              "explication": "Sans objet, il peut être jugé sans intérêt, ou classé comme indésirable."
+            },
+            {
+              "id": "cor-l1-e3",
+              "type": "choix",
+              "fiche": "cor-f-objet",
+              "consigne": "Quel objet est le plus clair ?",
+              "options": ["Question", "Absence au cours du 12 mars – devoir à rendre", "URGENT !!!", "Coucou"],
+              "bonne": 1,
+              "explication": "Un bon objet dit précisément de quoi parle le message, l'essentiel au début."
+            },
+            {
+              "id": "cor-l1-e4",
+              "type": "ordre",
+              "fiche": "cor-f-corps",
+              "consigne": "Remettez ce courriel dans l'ordre.",
+              "elements": [
+                "Madame,",
+                "Je suis élève dans votre classe de 3e B.",
+                "Pourriez-vous m'indiquer la date de remise du devoir ?",
+                "Merci de votre aide.",
+                "Bonne journée,",
+                "Samuel Mbala"
+              ],
+              "explication": "Formule d'appel, contexte, demande, remerciement, salutation, puis le nom."
+            },
+            {
+              "id": "cor-l1-e5",
+              "type": "trous",
+              "fiche": "cor-f-corps",
+              "consigne": "Complétez le message.",
+              "texte": "___ Madame, pourriez-vous ___ m'indiquer les pages à lire ? ___ salutations, Samuel",
+              "trous": [
+                { "options": ["Bonjour", "Yo", "Wesh"], "bonne": 0 },
+                { "options": ["svp", "s'il vous plaît", "stp"], "bonne": 1 },
+                { "options": ["Grosses", "Meilleures", "Bisous"], "bonne": 1 }
+              ],
+              "explication": "On écrit les mots en entier, sans abréviation, et on finit par une salutation courtoise."
+            },
+            {
+              "id": "cor-l1-e6",
+              "type": "meilleur_message",
+              "fiche": "cor-f-corps",
+              "consigne": "Choisissez le meilleur message.",
+              "contexte": "Vous avez manqué le cours et voulez connaître le devoir.",
+              "options": [
+                "jé raté le cour tu peu menvoyer le devoir",
+                "Bonjour Monsieur, j'étais absent mardi. Pourriez-vous m'indiquer le devoir à faire ? Merci, bonne journée. Samuel",
+                "Bonjour, envoyez-moi le devoir maintenant."
+              ],
+              "bonne": 1,
+              "explication": "Il situe la demande, la formule poliment et se termine par une salutation et le nom."
+            },
+            {
+              "id": "cor-l1-e7",
+              "type": "association",
+              "fiche": "cor-f-corps",
+              "consigne": "Associez chaque partie à son exemple.",
+              "paires": [
+                ["Formule d'appel", "Madame,"],
+                ["Demande", "Pourriez-vous m'aider ?"],
+                ["Salutation", "Meilleures salutations,"]
+              ],
+              "explication": "Un courriel s'ouvre par l'appel, contient la demande et se ferme par la salutation."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

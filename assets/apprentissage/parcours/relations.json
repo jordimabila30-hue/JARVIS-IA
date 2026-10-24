@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "parcours": "relations",
+  "version": 2,
+  "fiches": [
+    {
+      "id": "rel-f-osbd",
+      "titre": "Faits, ressenti, besoin, demande",
+      "niveau": 1,
+      "explication": "La communication non violente, créée par Marshall B. Rosenberg, suit quatre étapes : décrire la situation sans juger (observation), dire ce que l'on ressent en disant « je » (sentiment), exprimer son besoin (besoin), puis faire une demande réalisable, concrète, précise et formulée positivement (demande).",
+      "exemples": [
+        "« Quand tu prends mon chargeur sans demander, je me sens agacé, parce que j'ai besoin de savoir où sont mes affaires. Peux-tu me demander avant ? »"
+      ],
+      "a_eviter": [
+        "« Tu es toujours en train de prendre mes affaires ! »"
+      ],
+      "sources": [
+        {
+          "titre": "Les 4 étapes d'une communication non violente à pratiquer en famille",
+          "editeur": "CIUSSS de l'Est-de-l'Île-de-Montréal (réseau public de santé du Québec), document non daté",
+          "url": "https://cem.ciusss-estmtl.gouv.qc.ca/sites/cem/files/media/document/PDF_MASEC_4etapes_CEM_CIUSSS-EMTL.pdf",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    },
+    {
+      "id": "rel-f-desaccord",
+      "titre": "Être en désaccord avec respect",
+      "niveau": 1,
+      "explication": "On peut dire son désaccord sans blesser : décrire les faits sans juger, dire ce dont on a besoin, puis proposer une demande précise, sans l'exiger.",
+      "exemples": [
+        "« J'aimerais bien venir, mais j'ai besoin de réviser ce soir. On y va samedi ? »"
+      ],
+      "a_eviter": [
+        "« Ton idée est nulle. » (un jugement)",
+        "« Tu dois venir, point final. » (une exigence)"
+      ],
+      "sources": [
+        {
+          "titre": "Les 4 étapes d'une communication non violente à pratiquer en famille",
+          "editeur": "CIUSSS de l'Est-de-l'Île-de-Montréal (réseau public de santé du Québec), document non daté",
+          "url": "https://cem.ciusss-estmtl.gouv.qc.ca/sites/cem/files/media/document/PDF_MASEC_4etapes_CEM_CIUSSS-EMTL.pdf",
+          "consulte_le": "2026-10-20"
+        }
+      ],
+      "statut": "brouillon",
+      "version": 2
+    }
+  ],
+  "unites": [
+    {
+      "id": "rel-u1",
+      "titre": "Gérer un désaccord",
+      "lecons": [
+        {
+          "id": "rel-l1",
+          "titre": "Exprimer un désaccord sans blesser",
+          "niveau": 1,
+          "duree_minutes": 3,
+          "objectif": "Dire son désaccord en respectant l'autre.",
+          "fiches": [
+            "rel-f-osbd",
+            "rel-f-desaccord"
+          ],
+          "exercices": [
+            {
+              "id": "rel-l1-e1",
+              "type": "choix",
+              "fiche": "rel-f-osbd",
+              "consigne": "Laquelle décrit un fait, sans jugement ?",
+              "options": [
+                "Tu es toujours en retard.",
+                "Tu es arrivé à 15 h 20, le rendez-vous était à 15 h.",
+                "Tu ne respectes personne."
+              ],
+              "bonne": 1,
+              "explication": "Une observation décrit ce qui s'est passé, sans « toujours » ni jugement."
+            },
+            {
+              "id": "rel-l1-e2",
+              "type": "vrai_faux",
+              "fiche": "rel-f-desaccord",
+              "consigne": "Vrai ou faux ?",
+              "affirmation": "Être en désaccord avec quelqu'un, c'est forcément lui manquer de respect.",
+              "reponse": false,
+              "explication": "On peut dire son désaccord en décrivant les faits sans juger et en demandant sans exiger."
+            },
+            {
+              "id": "rel-l1-e3",
+              "type": "ordre",
+              "fiche": "rel-f-osbd",
+              "consigne": "Remettez ce message dans l'ordre.",
+              "elements": [
+                "Quand tu prends mon chargeur sans demander,",
+                "je me sens agacé,",
+                "parce que j'ai besoin de savoir où sont mes affaires.",
+                "Peux-tu me demander avant de le prendre ?"
+              ],
+              "explication": "Fait, ressenti, besoin, puis demande."
+            },
+            {
+              "id": "rel-l1-e4",
+              "type": "association",
+              "fiche": "rel-f-osbd",
+              "consigne": "Associez chaque étape à son rôle.",
+              "paires": [
+                [
+                  "Observation",
+                  "Décrire la situation sans juger"
+                ],
+                [
+                  "Sentiment",
+                  "Dire ce qu'on ressent, avec « je »"
+                ],
+                [
+                  "Besoin",
+                  "Exprimer son besoin"
+                ],
+                [
+                  "Demande",
+                  "Proposer une action précise, sans exiger"
+                ]
+              ],
+              "explication": "Les quatre étapes de la communication non violente."
+            },
+            {
+              "id": "rel-l1-e5",
+              "type": "meilleur_message",
+              "fiche": "rel-f-desaccord",
+              "consigne": "Choisissez le meilleur message.",
+              "contexte": "Votre ami veut aller au cinéma ce soir. Vous préférez réviser.",
+              "options": [
+                "Ton idée est nulle.",
+                "J'aimerais bien venir, mais j'ai besoin de réviser ce soir. On y va samedi ?",
+                "Fais ce que tu veux, ça m'est égal."
+              ],
+              "bonne": 1,
+              "explication": "Il dit son besoin sans juger l'idée de l'autre, et propose une demande précise."
+            },
+            {
+              "id": "rel-l1-e6",
+              "type": "trous",
+              "fiche": "rel-f-desaccord",
+              "consigne": "Complétez.",
+              "texte": "Je ne suis pas ___ avec ton idée, mais je ___ ton point de vue.",
+              "trous": [
+                {
+                  "options": [
+                    "gentil",
+                    "d'accord",
+                    "content"
+                  ],
+                  "bonne": 1
+                },
+                {
+                  "options": [
+                    "respecte",
+                    "déteste",
+                    "ignore"
+                  ],
+                  "bonne": 0
+                }
+              ],
+              "explication": "On peut refuser une idée et respecter la personne qui la propose."
+            },
+            {
+              "id": "rel-l1-e7",
+              "type": "choix",
+              "fiche": "rel-f-desaccord",
+              "consigne": "En communication non violente, une bonne demande est…",
+              "options": [
+                "Un ordre qu'on ne peut pas refuser.",
+                "Réalisable, concrète, précise et formulée positivement.",
+                "Une menace polie."
+              ],
+              "bonne": 1,
+              "explication": "On demande sans exiger : une action réalisable, concrète, précise, dite positivement."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

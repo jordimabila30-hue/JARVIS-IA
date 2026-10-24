@@ -16,7 +16,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ia_jarvis/models/apparence/preferences_apparence.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
+import 'package:ia_jarvis/models/apparence/fond_photo.dart';
+import 'package:ia_jarvis/pages/editeur_fond_page.dart';
+import 'package:ia_jarvis/services/apparence/depot_fonds_photo.dart';
 import 'package:ia_jarvis/services/apparence/service_apparence.dart';
+import 'package:ia_jarvis/services/apparence/service_fonds.dart';
 import 'package:ia_jarvis/services/conversation/conversation_session.dart';
 import 'package:ia_jarvis/services/voice_settings_service.dart';
 import 'package:ia_jarvis/theme/motifs_jarvis.dart';
@@ -64,7 +68,12 @@ void main() {
     return s;
   }
 
-  Widget app(ServiceApparence a, Widget page, GlobalKey cle) => RepaintBoundary(
+  Widget app(
+    ServiceApparence a,
+    Widget page,
+    GlobalKey cle, {
+    ServiceFonds? fonds,
+  }) => RepaintBoundary(
     key: cle,
     child: ListenableBuilder(
       listenable: a,
@@ -77,7 +86,12 @@ void main() {
           ),
           builder: (context, enfant) => PorteeApparence(
             service: a,
-            child: TransitionApparence(service: a, child: enfant!),
+            child: fonds == null
+                ? TransitionApparence(service: a, child: enfant!)
+                : PorteeFonds(
+                    service: fonds,
+                    child: TransitionApparence(service: a, child: enfant!),
+                  ),
           ),
           home: page,
         );
@@ -214,4 +228,159 @@ void main() {
       });
     }
   }
+
+  // --- Fonds photo ------------------------------------------------------------
+
+  /// « Photo » d'essai : coucher de soleil et collines (aucun fichier).
+  Future<Uint8List> photoEssai() async {
+    final r = ui.PictureRecorder();
+    final c = Canvas(r);
+    const t = Size(900, 1400);
+    c.drawRect(
+      Offset.zero & t,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFD39A), Color(0xFFF08A5D), Color(0xFF8E5A86)],
+        ).createShader(Offset.zero & t),
+    );
+    c.drawCircle(
+      const Offset(620, 520),
+      90,
+      Paint()..color = const Color(0xFFFFF1C9),
+    );
+    for (final (y, couleur) in [
+      (900.0, const Color(0xFF6B4A78)),
+      (1050.0, const Color(0xFF4A3459)),
+    ]) {
+      final p = Path()..moveTo(0, t.height);
+      for (var x = 0.0; x <= t.width; x += 60) {
+        p.lineTo(x, y - 80 * (0.5 + 0.5 * ((x / 170) % 2 - 1).abs()));
+      }
+      p
+        ..lineTo(t.width, t.height)
+        ..close();
+      c.drawPath(p, Paint()..color = couleur);
+    }
+    final image = await r.endRecording().toImage(900, 1400);
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return png!.buffer.asUint8List();
+  }
+
+  Future<(ServiceApparence, ServiceFonds, Uint8List)> avecPhoto(
+    WidgetTester tester,
+    PreferencesApparence p,
+    ReglagesPhoto reglages,
+  ) async {
+    final r = await tester.runAsync(() async {
+      final a = await apparence(p);
+      final f = ServiceFonds(
+        apparence: a,
+        depot: DepotFondsPhotoMemoire(),
+        stockage: StockageMemoire(),
+      );
+      final octets = await photoEssai();
+      final id = await f.importer(octets);
+      await f.definirGeneral(FondPhoto(id: id, reglages: reglages));
+      return (a, f, octets);
+    });
+    return r!;
+  }
+
+  Future<void> attendre(WidgetTester tester) async {
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
+      await images(tester, 10);
+    }
+  }
+
+  for (final (style, mode) in [
+    (StyleVisuel.jarvis, ModeAffichage.clair),
+    (StyleVisuel.congotronics, ModeAffichage.sombre),
+  ]) {
+    testWidgets('fond photo ${style.name} ${mode.name}', (tester) async {
+      telephone(tester);
+      final (a, f, _) = await avecPhoto(
+        tester,
+        PreferencesApparence(style: style, mode: mode),
+        const ReglagesPhoto(flou: 4, assombrissement: 0.3, visibilite: 0.9),
+      );
+      final cle = GlobalKey();
+      await tester.pumpWidget(
+        app(
+          a,
+          AccueilPage(
+            pim: PimController(),
+            conversation: ConversationSession(
+              delaiReflexion: const Duration(milliseconds: 200),
+            ),
+          ),
+          cle,
+          fonds: f,
+        ),
+      );
+      await attendre(tester);
+      await tester.enterText(find.byType(EditableText), _sarah);
+      await images(tester, 5);
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await images(tester, 60);
+      await finirEcritures(tester);
+      await attendre(tester);
+      await photo(tester, cle, 'fond_photo_${style.name}_${mode.name}');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('editeur fond', (tester) async {
+    telephone(tester);
+    final (a, f, octets) = await avecPhoto(
+      tester,
+      const PreferencesApparence(),
+      ReglagesPhoto.parDefaut,
+    );
+    final cle = GlobalKey();
+    await tester.pumpWidget(
+      app(
+        a,
+        EditeurFondPage(fonds: f, octets: octets),
+        cle,
+        fonds: f,
+      ),
+    );
+    await attendre(tester);
+    await photo(tester, cle, 'editeur_fond');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('apparence galerie', (tester) async {
+    telephone(tester);
+    final (a, f, _) = await avecPhoto(
+      tester,
+      const PreferencesApparence(),
+      ReglagesPhoto.parDefaut,
+    );
+    final cle = GlobalKey();
+    await tester.pumpWidget(
+      app(
+        a,
+        Scaffold(
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(18),
+              child: PageApparence(apparence: a),
+            ),
+          ),
+        ),
+        cle,
+        fonds: f,
+      ),
+    );
+    await attendre(tester);
+    await photo(tester, cle, 'apparence_galerie');
+    expect(tester.takeException(), isNull);
+  });
 }

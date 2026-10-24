@@ -91,6 +91,27 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Profil supprimé (tableau de bord, service_role) → compte Auth supprimé
+-- aussi (migration 20261021100000_supprimer_compte_avec_profil).
+create or replace function public.supprimer_compte_du_profil()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from auth.users where id = old.id;
+  return old;
+end;
+$$;
+
+revoke all on function public.supprimer_compte_du_profil() from public, anon, authenticated;
+
+drop trigger if exists users_supprimer_compte on public.users;
+create trigger users_supprimer_compte
+  after delete on public.users
+  for each row execute function public.supprimer_compte_du_profil();
+
 -- =============================================================================
 -- Table : conversations
 -- =============================================================================

@@ -12,6 +12,11 @@ import 'package:ia_jarvis/widgets/ligne_de_commande.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/models/authentification/utilisateur_auth.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
+import 'package:ia_jarvis/pages/apprentissage/apprendre_page.dart';
+import 'package:ia_jarvis/services/apprentissage/catalogue_apprentissage.dart';
+import 'package:ia_jarvis/services/apprentissage/espace_apprentissage.dart';
+import 'package:ia_jarvis/services/apprentissage/service_progression.dart';
+import 'package:ia_jarvis/widgets/apprentissage/cartes_apprendre.dart';
 import 'package:ia_jarvis/services/authentification/auth_repository.dart';
 import 'package:ia_jarvis/services/authentification/auth_service.dart';
 import 'package:ia_jarvis/services/conversation/conversation_session.dart';
@@ -113,6 +118,7 @@ Future<void> _accueil(
   WidgetTester tester,
   Size taille, {
   AuthService? auth,
+  EspaceApprentissage? apprentissage,
 }) async {
   tester.view.physicalSize = taille;
   tester.view.devicePixelRatio = 1;
@@ -141,6 +147,7 @@ Future<void> _accueil(
         pim: _pim,
         conversation: _conversation,
         auth: auth,
+        apprentissage: apprentissage,
       ),
     ),
   );
@@ -415,6 +422,44 @@ void main() {
     await _images(tester, 25);
     expect(_ouvert(tester), isFalse);
     expect(_conversation.messages, hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Apprendre : ouvert depuis le menu ; PIM suspendu tant qu’il '
+      'est caché, repris tel quel au retour', (tester) async {
+    final espace = EspaceApprentissage(
+      catalogue: CatalogueApprentissage(apercu: true),
+      progression: ServiceProgression(
+        principal: StockageMemoire(),
+        secours: StockageMemoire(),
+        corrompue: StockageMemoire(),
+      ),
+    );
+    addTearDown(espace.dispose);
+    await _accueil(tester, const Size(390, 844), apprentissage: espace);
+    final etat = tester.state(find.byType(PimParticle));
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
+    await _ouvrir(tester);
+    await tester.tap(find.text('Apprendre'));
+    await tester.pump();
+    // Déjà suspendu pendant l'entrée, pas seulement une fois couvert.
+    final pimContexte = tester.element(find.byType(PimParticle));
+    expect(TickerMode.valuesOf(pimContexte).enabled, isFalse);
+    await _images(tester, 60);
+    expect(find.byType(ApprendrePage), findsOneWidget);
+    expect(find.byType(CarteParcours), findsNWidgets(4));
+    // Accueil hors scène : PIM ne demande plus aucune image.
+    expect(tester.binding.transientCallbackCount, 0);
+    await tester.tap(find.byTooltip('Retour'));
+    await tester.pump();
+    // Le Future de push est terminé, mais la transition inverse continue.
+    expect(TickerMode.valuesOf(pimContexte).enabled, isFalse);
+    await _images(tester, 60);
+    expect(find.byType(ApprendrePage), findsNothing);
+    expect(_ouvert(tester), isFalse);
+    expect(tester.state(find.byType(PimParticle)), same(etat));
+    expect(TickerMode.valuesOf(pimContexte).enabled, isTrue);
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
 

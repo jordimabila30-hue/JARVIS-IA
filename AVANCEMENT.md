@@ -1981,3 +1981,89 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Évaluation Claude autorisée par l'utilisateur, mais IMPOSSIBLE : le compte API Anthropic a atteint la limite d'utilisation fixée par son propriétaire (« You have reached your specified API usage limits », retour le 2026-11-01 00:00 UTC). 3 appels refusés, rien consommé, évaluation arrêtée. Conséquence : en production, les comptes Pro (Claude) reçoivent une erreur « service indisponible » jusqu'à cette date.
 - Relancer `evaluation_gmail.py --fournisseur anthropic` après le 1er novembre (ou après relèvement de la limite) ; essai réel S10+ sur la boîte de l'utilisateur avec son accord.
 - Phase 3 : résumés et réduction des tokens (la consigne Gmail est la première cible).
+
+## 2026-10-20 — Module Apprendre (Kelasi), phase 1 : interface, moteur hors ligne, progression
+
+### Fait
+- Menu latéral › **Apprendre** (interrupteur local `JARVIS_APPRENTISSAGE`, actif par défaut). Accueil : carte « Continuer », Parcours / Pratiquer / Réviser, quatre parcours (Correspondance, Communication, Relations et respect, Termes techniques) avec barre et pourcentage réels.
+- Parcours → unités → leçons (à commencer, en cours, terminée ; reprendre, recommencer, revoir, refaire ; aucun blocage).
+- Moteur de leçon hors ligne réutilisable (`SeanceLecon`) : introduction (objectif, fiches, exemples, à éviter, sources), 7 types d'exercices (choix, vrai/faux, trous, ordre, association, meilleur message, écoute avec repli texte), correction immédiate, réessayer, retour en fin de séance, résultat (acquis / à retravailler, Réviser).
+- Corpus JSON local (schéma 1, 27 Ko) : une leçon complète par parcours (6-7 exercices), 9 fiches, toutes `brouillon` ; validation tolérante ; publication des seules fiches validées (aperçu des brouillons en debug / profile uniquement). Sources réellement consultées le 2026-10-20 : `docs/APPRENTISSAGE_SOURCES.md`.
+- Progression locale versionnée : écritures regroupées, forcées en fin de leçon / arrière-plan / sortie ; copie de secours et copie de la valeur corrompue (jamais d'effacement silencieux).
+- Doc : `docs/APPRENTISSAGE.md`. Aucune dépendance ajoutée, aucun backend, aucune IA, aucun avatar.
+
+### Vérifié
+- `flutter analyze` : aucun problème. Tests : **909 / 909** (dont 42 du module : corpus, moteur, progression, interface ; + menu / PIM dans menu_lateral_test).
+- Galaxy S10+ (profile, vrai backend `jarvis-api` via `adb reverse`) : module, parcours, leçon, correction, reprise après redémarrage, retour au chat.
+- Mesures S10+ : premier rendu au démarrage 1 113 ms avant / 1 113 ms après (3 mesures chacun) ; APK release arm64 22 716 114 → 22 923 134 octets (+202 Ko) ; ouverture du module 52-56 ms (données 13-23 ms) ; ouverture d'une leçon 16 ms ; exercices : rendu 4,4 ms en moyenne (max 8), interface 1,8 ms ; PIM : 0 image calculée pendant le module ; retour au chat : 314 images / 5 s, rendu 16,1 ms = chat au repos ; mémoire ≈ 430 Mo RSS (428 Mo avant ouverture).
+- Défauts trouvés et corrigés : toucher qui désélectionnait dans « Associer », débordement de la carte de leçon à 320 px, titres centrés à tort, « ? » isolé en début de ligne.
+
+### Limites / à valider
+- Validation humaine des 9 fiches (inventaire des sources) avant toute publication en release.
+- Transition d'ouverture : quelques images à 20-36 ms (accueil PIM + module dessinés ensemble pendant le fondu) ; le chat au repos est déjà proche de 16 ms (PIM), indépendant du module.
+- Écoute : voix de JARVIS (même moteur que l'aperçu) ; fonctionnement hors réseau non vérifié sur l'appareil (dépend de la voix installée), texte toujours disponible.
+- Progression par appareil (pas par compte), pas de synchronisation.
+
+### Prochaine étape
+- Relecture / validation des fiches ; phase 2 (IA) seulement après accord.
+
+## 2026-10-20 — Fonds photo (général et par conversation) et deux motifs
+
+### Fait
+- Motifs « Kuba 4 · Velours » et « Kuba 5 · Labyrinthe » (vrais dessins,
+  cases hors écran ignorées) ; tous les anciens gardés.
+- Carte « Ma galerie » en fin de carrousel des motifs : choisir une photo,
+  la réactiver, ou l'ajuster ; photo active → « Ajuster la photo » /
+  « Changer de photo » à la place de l'Intensité (réservée aux motifs).
+- Éditeur plein écran (`pages/editeur_fond_page.dart`) : aperçu à la vraie
+  taille de l'écran (réduit), conversation de démonstration, glisser /
+  pincer / double toucher, visibilité, flou, assombrissement, Annuler /
+  Réinitialiser / Appliquer.
+- Fond par conversation : « Personnaliser le fond » dans le menu d'une
+  conversation (fond général, motif, photo, modifier) ; règle :
+  conversation → général → JARVIS.
+- Stockage local : fichiers du support de l'application (path_provider,
+  ajouté) ou IndexedDB (Web) ; préférences = identifiants et réglages
+  seulement ; photos inutilisées supprimées.
+- Rendu : photo décodée réduite, composée UNE fois (cadrage, flou,
+  assombrissement) puis copiée ; PIM inchangé au-dessus.
+
+### Vérifié
+- Analyse : aucun problème ; tests : 922 / 922 (dont `test/fonds_test.dart`).
+- Captures : fond photo derrière une conversation (bulles lisibles, PIM
+  au-dessus), éditeur, « Ma galerie », nouveaux motifs.
+- S10+ : carte « Ma galerie », sélecteur, éditeur (flou en direct),
+  Appliquer.
+
+### Reste à vérifier
+- S10+ : fond photo sur l'accueil, fond d'une conversation (le téléphone
+  était sans Internet : liste vide), redémarrage.
+
+## 2026-10-20 — Kelasi, phase 2 étape A : sources, sauvegarde, transition
+
+### Fait
+- Sources : 9 fiches auditées ; Wikipédia et l'ouvrage non consulté retirés ; remplacés par 4 pages BDL (OQLF), 6 fiches GDT (OQLF), la fiche outil « L'écoute active » (académie de Lille), le document CNV du CIUSSS de l'Est-de-l'Île-de-Montréal (non daté, non signé). Corrigés : « Je comprends… » (déconseillé par la source), origine Gordon/Rogers, définition du système d'exploitation. Inventaire : `docs/APPRENTISSAGE_SOURCES.md` ; relecture : `docs/validation_apprentissage/RELECTURE.md`.
+- Publication : une fiche `valide` exige une relecture tracée (`validation.par`, `validation.le`) ; aperçu des brouillons impossible en release, même en mémoire. 9 fiches toujours `brouillon`.
+- Sauvegarde : réponses et étapes de séance écrites aussitôt (navigation toujours regroupée).
+- Transition vers Apprendre (Codex) : fondu court 180 ms, PIM suspendu (`TickerMode`) jusqu'à la fin du retour ; variantes de mesure `ext.jarvis.variante`, outil `tool/mesure_kelasi.py`.
+
+### Vérifié
+- `flutter analyze` : aucun problème ; tests : 932 / 932.
+- S10+ hors ligne : relance à froid, contenus, sources, corrections, révision, reprise, écoute avec la voix Samsung locale et « Voir le texte ». `force-stop` 0,3 s après « Continuer » : avant 3 / 8 (étape perdue), après 4 / 8.
+- S10+, A/B alterné ×5 (profile) : ouverture 45 → 20 images hors budget au total, pire rendu 32,1 → 22,6 ms, images PIM pendant l'ouverture ≈ 27 → 1 ; retour au chat sans gain net (médiane 2-3) ; le chat au repos dépasse déjà le budget par moments (PIM). RSS 416 → 438 Mo sur la série.
+
+### En attente
+- Relecture humaine des 9 fiches (rien n'est publié en release).
+- Saccade réduite, pas supprimée.
+
+## 2026-10-20 (soir) — Gmail phase 2 : finalisation et validation
+
+- État retrouvé : phase 2 déjà commitée et poussée (`79cfdbf`) ; aucun fichier Gmail / backend modifié depuis ; modifications non commitées = autres chantiers (Apparence, fonds photo, Apprendre), non touchées.
+- Docker Desktop était arrêté (production 8000 hors service, sans lien avec Gmail) : relancé, `jarvis-redis` et `jarvis-api` redémarrés à l'identique avec l'accord de l'utilisateur, `/health/ready` ok.
+- Tests : backend **613 réussis, 1 ignoré** (Gmail phases 1-2 : 87, ODO + chat : 46, vocal : 3) ; Flutter **932 réussis, 0 échec**.
+- GroqCloud réel (corpus fictif) : 17/17 (passage du 20/10), 16/17 (passage du soir : rubriques « Faits / Interprétation » sur le scénario 14), 6/6 sur les scénarios 07 et 14 répétés. Défaut de format intermittent (≈ 1 réponse sur 34) → phase 3.
+- Critères corrigés (fausses alertes prouvées par les réponses) : 07 accepte « aucune confirmation » / « en attente » ; 14 reconnaît « aucune réponse urgente ». Règle « pas d'étiquettes » inchangée.
+- Claude : nouvelle clé API mise dans `backend/.env` par l'utilisateur ; UN message de test « salut » → réponse correcte (`claude-opus-5-5`, 37 tokens, 2,6 s). Décision de l'utilisateur : évaluation de compréhension sur GroqCloud seulement.
+- Production : `jarvis-api` recréé avec l'accord de l'utilisateur (même image `04754e448bc0`, sans reconstruction, Redis intact) : nouvelle clé Anthropic chargée (106 caractères), `/health/ready` ok, routage actif, ODO actif, Gmail configuré.
+- Tokens : ≈ 1 650-2 050 par appel (référence pour la phase 3 ; avant phase 2 ≈ 1 100-1 440) ; latence 0,9-1,9 s par appel.
+- Verdict : phase 2 validée (GroqCloud réel + Claude joignable) ; compréhension Claude non évaluée par choix.

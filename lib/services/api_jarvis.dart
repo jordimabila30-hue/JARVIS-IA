@@ -2,6 +2,7 @@ import '../models/capture_jointe.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/importation/propositions_reponse.dart';
@@ -173,7 +174,60 @@ class ApiJarvis {
     this.delai = const Duration(seconds: 10),
     this.delaiChat = const Duration(seconds: 30),
     this.delaiInactivite = const Duration(seconds: 30),
+    this.veille,
+    this.delaiReveil = const Duration(seconds: 75),
   }) : _client = client ?? http.Client();
+
+  /// Serveur hébergé qui s'endort (Render Free : après ~15 min sans
+  /// requête) : après ce silence, chaque appel protégé attend d'abord son
+  /// réveil ([reveiller]). Null (serveur local, tests) : jamais d'attente.
+  final Duration? veille;
+
+  /// Attente maximale du réveil d'un serveur endormi.
+  final Duration delaiReveil;
+
+  /// Vrai pendant un réveil qui dure (au-delà d'une seconde et demie) :
+  /// l'application affiche « Connexion au serveur JARVIS… ».
+  final reveilEnCours = ValueNotifier<bool>(false);
+
+  DateTime? _dernierContact;
+  Future<ErreurApi?>? _reveil;
+
+  void _vu() => _dernierContact = DateTime.now();
+
+  /// Réveille le serveur hébergé s'il a pu s'endormir (`GET /health`, délai
+  /// long, une seule requête partagée par les appels simultanés). Rien
+  /// n'est envoyé au chat avant : jamais de message parti deux fois.
+  /// Null : serveur joignable ; sinon l'erreur à présenter.
+  Future<ErreurApi?> reveiller() {
+    final veille = this.veille;
+    final contact = _dernierContact;
+    if (veille == null ||
+        (contact != null && DateTime.now().difference(contact) < veille)) {
+      return Future.value();
+    }
+    return _reveil ??= _attendreReveil().whenComplete(() => _reveil = null);
+  }
+
+  Future<ErreurApi?> _attendreReveil() async {
+    final lent = Timer(
+      const Duration(milliseconds: 1500),
+      () => reveilEnCours.value = true,
+    );
+    try {
+      final r = await _client.get(_route('health')).timeout(delaiReveil);
+      _vu();
+      return r.statusCode == 200 ? null : ErreurApi.indisponible;
+    } on TimeoutException {
+      return ErreurApi.delaiDepasse;
+    } catch (e) {
+      debugPrint('[JARVIS API] réveil impossible : ${_resume(e)}');
+      return ErreurApi.injoignable;
+    } finally {
+      lent.cancel();
+      reveilEnCours.value = false;
+    }
+  }
 
   /// Longueur maximale d'un message accepté par le serveur.
   static const longueurMaxMessage = 8000;
@@ -203,6 +257,7 @@ class ApiJarvis {
   Future<bool> pret() async {
     try {
       final r = await _client.get(_route('health/ready')).timeout(delai);
+      _vu();
       return r.statusCode == 200;
     } catch (_) {
       return false;
@@ -657,7 +712,20 @@ class ApiJarvis {
   ) async {
     final j = await jeton();
     if (j == null) return EchecApi<T>(ErreurApi.nonConnecte);
+    final reveil = await reveiller();
+    if (reveil != null) return EchecApi<T>(reveil, detail: 'réveil du serveur');
     var r = await appel(j);
+    // Le serveur a répondu (même par un refus) : il est éveillé.
+    final repondu = switch (r) {
+      _Resultat<T>(
+        resultat: EchecApi<T>(
+          type: ErreurApi.injoignable || ErreurApi.delaiDepasse,
+        ),
+      ) =>
+        false,
+      _ => true,
+    };
+    if (repondu) _vu();
     final renouveler = this.renouveler;
     if (r is _Refus<T> && r.detail == 'Token expiré' && renouveler != null) {
       final neuf = await renouveler();
@@ -771,8 +839,9 @@ class ApiJarvis {
     } on TimeoutException {
       if (!abandon.isCompleted) abandon.complete();
       return echec(ErreurApi.delaiDepasse);
-    } catch (_) {
-      return echec(annulee ? ErreurApi.annulee : ErreurApi.injoignable);
+    } catch (e) {
+      if (annulee) return echec(ErreurApi.annulee);
+      return echec(ErreurApi.injoignable, _resume(e));
     }
 
     if (r.statusCode != 200) {
@@ -876,6 +945,13 @@ class ApiJarvis {
     return fin ?? echec(ErreurApi.fluxInterrompu);
   }
 
+  /// Cause d'un échec réseau pour le journal : type et début du message
+  /// (adresse, code système ; jamais d'en-tête ni de jeton).
+  static String _resume(Object e) {
+    final m = '$e'.replaceAll(RegExp(r'\s+'), ' ');
+    return '${e.runtimeType}: ${m.length > 160 ? m.substring(0, 160) : m}';
+  }
+
   static String? _raison(String? detail, String jeton) {
     final raison = [?detail, ?_algorithme(jeton)].join(' · ');
     return raison.isEmpty ? null : raison;
@@ -957,7 +1033,10 @@ class ApiJarvis {
     }
   }
 
-  void fermer() => _client.close();
+  void fermer() {
+    reveilEnCours.dispose();
+    _client.close();
+  }
 }
 
 sealed class _Reponse<T> {
