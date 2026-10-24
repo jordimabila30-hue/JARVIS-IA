@@ -106,9 +106,14 @@ class MessageServeur {
     required this.contenu,
     required this.date,
     this.capture = false,
+    this.propositions = false,
   });
 
   final String id;
+
+  /// Réponse de JARVIS qui porte des propositions de réponse (cartes) :
+  /// relues avec les références du chat (WhatsApp ou aide hors WhatsApp).
+  final bool propositions;
 
   /// Message de l'utilisateur qui portait une capture d'écran (trace
   /// seulement : l'image n'est jamais enregistrée).
@@ -298,6 +303,8 @@ class DepotConversationsSupabase implements DepotConversations {
           contenu: l['content'] as String? ?? '',
           date: _date(l['created_at']),
           capture: l['role'] == 'user' && l['piece'] == 'capture_ecran',
+          propositions:
+              l['role'] == 'assistant' && l['piece'] == 'propositions_reponse',
         ),
     ], plusAnciens: lignes.length > limite);
   });

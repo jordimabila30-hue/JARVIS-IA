@@ -96,7 +96,7 @@ from ...odo.service import ServiceODO, get_odo
 # Marqueur de source (dans `messages.attachments` de la réponse, sans migration).
 SOURCE_GMAIL = {"type": "source", "source": "gmail"}
 from ...comprehension.instructions import NOTE_PIECE_SUPPRIMEE
-from ...comprehension import ciblage, controle, etat, generation, memoire, propositions as aide, reperes, restauration
+from ...comprehension import aide_libre, ciblage, controle, etat, generation, memoire, propositions as aide, reperes, restauration
 from ...comprehension.attribution import CorrecteurAttributions
 from ...comprehension.moteur import MoteurComprehension, Preparation, choisir
 from ...comprehension.references import FiltreReperes, entree_stockee, verifier
@@ -778,6 +778,7 @@ async def chat_stream(
         # Taille et type seulement : jamais le contenu.
         logger.info("Image jointe : %s, %d Ko", body.image.media_type, taille_image // 1024)
     assistant_id = str(uuid4())
+    aide_libre_active = False
     if preparation is not None:
         prompt = preparation.messages
         # La réponse principale n'écrit plus les propositions (lots) : sortie normale.
@@ -787,12 +788,20 @@ async def chat_stream(
         if image_id is not None:
             derniere["images"] = [{"media_type": body.image.media_type, "data": body.image.data}]
             await vision.garder(redis, conversation["id"], image_id, body.image, settings.chat_context_ttl)
+        # K1-16 : aide à répondre à un message reçu hors WhatsApp (indice
+        # seulement : le modèle décide d'écrire ou non le bloc, même appel).
+        aide_libre_active = (consigne is None and image_id is None
+                             and reperes.analyser(question, [], now.date()).aide_reponse)
+        if aide_libre_active:
+            systeme = f"{systeme}\n\n{aide_libre.CONSIGNE}"
         prompt = [
             {"role": "system", "content": systeme},
             *(await vision.joindre(redis, conversation["id"], history)),
             derniere,
         ]
         max_sortie = plafond(llm, settings.chat_max_output_tokens, settings)
+        if aide_libre_active:
+            max_sortie = max(max_sortie, plafond(llm, aide_libre.SORTIE_MIN, settings))
 
     # Contrôle avant l'appel facturable : une demande dont l'entrée estimée
     # dépasse déjà les tokens restants (jour ou session) n'est pas envoyée.
@@ -854,11 +863,17 @@ async def chat_stream(
             )
             filtre = FiltreReperes(correcteur)
             blocs = aide.FiltrePropositions()
+        elif aide_libre_active:
+            blocs = aide.FiltrePropositions()
+        affiches: list[str] = []     # texte diffusé sans le bloc (aide libre)
 
         def visible(fragment: str) -> str:
             if blocs is not None:
                 fragment = blocs.ajouter(fragment)
-            return filtre.ajouter(fragment) if filtre else fragment
+            if filtre:
+                return filtre.ajouter(fragment)
+            affiches.append(fragment)
+            return fragment
         stockees: list[dict] = []
         try:
             yield sse("meta", {
@@ -928,6 +943,22 @@ async def chat_stream(
                              else "La réponse a été coupée avant la fin. Renvoie ta question pour la réponse complète."),
                 )
             ensemble = None
+            if filtre is None and blocs is not None:
+                # Aide à répondre hors WhatsApp : compréhension dans le texte,
+                # messages prêts à copier dans les cartes (même composant).
+                reste = blocs.terminer()
+                entree = aide_libre.ensemble(blocs.bloc, demande_id)
+                lues = aide.lues([entree], assistant_id) if entree else None
+                if lues and not ("".join(affiches) + reste).strip():
+                    reste += "Voici quelques idées de réponse."
+                if reste:
+                    affiches.append(reste)
+                    yield sse("delta", {"text": reste})
+                if lues:
+                    stockees.insert(0, entree)      # 1re pièce : relue par l'appli
+                    yield sse("propositions", {"message_id": assistant_id, **lues})
+                logger.info("Aide à répondre (hors WhatsApp) : bloc=%s, %d ton(s)",
+                            blocs.bloc is not None, len(lues["tons"]) if lues else 0)
             if filtre is not None:
                 reste = filtre.ajouter(blocs.terminer()) + filtre.terminer()
                 if blocs.bloc is not None:
@@ -1040,6 +1071,8 @@ async def chat_stream(
                 filtre.ajouter(blocs.terminer())
                 filtre.terminer()
                 text = filtre.visible
+            elif blocs is not None:
+                text = "".join(affiches)
             else:
                 text = "".join(parts)
             if fin is None and execution is not None:

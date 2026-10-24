@@ -1480,8 +1480,10 @@ class ConversationSession extends ChangeNotifier {
       _rattacherPiecesJointes(id, page.contextes);
       _appliquerReferences(id);
       if (premierChargement) _plusAnciens = page.plusAnciens;
-      // Chat WhatsApp : les cartes de références de ses réponses.
-      if (page.contextes.isNotEmpty) {
+      // Chat WhatsApp, ou réponses avec propositions (aide à répondre hors
+      // WhatsApp) : références et cartes relues sur le serveur.
+      if (page.contextes.isNotEmpty ||
+          page.messages.any((m) => m.propositions)) {
         unawaited(_chargerReferences(id, serveur));
         unawaited(_chargerAjouts(id, page.contextes));
       }

@@ -119,7 +119,12 @@ class _Service implements ServicePiecesJointes {
   @override
   Future<ResultatApi<Map<String, ReferencesReponse>>> references(
     String conversation,
-  ) async => SuccesApi(refs);
+  ) async {
+    lectures++;
+    return SuccesApi(refs);
+  }
+
+  int lectures = 0;
 
   @override
   Future<ResultatApi<PageWhatsApp>> page(
@@ -349,6 +354,66 @@ void main() {
       );
       expect(s.messages.first.propositions, isNull);
     });
+
+    test('K1-16 : chat ordinaire (sans pièce jointe WhatsApp) rouvert : '
+        'les cartes de l’aide à répondre sont relues', () async {
+      final service = _Service()
+        ..refs = {
+          'r0': ReferencesReponse(
+            const [],
+            propositions: PropositionsReponse.depuisJson(_propositions),
+          ),
+        };
+      final s = ConversationSession(
+        delaiReflexion: Duration.zero,
+        piecesJointes: service,
+        correspondance: CorrespondanceConversations(),
+        depot: _Depot([
+          MessageServeur(
+            id: 'c1',
+            role: 'user',
+            contenu: 'Aide-moi à répondre à ce message reçu sur Instagram',
+            date: DateTime(2026, 10, 15, 10),
+          ),
+          MessageServeur(
+            id: 'r0',
+            role: 'assistant',
+            contenu: 'Tu veux refuser gentiment.',
+            date: DateTime(2026, 10, 15, 10, 1),
+            propositions: true,
+          ),
+        ], const []),
+      );
+      addTearDown(s.dispose);
+      await s.ouvrirServeur(_conv);
+      await Future<void>.delayed(Duration.zero);
+      expect(s.messages.last.propositions!.tons.length, 3);
+      expect(s.messages.last.texte, 'Tu veux refuser gentiment.');
+    });
+
+    test(
+      'chat ordinaire sans propositions : aucune relecture inutile',
+      () async {
+        final service = _Service();
+        final s = ConversationSession(
+          delaiReflexion: Duration.zero,
+          piecesJointes: service,
+          correspondance: CorrespondanceConversations(),
+          depot: _Depot([
+            MessageServeur(
+              id: 'r0',
+              role: 'assistant',
+              contenu: 'Bonjour !',
+              date: DateTime(2026, 10, 15, 10, 1),
+            ),
+          ], const []),
+        );
+        addTearDown(s.dispose);
+        await s.ouvrirServeur(_conv);
+        await Future<void>.delayed(Duration.zero);
+        expect(service.lectures, 0);
+      },
+    );
 
     test('client : liste des références avec propositions', () async {
       final client = MockClient(
