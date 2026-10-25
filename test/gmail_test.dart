@@ -337,5 +337,15 @@ void main() {
       final heure = await local.repondreLocalement(d('Quelle heure est-il ?'), avecIA: true);
       expect(heure, isNotNull);                                                  // commande locale gardée
     });
+
+    test('K1-16 : « je lui réponds quoi ? » sans conversation collée va à l’IA (cartes)', () async {
+      final local = MoteurConversationLocal();
+      DemandeJarvis d(String t) => DemandeJarvis(
+        texte: t, intention: const DetecteurIntention().detecter(t, conversationConnue: false));
+      const q = 'Ma voisine m’a écrit : tu peux arroser mes plantes ? Je lui réponds quoi ?';
+      expect(await local.repondreLocalement(d(q), avecIA: true), isNull);
+      // Sans IA (sans compte) : on demande toujours de coller la conversation.
+      expect((await local.repondreLocalement(d(q)))!.texte, MoteurConversationLocal.demandeConversation);
+    });
   });
 }

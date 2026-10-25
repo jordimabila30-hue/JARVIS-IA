@@ -284,7 +284,10 @@ class MoteurConversationLocal implements MoteurConversation {
         : null;
     switch (demande.intention) {
       case IntentionMessage.reponse:
-        if (c == null) return sansConversation;
+        // K1-16 : avec l'IA, un message rapporté (« elle m'a écrit… je lui
+        // réponds quoi ? ») est compris par le serveur, qui propose les
+        // réponses en cartes ou pose la question qui manque.
+        if (c == null) return avecIA ? null : sansConversation;
         return ReponseJarvis(
           AnalyseConversation(c).avantReponse,
           choixTon: true,
