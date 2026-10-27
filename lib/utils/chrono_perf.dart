@@ -17,7 +17,11 @@ class ChronoPerf {
   /// Parties retirées du dessin pour mesurer leur coût (banc seulement,
   /// `?sans=pim.halos,fond.flou…`). Toujours vide hors du banc.
   static final Set<String> _retires = actif
-      ? {...?Uri.base.queryParameters['sans']?.split(',')}
+      ? {
+          ...?Uri.base.queryParameters['sans']?.split(','),
+          // Téléphone : `--dart-define=JARVIS_PERF_SANS=indicateur,…`.
+          ...const String.fromEnvironment('JARVIS_PERF_SANS').split(','),
+        }
       : const {};
 
   static bool sans(String partie) => actif && _retires.contains(partie);

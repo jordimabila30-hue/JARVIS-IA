@@ -1,6 +1,6 @@
 {
-    "name": "ia_jarvis",
-    "short_name": "ia_jarvis",
+    "name": "Jarvis",
+    "short_name": "Jarvis",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FAF8F2",

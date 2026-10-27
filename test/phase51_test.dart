@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ia_jarvis/widgets/conversation/selecteurs_reponse.dart';
 import 'package:ia_jarvis/models/importation/conversation_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/piece_jointe_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/propositions_reponse.dart';
@@ -194,19 +195,19 @@ void main() {
           surTon: (t, l) => reglages.add((t, l)),
         ),
       );
-      expect(
-        find.byKey(const Key('ton-propose-Professionnel')),
-        findsOneWidget,
-      );
-      for (final l in ['court', 'moyen', 'long']) {
-        expect(find.byKey(Key('longueur-$l')), findsOneWidget);
-      }
+      await _options(tester, SelecteursReponse.cleTon, [
+        'ton-propose-Professionnel',
+      ]);
+      await _options(tester, SelecteursReponse.cleLongueur, [
+        for (final l in ['court', 'moyen', 'long']) 'longueur-$l',
+      ]);
       expect(find.text('Naturel moyen 2'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('ton-propose-Professionnel')));
-      await tester.pump(); // aucun chargement : une seule image
+      await _choisir(
+        tester,
+        'ton-propose-Professionnel',
+      ); // aucun chargement : une seule image
       expect(find.text('Professionnel moyen 2'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('longueur-long')));
-      await tester.pump();
+      await _choisir(tester, 'longueur-long');
       expect(find.text('Professionnel long 1'), findsOneWidget);
       expect(find.text('Professionnel moyen 1'), findsNothing);
       expect(reglages.last, ('Professionnel', LongueurProposition.long));
@@ -266,7 +267,7 @@ void main() {
       expect(find.byKey(const Key('reponse-choisie')), findsOneWidget);
       expect(find.text('Professionnel long 2'), findsOneWidget);
       expect(find.text('Vous → Lina Moreau'), findsOneWidget);
-      expect(find.byKey(const Key('ton-propose-Naturel')), findsNothing);
+      expect(find.byKey(SelecteursReponse.cleTon), findsNothing);
       expect(find.byType(CarteProposition), findsNothing);
       await tester.tap(find.byKey(const Key('menu-reponse-choisie')));
       await tester.pumpAndSettle();
@@ -502,4 +503,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+/// Ton ▾ / Longueur ▾ : ouvre le menu, choisit, referme.
+Future<void> _choisir(WidgetTester t, String cle) async {
+  await t.tap(
+    find.byKey(
+      cle.startsWith('ton-')
+          ? SelecteursReponse.cleTon
+          : SelecteursReponse.cleLongueur,
+    ),
+  );
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(Key(cle)).last);
+  await t.pumpAndSettle();
+}
+
+/// Les choix proposés par un menu (ouvert puis refermé).
+Future<void> _options(WidgetTester t, Key menu, List<String> cles) async {
+  await t.tap(find.byKey(menu));
+  await t.pumpAndSettle();
+  for (final c in cles) {
+    expect(find.byKey(Key(c)), findsOneWidget, reason: c);
+  }
+  await t.tapAt(const Offset(1, 1));
+  await t.pumpAndSettle();
 }

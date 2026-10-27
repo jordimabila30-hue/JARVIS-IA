@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:ia_jarvis/widgets/conversation/indicateur_generation.dart';
+import 'package:ia_jarvis/widgets/conversation/selecteurs_reponse.dart';
 import 'package:ia_jarvis/models/importation/conversation_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/piece_jointe_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/propositions_reponse.dart';
@@ -430,7 +432,7 @@ void main() {
         expect(find.byKey(const Key('reponse-choisie')), findsOneWidget);
         expect(find.text('Amical proposition 2'), findsOneWidget);
         expect(find.byType(CarteProposition), findsNothing);
-        expect(find.byKey(const Key('ton-propose-Taquin')), findsNothing);
+        expect(find.byKey(SelecteursReponse.cleTon), findsNothing);
         // Menu ··· : Copier, Annuler le choix.
         await tester.tap(find.byKey(const Key('menu-reponse-choisie')));
         await tester.pumpAndSettle();
@@ -678,7 +680,9 @@ void main() {
                 propositions: p,
                 surReprendre: () async {
                   reprises++;
-                  setState(() => p = PropositionsReponse.depuisJson(complet())!);
+                  setState(
+                    () => p = PropositionsReponse.depuisJson(complet())!,
+                  );
                   return true;
                 },
               ),
@@ -695,11 +699,9 @@ void main() {
       expect(find.textContaining('Génération incomplète'), findsNothing);
       expect(find.byType(CarteProposition), findsNWidgets(3));
       // Longueur et ton : instantané, au même endroit.
-      await tester.tap(find.byKey(const Key('longueur-long')));
-      await tester.pump();
+      await _choisir(tester, 'longueur-long');
       expect(find.text('Amical long 1'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('ton-propose-Professionnel')));
-      await tester.pump();
+      await _choisir(tester, 'ton-propose-Professionnel');
       expect(find.text('Professionnel long 1'), findsOneWidget);
       expect(reprises, 1);
     });
@@ -726,13 +728,13 @@ void main() {
     });
   });
 
-  testWidgets('propositions en préparation : trois points toujours animés', (
+  testWidgets('propositions en préparation : cercle toujours animé', (
     tester,
   ) async {
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: PreparationPropositions())),
     );
-    expect(find.text('Je prépare les propositions'), findsOneWidget);
+    expect(find.text(IndicateurGeneration.propositions), findsOneWidget);
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 200));
       expect(tester.binding.hasScheduledFrame, isTrue); // jamais figé
@@ -744,9 +746,8 @@ void main() {
     tester.view.physicalSize = const Size(390, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    String texte(String l, int i) => l == 'long'
-        ? List.filled(40, 'mot$i').join(' ')
-        : 'Texte $l $i';
+    String texte(String l, int i) =>
+        l == 'long' ? List.filled(40, 'mot$i').join(' ') : 'Texte $l $i';
     final p = PropositionsReponse.depuisJson({
       'longueurs': ['court', 'moyen', 'long'],
       'tons': [
@@ -776,23 +777,17 @@ void main() {
         ),
       ),
     );
-    final capsule = find.byKey(const Key('longueur-long'));
+    // Le menu Longueur reste sous le doigt pendant les changements.
+    final capsule = find.byKey(SelecteursReponse.cleLongueur);
     final avant = tester.getTopLeft(capsule).dy;
-    await tester.tap(capsule);
-    await tester.pumpAndSettle();
+    await _choisir(tester, 'longueur-long');
     expect(find.textContaining('mot1 mot1'), findsOneWidget);
     expect(tester.getTopLeft(capsule).dy, moreOrLessEquals(avant, epsilon: 1));
     // Et retour à Court : toujours sous le doigt.
-    await tester.tap(find.byKey(const Key('longueur-court')));
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.byKey(const Key('longueur-court'))).dy,
-      moreOrLessEquals(tester.getTopLeft(capsule).dy, epsilon: 1),
-    );
+    await _choisir(tester, 'longueur-court');
     expect(tester.getTopLeft(capsule).dy, moreOrLessEquals(avant, epsilon: 1));
     // Long puis choix : la bulle compacte n'est jamais cachée en bas.
-    await tester.tap(capsule);
-    await tester.pumpAndSettle();
+    await _choisir(tester, 'longueur-long');
     final choisie = p.affichees(p.tons.first, LongueurProposition.long)[1];
     await tester.pumpWidget(
       MaterialApp(
@@ -817,4 +812,29 @@ void main() {
     expect(bulle, findsOneWidget);
     expect(tester.getBottomLeft(bulle).dy, lessThanOrEqualTo(800 - 48 + 1));
   });
+}
+
+/// Ton ▾ / Longueur ▾ : ouvre le menu, choisit, referme.
+Future<void> _choisir(WidgetTester t, String cle) async {
+  await t.tap(
+    find.byKey(
+      cle.startsWith('ton-')
+          ? SelecteursReponse.cleTon
+          : SelecteursReponse.cleLongueur,
+    ),
+  );
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(Key(cle)).last);
+  await t.pumpAndSettle();
+}
+
+/// Les choix proposés par un menu (ouvert puis refermé).
+Future<void> _options(WidgetTester t, Key menu, List<String> cles) async {
+  await t.tap(find.byKey(menu));
+  await t.pumpAndSettle();
+  for (final c in cles) {
+    expect(find.byKey(Key(c)), findsOneWidget, reason: c);
+  }
+  await t.tapAt(const Offset(1, 1));
+  await t.pumpAndSettle();
 }

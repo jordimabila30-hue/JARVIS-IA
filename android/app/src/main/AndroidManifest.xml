@@ -15,7 +15,7 @@
          session vocale ouverte par l'utilisateur (type déclaré à ce moment). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <application
-        android:label="ia_jarvis"
+        android:label="Jarvis"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
@@ -148,6 +148,7 @@
         <!-- Menu « + » : ouvrir Instagram, Messenger, l'appli e-mail. -->
         <package android:name="com.instagram.android"/>
         <package android:name="com.facebook.orca"/>
+        <package android:name="com.google.android.gm"/>
         <intent>
             <action android:name="android.intent.action.MAIN"/>
             <category android:name="android.intent.category.APP_EMAIL"/>

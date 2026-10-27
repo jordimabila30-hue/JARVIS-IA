@@ -66,7 +66,7 @@ class FeuilleAjout extends StatelessWidget {
       ChoixAjout.messenger,
       LogoSource(SourceConversation.messenger, taille: 30),
     ),
-    (ChoixAjout.mail, Icon(Icons.mail_outline_rounded, size: 26)),
+    (ChoixAjout.mail, LogoSource(SourceConversation.gmail, taille: 30)),
   ];
 
   /// Phase 5 : « Ajouter une réponse reçue » disponible (compte connecté),

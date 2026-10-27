@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/importation/propositions_reponse.dart';
 import '../../theme/theme_jarvis.dart';
+import 'selecteurs_reponse.dart';
 
 /// Ton et longueur affichés (mémorisés par la session).
 typedef SurReglagePropositions =
@@ -288,38 +289,15 @@ class _PropositionsJarvisState extends State<PropositionsJarvis> {
           ],
         ),
         const SizedBox(height: 8),
-        // Wrap plutôt qu'un défilement horizontal : rien de caché sur un
-        // téléphone étroit, une seule ligne sur un écran large.
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final (i, t) in p.tons.indexed)
-              _CapsuleTon(
-                key: Key('ton-propose-${t.nom}'),
-                nom: t.nom,
-                choisi: i == _choisi,
-                surAppui: () => _regler(ton: i),
-              ),
-          ],
+        // Ton ▾ / Longueur ▾ : composant partagé (toutes les idées de réponse).
+        SelecteursReponse(
+          tons: [for (final t in p.tons) t.nom],
+          ton: _choisi,
+          surTon: (i) => _regler(ton: i),
+          longueurs: [for (final l in p.longueurs) l.libelle],
+          longueur: _longueur == null ? null : p.longueurs.indexOf(_longueur!),
+          surLongueur: (i) => _regler(longueur: p.longueurs[i]),
         ),
-        if (p.longueurs.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final l in p.longueurs)
-                _CapsuleTon(
-                  key: Key('longueur-${l.name}'),
-                  nom: l.libelle,
-                  choisi: l == _longueur,
-                  petite: true,
-                  surAppui: () => _regler(longueur: l),
-                ),
-            ],
-          ),
-        ],
         const SizedBox(height: 10),
         // Même emplacement, même taille de cadre : seuls les textes changent.
         Column(
@@ -478,67 +456,6 @@ class BulleReponseChoisie extends StatelessWidget {
   static String _date(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} '
       'à ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-}
-
-class _CapsuleTon extends StatelessWidget {
-  const _CapsuleTon({
-    super.key,
-    required this.nom,
-    required this.choisi,
-    required this.surAppui,
-    this.petite = false,
-  });
-
-  final String nom;
-  final bool choisi;
-  final VoidCallback surAppui;
-  final bool petite;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      selected: choisi,
-      button: true,
-      label: petite ? 'Longueur $nom' : 'Ton $nom',
-      excludeSemantics: true,
-      child: Material(
-        color: choisi
-            ? CouleursJarvis.lavande.withValues(alpha: 0.85)
-            : CouleursJarvis.coque.withValues(alpha: 0.7),
-        shape: StadiumBorder(
-          side: BorderSide(
-            color: choisi
-                ? CouleursJarvis.violet.withValues(alpha: 0.6)
-                : CouleursJarvis.lavande,
-          ),
-        ),
-        child: InkWell(
-          onTap: surAppui,
-          customBorder: const StadiumBorder(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: petite ? 30 : 34),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: petite ? 11 : 13,
-                vertical: petite ? 5 : 7,
-              ),
-              child: Text(
-                nom,
-                style: TextStyle(
-                  fontSize: petite ? 12.5 : 13,
-                  height: 1.25,
-                  fontWeight: choisi ? FontWeight.w600 : FontWeight.w500,
-                  color: choisi
-                      ? CouleursJarvis.signal
-                      : CouleursJarvis.texteSecondaire,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Déclare (vrai) ou annule (faux) l'envoi d'une proposition ; vrai quand

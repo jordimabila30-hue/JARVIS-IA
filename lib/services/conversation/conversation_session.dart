@@ -17,6 +17,7 @@ import '../importation/pieces_jointes_serveur.dart';
 import '../ecriture/ecriture_progressive.dart';
 import '../ecriture/texte_en_direct.dart';
 import '../voice_command_service.dart';
+import '../../utils/chrono_perf.dart';
 import 'consentement_analyse.dart';
 import 'detecteur_conversation.dart';
 import 'detecteur_intention.dart';
@@ -957,6 +958,10 @@ class ConversationSession extends ChangeNotifier {
     _enCours++;
     _enAttente++;
     notifyListeners();
+    // Mesure (JARVIS_PERF seulement, supprimé à la compilation sinon) :
+    // premier fragment, durée totale, images pendant la génération.
+    ChronoPerf.reinitialiser();
+    final mesure = ChronoPerf.debut();
     // Réception : tampon des fragments de l'IA (texte mis en forme au fur
     // et à mesure, Markdown inachevé masqué).
     final flux = TexteEnDirect(
@@ -983,6 +988,7 @@ class ConversationSession extends ChangeNotifier {
       if (idBulle != null || generation != _generation) return;
       // Premier fragment : la bulle de JARVIS remplace la réflexion, le
       // texte s'y écrit pendant que la suite arrive.
+      ChronoPerf.fin('reponse.premier_fragment', mesure);
       finAttente();
       final id = idBulle = _id++;
       final heure = heureBulle = _horloge();
@@ -1039,6 +1045,18 @@ class ConversationSession extends ChangeNotifier {
             );
     }
     _enCours--;
+    ChronoPerf.fin('reponse.totale', mesure);
+    if (ChronoPerf.actif) {
+      // Ligne courte (le journal complet peut être tronqué par Android).
+      debugPrint(
+        '[PERF] durees totale_ms=${(ChronoPerf.debut() - mesure) ~/ 1000}',
+      );
+      // Après la fin de l'écriture progressive (images comprises).
+      Future<void>.delayed(
+        const Duration(seconds: 6),
+        () => ChronoPerf.journal('reponse'),
+      );
+    }
     finAttente();
     if (idBulle != null) _preparations.remove(idBulle);
     if (_ferme) {

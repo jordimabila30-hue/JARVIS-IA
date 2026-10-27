@@ -12,7 +12,8 @@ enum Messagerie {
     'https://www.instagram.com/direct/inbox/',
   ),
   messenger('Messenger', 'com.facebook.orca', 'https://www.messenger.com/'),
-  mail('Mail', 'mail', 'https://mail.google.com/');
+  // Gmail (le service e-mail de JARVIS) : son application, sinon son site.
+  mail('Gmail', 'com.google.android.gm', 'https://mail.google.com/');
 
   const Messagerie(this.libelle, this.cibleAndroid, this.site);
 

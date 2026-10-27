@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -12,6 +10,7 @@ import '../apparence/frise_kuba.dart';
 import '../ecriture/texte_progressif.dart';
 import 'choix_ton.dart';
 import 'heure_message.dart';
+import 'indicateur_generation.dart';
 import '../../models/importation/propositions_reponse.dart';
 import 'propositions_jarvis.dart';
 import 'references_jarvis.dart';
@@ -23,9 +22,18 @@ import 'reponse_proposee.dart';
 /// signature « • JARVIS » ([SignatureJarvis]), heure en bas à
 /// droite.
 class _CadreJarvis extends StatelessWidget {
-  const _CadreJarvis({required this.child, this.heure, this.ecriture});
+  const _CadreJarvis({
+    required this.child,
+    this.heure,
+    this.ecriture,
+    this.indicateur,
+  });
 
   final Widget child;
+
+  /// Réception en cours (« Rédaction… ») : à droite de la signature, posé
+  /// par-dessus la ligne (la carte ne change pas de hauteur à la fin).
+  final Widget? indicateur;
 
   /// Heure de la réponse ; aucune pendant la réflexion.
   final DateTime? heure;
@@ -100,7 +108,22 @@ class _CadreJarvis extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Même signature pour toutes les réponses de JARVIS.
-        SignatureJarvis(compacte: GabaritJarvis.of(context).compact),
+        SizedBox(
+          width: double.infinity,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SignatureJarvis(compacte: GabaritJarvis.of(context).compact),
+              if (indicateur case final i?)
+                Positioned(
+                  right: 0,
+                  top: -2,
+                  left: 90,
+                  child: Align(alignment: Alignment.centerRight, child: i),
+                ),
+            ],
+          ),
+        ),
         const SizedBox(height: 9),
         child,
         if (heure != null) ...[
@@ -205,6 +228,15 @@ class CarteJarvis extends StatelessWidget {
     return _CadreJarvis(
       heure: message.heure,
       ecriture: ecriture,
+      // Seulement pendant la réception réelle (fragments du serveur) :
+      // disparaît à la fin, la bulle retrouve exactement son aspect.
+      indicateur: message.redaction && !preparation
+          ? const IndicateurGeneration(
+              libelle: IndicateurGeneration.redaction,
+              libelleLong: IndicateurGeneration.longue,
+              delaiLong: Duration(seconds: 25),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -405,118 +437,56 @@ class _BoutonChoix extends StatelessWidget {
   }
 }
 
-/// Propositions en préparation : les mêmes trois points, sans cadre, et
-/// une courte légende.
+/// Propositions en préparation (événement `preparation` du serveur) :
+/// cercle et courte légende sous le texte, jusqu'à leur arrivée.
 class PreparationPropositions extends StatelessWidget {
   const PreparationPropositions({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const KeyedSubtree(
       key: Key('preparation-propositions'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ReflexionJarvis(cadre: false),
-        SizedBox(width: 4),
-        Text(
-          'Je prépare les propositions',
-          style: TextStyle(fontSize: 13, color: CouleursJarvis.texteSecondaire),
-        ),
-      ],
+      child: IndicateurGeneration(
+        libelle: IndicateurGeneration.propositions,
+        libelleLong: IndicateurGeneration.longue,
+        delaiLong: Duration(seconds: 30),
+      ),
     );
   }
 }
 
-/// JARVIS prépare sa réponse : trois points qui respirent doucement.
-class ReflexionJarvis extends StatefulWidget {
+/// JARVIS prépare sa réponse (aucun fragment reçu) : cercle qui tourne et
+/// « Préparation… », ou « Connexion au serveur JARVIS… » pendant le réveil
+/// du serveur hébergé (état réel, signalé par l'API).
+class ReflexionJarvis extends StatelessWidget {
   const ReflexionJarvis({super.key, this.cadre = true, this.reveilServeur});
 
-  /// Faux : les points seuls (sous un texte déjà affiché).
+  /// Faux : l'indicateur seul (sous un texte déjà affiché).
   final bool cadre;
 
-  /// Vrai pendant le réveil du serveur hébergé : « Connexion au serveur
-  /// JARVIS… » à côté des points.
+  /// Vrai pendant le réveil du serveur hébergé.
   final ValueListenable<bool>? reveilServeur;
 
-  @override
-  State<ReflexionJarvis> createState() => _ReflexionJarvisState();
-}
-
-class _ReflexionJarvisState extends State<ReflexionJarvis>
-    with SingleTickerProviderStateMixin {
-  late final _anim = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
+  static const connexion = 'Connexion au serveur JARVIS…';
 
   @override
   Widget build(BuildContext context) {
-    final points = SizedBox(
-      height: 18,
-      child: RepaintBoundary(
-        child: AnimatedBuilder(
-          animation: _anim,
-          builder: (context, _) => Row(
-            children: [
-              for (var i = 0; i < 3; i++)
-                Container(
-                  width: 7,
-                  height: 7,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: CouleursJarvis.violet.withValues(
-                      alpha:
-                          0.25 +
-                          0.55 *
-                              (0.5 +
-                                  0.5 *
-                                      math.sin(
-                                        (_anim.value - i * 0.18) * 2 * math.pi,
-                                      )),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    const preparation = IndicateurGeneration(
+      libelle: IndicateurGeneration.preparation,
+      libelleLong: IndicateurGeneration.longue,
     );
-    final reveil = widget.reveilServeur;
+    final reveil = reveilServeur;
     final contenu = reveil == null
-        ? points
+        ? preparation
         : ValueListenableBuilder<bool>(
             valueListenable: reveil,
             builder: (context, enCours, _) => enCours
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      points,
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          'Connexion au serveur JARVIS…',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: CouleursJarvis.texteSecondaire,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : points,
+                ? const IndicateurGeneration(libelle: connexion)
+                : preparation,
           );
     return Semantics(
-      label: widget.cadre
-          ? 'JARVIS réfléchit'
-          : 'JARVIS prépare les propositions',
-      child: widget.cadre ? _CadreJarvis(child: contenu) : contenu,
+      label: cadre ? 'JARVIS réfléchit' : 'JARVIS prépare les propositions',
+      child: cadre ? _CadreJarvis(child: contenu) : contenu,
     );
   }
 }

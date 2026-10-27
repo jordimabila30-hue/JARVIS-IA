@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:ia_jarvis/widgets/conversation/selecteurs_reponse.dart';
 import 'package:ia_jarvis/models/importation/conversation_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/piece_jointe_whatsapp.dart';
 import 'package:ia_jarvis/models/importation/propositions_reponse.dart';
@@ -455,16 +456,16 @@ void main() {
           surTon: (ton, _) => tons.add(ton),
         );
         expect(find.text('Idées de réponse'), findsOneWidget);
-        for (final nom in ['Taquin', 'Naturel', 'Sérieux']) {
-          expect(find.byKey(Key('ton-propose-$nom')), findsOneWidget);
-        }
+        await _options(tester, SelecteursReponse.cleTon, [
+          for (final nom in ['Taquin', 'Naturel', 'Sérieux'])
+            'ton-propose-$nom',
+        ]);
         expect(find.byType(CarteProposition), findsNWidgets(3));
         expect(
           find.text('Ministre, non. Président, à la rigueur 😏'),
           findsOneWidget,
         );
-        await tester.tap(find.byKey(const Key('ton-propose-Naturel')));
-        await tester.pumpAndSettle();
+        await _choisir(tester, 'ton-propose-Naturel');
         expect(find.byType(CarteProposition), findsNWidgets(3));
         expect(find.text('Désolé pour le retard, j’arrive !'), findsOneWidget);
         expect(
@@ -530,4 +531,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+/// Ton ▾ / Longueur ▾ : ouvre le menu, choisit, referme.
+Future<void> _choisir(WidgetTester t, String cle) async {
+  await t.tap(
+    find.byKey(
+      cle.startsWith('ton-')
+          ? SelecteursReponse.cleTon
+          : SelecteursReponse.cleLongueur,
+    ),
+  );
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(Key(cle)).last);
+  await t.pumpAndSettle();
+}
+
+/// Les choix proposés par un menu (ouvert puis refermé).
+Future<void> _options(WidgetTester t, Key menu, List<String> cles) async {
+  await t.tap(find.byKey(menu));
+  await t.pumpAndSettle();
+  for (final c in cles) {
+    expect(find.byKey(Key(c)), findsOneWidget, reason: c);
+  }
+  await t.tapAt(const Offset(1, 1));
+  await t.pumpAndSettle();
 }

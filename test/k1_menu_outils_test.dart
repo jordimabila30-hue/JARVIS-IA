@@ -43,6 +43,8 @@ void main() {
       await o.ouvrir(Messagerie.mail);
       expect(cibles, isEmpty);
       expect(sites.single.host, 'mail.google.com');
+      expect(Messagerie.mail.libelle, 'Gmail');
+      expect(Messagerie.mail.cibleAndroid, 'com.google.android.gm');
     });
 
     testWidgets('la feuille renvoie le choix de la messagerie', (tester) async {
@@ -60,7 +62,7 @@ void main() {
       );
       await tester.tap(find.text('+'));
       await tester.pumpAndSettle();
-      for (final t in ['Instagram', 'Messenger', 'Mail']) {
+      for (final t in ['Instagram', 'Messenger', 'Gmail']) {
         expect(find.text(t), findsOneWidget);
       }
       await tester.tap(find.text('Messenger'));

@@ -21,6 +21,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Mesures de performance (JARVIS_PERF) : rien hors mesure.
   ChronoPerf.enregistrerExtension();
+  ChronoPerf.suivreImages();
   var config = ConfigAuth.compilation();
   try {
     // Supabase : session gardée sur l'appareil, lien de récupération.
@@ -228,7 +229,7 @@ class _JarvisAppState extends State<JarvisApp> with WidgetsBindingObserver {
       builder: (context, _) {
         final palette = _apparence.palette;
         return MaterialApp(
-          title: 'JARVIS',
+          title: 'Jarvis',
           navigatorKey: _navigateur,
           debugShowCheckedModeBanner: false,
           theme: themeJarvis(palette),
