@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/conversations/apercu_conversation.dart';
@@ -732,7 +733,48 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
 
   /// La conversation commence (premier message) ou se termine
   /// (« Nouvelle conversation ») : seule bascule qui reconstruit la page.
+  // G7 : brouillon par conversation (mémoire seulement : rien sur le
+  // disque, perdu à la déconnexion avec la page). Clé : identifiant local
+  // de la conversation (null : nouvelle conversation).
+  final _brouillons = <String?, TextEditingValue>{};
+  String? _idBrouillon;
+
+  // Conversations déjà connues (mises de côté) : en rouvrir une n'est pas
+  // « commencer » la conversation vide.
+  final _idsConnus = <String>{};
+
+  /// Conversation affichée changée : le texte en cours lui reste attaché,
+  /// celui de la nouvelle conversation revient (jamais dans une autre).
+  void _changerBrouillon() {
+    final id = _conversation.idCourant;
+    if (id == _idBrouillon) return;
+    // Conversation vide qui vient de commencer (premier message, vocal) :
+    // c'est la même, le texte en cours reste dans la barre.
+    final commencee =
+        _idBrouillon == null &&
+        id != null &&
+        !_brouillons.containsKey(id) &&
+        !_idsConnus.contains(id);
+    _idsConnus
+      ..clear()
+      ..addAll([for (final a in _conversation.archives) a.id]);
+    if (id != null) _idsConnus.add(id);
+    if (commencee) {
+      _idBrouillon = id;
+      return;
+    }
+    if (_controleur.text.isNotEmpty) {
+      _brouillons[_idBrouillon] = _controleur.value;
+    } else {
+      _brouillons.remove(_idBrouillon);
+    }
+    _idBrouillon = id;
+    final repris = _brouillons.remove(id) ?? TextEditingValue.empty;
+    if (repris != _controleur.value) _controleur.value = repris;
+  }
+
   void _surConversation() {
+    _changerBrouillon();
     _lireNouvelleReponse();
     final actif = !_conversation.vide;
     _pim.conversation = actif;
@@ -762,8 +804,24 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       return;
     }
     _pim.surEnvoi();
-    _conversation.envoyer(message);
+    // Champ vidé AVANT l'envoi : le message envoyé n'est jamais gardé comme
+    // brouillon de la conversation qu'il crée.
     _controleur.clear();
+    _conversation.envoyer(message);
+    _fermerClavierApresEnvoi();
+  }
+
+  /// G7 : message accepté → le clavier tactile se ferme aussitôt (sans
+  /// attendre la réponse) et la barre redescend avec lui (insets natifs,
+  /// aucune animation concurrente). Web, Windows (clavier physique) : le
+  /// focus reste, comme avant.
+  void _fermerClavierApresEnvoi() {
+    if (kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    _focus.unfocus();
   }
 
   /// Consigne et pièce jointe partent ensemble, une seule fois. Avec un
@@ -784,8 +842,13 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
       if (r is PieceJointeEnvoyee && identical(_pieceJointe, piece)) {
         _pieceJointe = null;
         _controleur.clear();
+        // La consigne a pu être mise de côté pendant l'enregistrement (chat
+        // créé à l'envoi) : envoyée, elle n'est plus un brouillon.
+        _brouillons.removeWhere((_, v) => v.text.trim() == message);
       }
     });
+    // Échec : texte et pièce jointe gardés, clavier ouvert pour réessayer.
+    if (r is PieceJointeEnvoyee) _fermerClavierApresEnvoi();
     if (r case PieceJointeNonEnvoyee(:final raison)) {
       ScaffoldMessenger.maybeOf(context)
         ?..hideCurrentSnackBar()

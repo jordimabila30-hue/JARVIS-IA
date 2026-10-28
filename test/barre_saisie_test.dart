@@ -406,8 +406,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('envoi : message dans le fil, champ vidé, barre dépliée '
-        'tant que le focus reste', (tester) async {
+    testWidgets('envoi (téléphone, G7) : message dans le fil, champ vidé, '
+        'clavier fermé, barre revenue au repos', (tester) async {
       await page(tester, const Size(1366, 768));
       await tester.tap(find.byType(EditableText));
       await tester.enterText(find.byType(EditableText), 'Bonjour JARVIS');
@@ -417,8 +417,8 @@ void main() {
       expect(find.text('Bonjour JARVIS'), findsOneWidget);
       final champ = tester.widget<EditableText>(find.byType(EditableText));
       expect(champ.controller.text, isEmpty);
-      expect(champ.focusNode.hasFocus, isTrue);
-      expect(barre(tester).height, closeTo(_deplie(false), 0.5));
+      expect(champ.focusNode.hasFocus, isFalse);
+      expect(barre(tester).height, MesuresBarre.hauteur);
       expect(tester.takeException(), isNull);
     });
 

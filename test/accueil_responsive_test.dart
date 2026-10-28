@@ -6,6 +6,7 @@ import 'package:ia_jarvis/models/importation/export_whatsapp.dart';
 import 'package:ia_jarvis/models/voice_settings.dart';
 import 'package:ia_jarvis/pages/accueil_page.dart';
 import 'package:ia_jarvis/pages/importation_whatsapp_page.dart';
+import 'package:ia_jarvis/services/conversation/conversation_session.dart';
 import 'package:ia_jarvis/services/importation/pont_android_importation.dart';
 import 'package:ia_jarvis/services/importation/selection_export_whatsapp.dart';
 import 'package:ia_jarvis/services/microphone_service.dart';
@@ -134,7 +135,7 @@ PartageRecu _partage(String id, String nom) => PartageRecu(
   ],
 );
 
-Widget _page({ReceptionPartages? partages}) {
+Widget _page({ReceptionPartages? partages, ConversationSession? conversation}) {
   final tts = _Tts();
   final session = VoiceSession(
     micro: _Micro(),
@@ -153,6 +154,7 @@ Widget _page({ReceptionPartages? partages}) {
       session: session,
       pim: PimController(),
       partages: partages ?? _Partages(),
+      conversation: conversation,
     ),
   );
 }
@@ -510,5 +512,87 @@ void main() {
     expect(find.byType(ImportationWhatsAppPage), findsOneWidget);
     expect(find.text('chat.zip'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  group('G7 : envoi, clavier, brouillons', () {
+    /// Écrit puis touche le bouton Envoyer de la barre (comme au doigt).
+    Future<void> ecrireEtEnvoyer(WidgetTester tester, String texte) async {
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), texte);
+      await tester.pump();
+      await tester.tap(find.byType(BoutonVocal));
+      await _images(tester, 20);
+    }
+
+    FocusNode focusDuChamp(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).focusNode!;
+
+    testWidgets('Android : message accepté → clavier fermé, champ vidé', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final s = ConversationSession(delaiReflexion: Duration.zero);
+      addTearDown(s.dispose);
+      await tester.pumpWidget(_page(conversation: s));
+      await _images(tester, 10);
+      await ecrireEtEnvoyer(tester, 'Quelle heure est-il ?');
+      expect(s.messages.first.texte, 'Quelle heure est-il ?');
+      expect(focusDuChamp(tester).hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('ordinateur (clavier physique) : le focus reste', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final s = ConversationSession(delaiReflexion: Duration.zero);
+      addTearDown(s.dispose);
+      await tester.pumpWidget(_page(conversation: s));
+      await _images(tester, 10);
+      await ecrireEtEnvoyer(tester, 'Quelle heure est-il ?');
+      // Déjà dans la conversation : le focus reste après l'envoi.
+      await ecrireEtEnvoyer(tester, 'Quelle date ?');
+      expect(focusDuChamp(tester).hasFocus, isTrue);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('brouillon gardé par conversation, jamais dans une autre ; '
+        'envoyé → effacé', (tester) async {
+      final s = ConversationSession(delaiReflexion: Duration.zero);
+      addTearDown(s.dispose);
+      await tester.pumpWidget(_page(conversation: s));
+      await _images(tester, 10);
+      TextEditingController champ() =>
+          tester.widget<TextField>(find.byType(TextField)).controller!;
+      await ecrireEtEnvoyer(tester, 'Quelle heure est-il ?');
+      final premiere = s.idCourant!;
+      await tester.enterText(find.byType(TextField), 'brouillon de la 1');
+      await tester.pump();
+      s.effacer(); // Nouvelle conversation
+      await _images(tester, 10);
+      expect(champ().text, isEmpty); // jamais dans une autre conversation
+      await tester.enterText(find.byType(TextField), 'Quelle date ?');
+      await tester.pump();
+      s.ouvrir(premiere);
+      await _images(tester, 10);
+      expect(champ().text, 'brouillon de la 1');
+      expect(champ().selection.baseOffset, 'brouillon de la 1'.length);
+      expect(s.messages.length, 2); // la restauration n'envoie rien
+      // Envoyé : le brouillon n'existe plus nulle part.
+      await tester.tap(find.byType(BoutonVocal));
+      await _images(tester, 20);
+      expect(champ().text, isEmpty);
+      s.effacer();
+      await _images(tester, 10);
+      expect(champ().text, 'Quelle date ?'); // brouillon de la nouvelle
+    });
   });
 }
