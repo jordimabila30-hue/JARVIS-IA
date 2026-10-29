@@ -11,6 +11,7 @@ import '../services/conversation/conversation_session.dart';
 import '../services/ecriture/ecriture_progressive.dart';
 import '../theme/gabarit_jarvis.dart';
 import '../theme/theme_jarvis.dart';
+import '../utils/chrono_perf.dart';
 import '../widgets/conversation/bulle_ajout_whatsapp.dart';
 import '../widgets/conversation/bulle_utilisateur.dart';
 import '../widgets/conversation/carte_jarvis.dart';
@@ -133,6 +134,7 @@ class _ConversationPageState extends State<ConversationPage> {
   void initState() {
     super.initState();
     _dernier = widget.session.messages.lastOrNull?.id;
+    _conversationAffichee = widget.session.idCourant;
     _reflexion = _attente(widget.session);
     widget.session.addListener(_surSession);
     final dernier = widget.session.messages.lastOrNull;
@@ -225,7 +227,14 @@ class _ConversationPageState extends State<ConversationPage> {
     final descendre = (ajout || reflexion) && (deLUtilisateur || _presDuBas);
     _dernier = messages.lastOrNull?.id;
     _reflexion = _attente(session);
-    if (messages.isEmpty) _cles.clear();
+    if (messages.isEmpty) {
+      _cles.clear();
+    } else if (session.idCourant != _conversationAffichee) {
+      // Autre conversation : seules les clés de ses messages restent.
+      final ids = {for (final m in messages) m.id};
+      _cles.removeWhere((id, _) => !ids.contains(id));
+    }
+    _conversationAffichee = session.idCourant;
     final dernier = messages.lastOrNull;
     final ecriture = dernier?.ecriture;
     _suivre(
@@ -253,6 +262,7 @@ class _ConversationPageState extends State<ConversationPage> {
 
   // Une clé par message affiché, pour retrouver sa position à l'écran.
   final _cles = <int, GlobalKey>{};
+  String? _conversationAffichee;
   GlobalKey _cle(int id) => _cles.putIfAbsent(id, GlobalKey.new);
 
   RenderBox? _boite(int id) {
@@ -394,6 +404,103 @@ class _ConversationPageState extends State<ConversationPage> {
     final precedents = session.plusAnciens && !session.chargement;
     final total = messages.length + decalage + (precedents ? 1 : 0);
 
+    final contenu = ScrollConfiguration(
+      // Défilement à la molette, au trackpad et au doigt, sans barre
+      // visible (Web, Windows, Android, iOS).
+      behavior: const DefilementSansBarre(),
+      child: SelectionArea(
+        child: ListView.builder(
+          controller: _defilement,
+          reverse: true,
+          // Marges dans la fenêtre : aucune carte collée au logo ni à la
+          // zone PIM quand le fil est au repos.
+          padding: EdgeInsets.only(top: fondu + 6, bottom: margeBas),
+          itemCount: total,
+          // Les messages gardent leur état (et leur place quand on relit
+          // l'historique) quand une réponse arrive en bas.
+          findChildIndexCallback: (cle) {
+            if (cle == const ValueKey('reflexion')) {
+              return reflexion ? 0 : null;
+            }
+            if (cle == const ValueKey('precedents')) {
+              return precedents ? total - 1 : null;
+            }
+            if (cle is! ValueKey<int>) return null;
+            final i = messages.indexWhere((m) => m.id == cle.value);
+            return i < 0 ? null : messages.length - 1 - i + decalage;
+          },
+          itemBuilder: (context, i) {
+            // Liste inversée : l'élément 0 est le plus récent.
+            if (reflexion && i == 0) {
+              return Padding(
+                key: const ValueKey('reflexion'),
+                padding: const EdgeInsets.symmetric(
+                  vertical: MesuresConversation.ecartMessages,
+                ),
+                child: ReflexionJarvis(reveilServeur: widget.reveilServeur),
+              );
+            }
+            if (precedents && i == total - 1) {
+              return Padding(
+                key: const ValueKey('precedents'),
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Center(
+                  child: TextButton(
+                    onPressed: session.chargerPlusAnciens,
+                    style: TextButton.styleFrom(
+                      foregroundColor: CouleursJarvis.texteSecondaire,
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    child: const Text('Afficher les messages précédents'),
+                  ),
+                ),
+              );
+            }
+            final m = messages[messages.length - 1 - (i - decalage)];
+            return Padding(
+              key: ValueKey(m.id),
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: KeyedSubtree(
+                key: _cle(m.id),
+                child: m.ajoutWhatsApp != null
+                    // Phase 5.1 : message WhatsApp collé (reçu / envoyé).
+                    ? BulleAjoutWhatsApp(
+                        ajout: m.ajoutWhatsApp!,
+                        taille: taille,
+                        surCorriger: (t) => session.corrigerAjout(m.id, t),
+                        surSupprimer: () => session.supprimerAjout(m.id),
+                      )
+                    : m.deJarvis
+                    ? CarteJarvis(
+                        message: m,
+                        taille: taille,
+                        surTon: (ton) => session.choisirTon(m.id, ton),
+                        surAction: (a) => _surAction(m.id, a),
+                        surChoix: (c) => session.choisir(m.id, c),
+                        surReference: _ouvrirReference,
+                        surTonPropositions: (ton, longueur) =>
+                            session.regarderTon(m.id, ton, longueur: longueur),
+                        tonPropositions: session.tonRegarde(m.id),
+                        longueurPropositions: session.longueurRegardee(m.id),
+                        contactPropositions: session.contactPropositions,
+                        surReprendrePropositions: () =>
+                            session.reprendrePropositions(m.id),
+                        repriseEnCours: session.repriseEnCours(m.id),
+                        preparation: session.preparationEnCours(m.id),
+                        surStatutProposition: (p, envoyee) => session
+                            .declarerEnvoyee(m.id, p.id, envoyee: envoyee),
+                      )
+                    : BulleUtilisateur(message: m, taille: taille),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    // Mesure seulement (JARVIS_PERF) : coût du fondu, jamais hors banc.
+    if (ChronoPerf.sans('fil.fondu')) {
+      return KeyedSubtree(key: ConversationPage.cleFil, child: contenu);
+    }
     return ShaderMask(
       key: ConversationPage.cleFil,
       // Fondus haut et bas : une carte qui sort de la fenêtre s'efface
@@ -417,99 +524,7 @@ class _ConversationPageState extends State<ConversationPage> {
           stops: [0, f, 1 - fb, 1],
         ).createShader(Offset.zero & r.size);
       },
-      child: ScrollConfiguration(
-        // Défilement à la molette, au trackpad et au doigt, sans barre
-        // visible (Web, Windows, Android, iOS).
-        behavior: const DefilementSansBarre(),
-        child: SelectionArea(
-          child: ListView.builder(
-            controller: _defilement,
-            reverse: true,
-            // Marges dans la fenêtre : aucune carte collée au logo ni à la
-            // zone PIM quand le fil est au repos.
-            padding: EdgeInsets.only(top: fondu + 6, bottom: margeBas),
-            itemCount: total,
-            // Les messages gardent leur état (et leur place quand on relit
-            // l'historique) quand une réponse arrive en bas.
-            findChildIndexCallback: (cle) {
-              if (cle == const ValueKey('reflexion')) {
-                return reflexion ? 0 : null;
-              }
-              if (cle == const ValueKey('precedents')) {
-                return precedents ? total - 1 : null;
-              }
-              if (cle is! ValueKey<int>) return null;
-              final i = messages.indexWhere((m) => m.id == cle.value);
-              return i < 0 ? null : messages.length - 1 - i + decalage;
-            },
-            itemBuilder: (context, i) {
-              // Liste inversée : l'élément 0 est le plus récent.
-              if (reflexion && i == 0) {
-                return Padding(
-                  key: const ValueKey('reflexion'),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: MesuresConversation.ecartMessages,
-                  ),
-                  child: ReflexionJarvis(reveilServeur: widget.reveilServeur),
-                );
-              }
-              if (precedents && i == total - 1) {
-                return Padding(
-                  key: const ValueKey('precedents'),
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Center(
-                    child: TextButton(
-                      onPressed: session.chargerPlusAnciens,
-                      style: TextButton.styleFrom(
-                        foregroundColor: CouleursJarvis.texteSecondaire,
-                        textStyle: const TextStyle(fontSize: 13),
-                      ),
-                      child: const Text('Afficher les messages précédents'),
-                    ),
-                  ),
-                );
-              }
-              final m = messages[messages.length - 1 - (i - decalage)];
-              return Padding(
-                key: ValueKey(m.id),
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: KeyedSubtree(
-                  key: _cle(m.id),
-                  child: m.ajoutWhatsApp != null
-                      // Phase 5.1 : message WhatsApp collé (reçu / envoyé).
-                      ? BulleAjoutWhatsApp(
-                          ajout: m.ajoutWhatsApp!,
-                          taille: taille,
-                          surCorriger: (t) => session.corrigerAjout(m.id, t),
-                          surSupprimer: () => session.supprimerAjout(m.id),
-                        )
-                      : m.deJarvis
-                      ? CarteJarvis(
-                          message: m,
-                          taille: taille,
-                          surTon: (ton) => session.choisirTon(m.id, ton),
-                          surAction: (a) => _surAction(m.id, a),
-                          surChoix: (c) => session.choisir(m.id, c),
-                          surReference: _ouvrirReference,
-                          surTonPropositions: (ton, longueur) => session
-                              .regarderTon(m.id, ton, longueur: longueur),
-                          tonPropositions: session.tonRegarde(m.id),
-                          longueurPropositions: session.longueurRegardee(m.id),
-                          contactPropositions: session.contactPropositions,
-                          surReprendrePropositions: () =>
-                              session.reprendrePropositions(m.id),
-                          repriseEnCours: session.repriseEnCours(m.id),
-                          preparation: session.preparationEnCours(m.id),
-                          surStatutProposition: (p, envoyee) => session
-                              .declarerEnvoyee(m.id, p.id, envoyee: envoyee),
-                        )
-                      : BulleUtilisateur(message: m, taille: taille),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
+      child: contenu,
     );
   }
 }

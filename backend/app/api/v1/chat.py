@@ -626,8 +626,11 @@ async def chat_stream(
             if conversation is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
             new_conversation = False
-            history = await load_context(redis, supabase, conversation["id"], settings)
-            contextes = await comprehension.contextes(user_id, conversation["id"])
+            # Indépendants (propriété déjà vérifiée) : lus en même temps.
+            history, contextes = await asyncio.gather(
+                load_context(redis, supabase, conversation["id"], settings),
+                comprehension.contextes(user_id, conversation["id"]),
+            )
         else:
             conversation = await supabase.create_conversation(user_id, conversation_title(body.message))
             new_conversation = True
@@ -838,6 +841,9 @@ async def chat_stream(
         if rappel and prompt and prompt[-1]["role"] == "user":
             prompt = [*prompt[:-1], {**prompt[-1], "content": f"{rappel}\n\n{prompt[-1]['content']}"}]
     source = execution.flux if execution is not None else llm.flux
+    # Part du serveur avant l'appel au fournisseur (latence réseau et
+    # fournisseur mesurées à part : « premier fragment »).
+    logger.info("Durée : préparation du chat %d ms", (time.perf_counter() - debut) * 1000)
 
     async def event_stream():
         nonlocal prompt, preparation

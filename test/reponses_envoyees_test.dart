@@ -827,14 +827,3 @@ Future<void> _choisir(WidgetTester t, String cle) async {
   await t.tap(find.byKey(Key(cle)).last);
   await t.pumpAndSettle();
 }
-
-/// Les choix proposés par un menu (ouvert puis refermé).
-Future<void> _options(WidgetTester t, Key menu, List<String> cles) async {
-  await t.tap(find.byKey(menu));
-  await t.pumpAndSettle();
-  for (final c in cles) {
-    expect(find.byKey(Key(c)), findsOneWidget, reason: c);
-  }
-  await t.tapAt(const Offset(1, 1));
-  await t.pumpAndSettle();
-}

@@ -2067,3 +2067,25 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Production : `jarvis-api` recréé avec l'accord de l'utilisateur (même image `04754e448bc0`, sans reconstruction, Redis intact) : nouvelle clé Anthropic chargée (106 caractères), `/health/ready` ok, routage actif, ODO actif, Gmail configuré.
 - Tokens : ≈ 1 650-2 050 par appel (référence pour la phase 3 ; avant phase 2 ≈ 1 100-1 440) ; latence 0,9-1,9 s par appel.
 - Verdict : phase 2 validée (GroqCloud réel + Claude joignable) ; compréhension Claude non évaluée par choix.
+
+## 2026-10-29 — Session AB (optimisations 1 à 13) : audit mesuré, corrections ciblées
+
+### Fait
+- Démarrage : Supabase et l'apparence chargés en parallèle avant le premier écran (`main.dart`) ; sondes `demarrage.avant_premier_ecran` / `demarrage.premiere_image` (JARVIS_PERF seulement).
+- Backend (`chat.py`, NON déployé) : historique (Redis/Supabase) et pièces jointes lus en parallèle après le contrôle de propriété (une requête Supabase de moins sur le chemin critique) ; nouveau journal « Durée : préparation du chat » (part serveur séparée du « premier fragment » fournisseur).
+- Fil : clés des messages élaguées au changement de conversation (elles s'accumulaient pour toutes les conversations ouvertes).
+- Banc `tool/banc_conversation.dart` (page réelle, 60 échanges) : défilement, écriture en flux, frappe, ouverture A↔B ; variantes alternées dans le même lancement (`JARVIS_VARIANTES`, `JARVIS_TOURS`) ; sondes `fil.fondu`, `bulle.ombre` (+ `pim.*` existantes), inactives hors banc.
+
+### Audit (déjà optimisé, rien changé)
+- Streaming : une seule notification au premier fragment, puis seul `TexteProgressif` se repeint (Ticker actif seulement si du texte attend). Accueil : la frappe en conversation ne reconstruit pas la page ; barre G7 : animation seule. Ouverture d'une conversation déjà ouverte : synchrone depuis la mémoire, synchro silencieuse ensuite. Menu : listes paresseuses. Import WhatsApp : lecture par paquets + ZIP dans un isolate. Contrôleurs : tous libérés. Limites du compte : cache Redis (pas de double lecture Supabase).
+
+### Mesures (Windows profile, GPU Intel intégré, 1920×1200 ; A/B alterné ×3, médianes)
+- Retirer le fondu du fil, les ombres des bulles ou le dessin de PIM : aucun gain mesurable (ex. écriture raster p50 22,7 / 19,6 / 21,0 ms ; ouverture 38 / 38 / 41 ms ; sans PIM : frappe raster p50 10,8 → 10,9 ms). Rendu gardé à l'identique.
+- Variance entre lancements ±50 % (fenêtre masquée = plus d'images) : seules les mesures alternées comptent.
+- Ouverture d'une conversation déjà chargée : p50 27-41 ms selon le lancement.
+- Web profile + Render réel (compte connecté) : avant premier écran 15,5 ms, première image 530 ms ; réponse courte à chaud : premier fragment 3,4 s, totale 3,8 s (à froid 6,2 / 7,1 s) ; pendant le flux raster moyen 4,5 ms, 3 images hors budget / 558.
+
+### À faire sur le S10+ (non testé)
+- `flutter run --profile -t tool/banc_conversation.dart --dart-define=JARVIS_PERF=true --dart-define=JARVIS_TOURS=3 "--dart-define=JARVIS_VARIANTES=fil.fondu;bulle.ombre"` ; puis timeline DevTools sur la frappe multiligne (pics raster quand la barre change de hauteur et que le fil se recompose).
+- Démarrage à froid (`[PERF] demarrage`), clavier Samsung (G7), ouverture depuis le menu.
+- Après déploiement autorisé du backend : comparer « Durée : préparation du chat » et « premier fragment » dans les journaux Render.

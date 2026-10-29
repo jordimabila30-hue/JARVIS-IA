@@ -22,7 +22,15 @@ Future<void> main() async {
   // Mesures de performance (JARVIS_PERF) : rien hors mesure.
   ChronoPerf.enregistrerExtension();
   ChronoPerf.suivreImages();
+  final demarrage = ChronoPerf.debut();
   var config = ConfigAuth.compilation();
+  // Apparence lue avant le premier écran : aucun éclair de l'ancien style.
+  final apparence = ServiceApparence(
+    luminositeSysteme:
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+  );
+  // Indépendants : Supabase et l'apparence se chargent en même temps.
+  final apparenceChargee = apparence.charger();
   try {
     // Supabase : session gardée sur l'appareil, lien de récupération.
     await config.initialiser();
@@ -31,13 +39,17 @@ Future<void> main() async {
     debugPrint('[JARVIS] Supabase indisponible : $e');
     config = ConfigAuth(accesDeveloppement: config.accesDeveloppement);
   }
-  // Apparence lue avant le premier écran : aucun éclair de l'ancien style.
-  final apparence = ServiceApparence(
-    luminositeSysteme:
-        WidgetsBinding.instance.platformDispatcher.platformBrightness,
-  );
-  await apparence.charger();
+  await apparenceChargee;
+  ChronoPerf.fin('demarrage.avant_premier_ecran', demarrage);
   runApp(JarvisApp(config: config, apparence: apparence));
+  if (ChronoPerf.actif) {
+    unawaited(
+      WidgetsBinding.instance.waitUntilFirstFrameRasterized.then((_) {
+        ChronoPerf.fin('demarrage.premiere_image', demarrage);
+        ChronoPerf.journal('demarrage');
+      }),
+    );
+  }
 }
 
 /// Parcours : écran de lancement → vérification de la session → accueil

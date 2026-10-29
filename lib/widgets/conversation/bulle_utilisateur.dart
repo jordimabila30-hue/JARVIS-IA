@@ -4,6 +4,7 @@ import '../../models/capture_jointe.dart';
 import '../../models/message_conversation.dart';
 import '../../services/capture/fichier_capture.dart';
 import '../../theme/theme_jarvis.dart';
+import '../../utils/chrono_perf.dart';
 import 'carte_conversation_externe.dart';
 import 'carte_piece_jointe.dart';
 import 'heure_message.dart';
@@ -52,16 +53,19 @@ class BulleUtilisateur extends StatelessWidget {
                 color: p.bordBulle,
                 width: p.identite.marquee ? p.identite.contour : 1,
               ),
-              boxShadow: [
-                if (p.identite.ombreBulle case final ombre?)
-                  BoxShadow(color: ombre, offset: const Offset(4, 4))
-                else
-                  BoxShadow(
-                    color: p.ombre.withAlpha(0x0D),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-              ],
+              // Mesure seulement (JARVIS_PERF) : coût des ombres.
+              boxShadow: ChronoPerf.sans('bulle.ombre')
+                  ? null
+                  : [
+                      if (p.identite.ombreBulle case final ombre?)
+                        BoxShadow(color: ombre, offset: const Offset(4, 4))
+                      else
+                        BoxShadow(
+                          color: p.ombre.withAlpha(0x0D),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                    ],
             ),
             // Contenu aligné à gauche ; l'heure, en dessous, à droite.
             child: Column(

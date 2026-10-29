@@ -6,6 +6,7 @@ import '../../models/message_conversation.dart';
 import '../../services/ecriture/ecriture_progressive.dart';
 import '../../theme/gabarit_jarvis.dart';
 import '../../theme/theme_jarvis.dart';
+import '../../utils/chrono_perf.dart';
 import '../apparence/frise_kuba.dart';
 import '../ecriture/texte_progressif.dart';
 import 'choix_ton.dart';
@@ -77,16 +78,19 @@ class _CadreJarvis extends StatelessWidget {
                 : p.trait.withValues(alpha: 0.6),
             width: id.marquee ? id.contour : 1,
           ),
-          boxShadow: [
-            if (id.ombreCarte case final ombre?)
-              BoxShadow(color: ombre, offset: const Offset(5, 5))
-            else
-              BoxShadow(
-                color: p.ombre.withAlpha(0x0A),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-          ],
+          // Mesure seulement (JARVIS_PERF) : coût des ombres.
+          boxShadow: ChronoPerf.sans('bulle.ombre')
+              ? null
+              : [
+                  if (id.ombreCarte case final ombre?)
+                    BoxShadow(color: ombre, offset: const Offset(5, 5))
+                  else
+                    BoxShadow(
+                      color: p.ombre.withAlpha(0x0A),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                ],
         ),
         child: frise == null
             ? _contenu(context)
