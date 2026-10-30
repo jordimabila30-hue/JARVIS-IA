@@ -93,11 +93,13 @@ class FauxGoogle:
                 ids = [i for i in self.messages if not self.filtrer or correspond(r.url.params["q"], self.messages[i])]
                 if self.filtrer:
                     ids.sort(key=lambda i: _epoch(self.messages[i]), reverse=True)      # plus récents d'abord
-                suite = len(ids) > n          # comme Gmail : jeton de page suivante
+                total = len(ids)
+                suite = total > n             # comme Gmail : jeton de page suivante
                 ids = ids[:n]
                 corps = {"messages": [{"id": i, "threadId": self.messages[i]["threadId"]} for i in ids]}                     if ids else {"resultSizeEstimate": 0}
                 if suite:
                     corps["nextPageToken"] = "page2"
+                    corps["resultSizeEstimate"] = total      # Gmail : estimation
                 return httpx.Response(200, json=corps)
             if chemin == "labels/INBOX":
                 boite = [m for m in self.messages.values() if "INBOX" in m["labelIds"]]

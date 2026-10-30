@@ -240,11 +240,18 @@ class GmailRechercher(_OutilGmail):
                 for x in fiables[:3]) + "). Si la demande en vise un seul, pose UNE question courte puis reprends "
                 "la demande initiale.")
         complet = not getattr(trouves, "suite", False)
-        if not complet:
+        estimation = getattr(trouves, "estimation", None)
+        if complet:
+            lignes.append(f"Total EXACT pour cette recherche : {len(trouves)} message(s) (aucun autre résultat).")
+        else:
+            approx = (f" Gmail ESTIME environ {estimation} résultats : c'est une estimation, présente-la comme "
+                      "telle (« environ »), jamais comme un total exact." if estimation and estimation > len(trouves)
+                      else "")
             lignes.append(f"Liste LIMITÉE : Gmail a d'autres résultats au-delà des {len(trouves)} consultés. "
                           f"Ce nombre n'est PAS un total : dis « au moins {len(trouves)} » (jamais "
-                          f"« {len(trouves)} » seul) ou propose de préciser la recherche.")
-        donnees.update(nombre=len(trouves), complet=complet, candidats=[_memo(x) for x in montres])
+                          f"« {len(trouves)} » seul) ou propose de préciser la recherche." + approx)
+        donnees.update(nombre=len(trouves), complet=complet, estimation=None if complet else estimation,
+                       candidats=[_memo(x) for x in montres])
         a_lire = [x for x in montres if x.pertinence != "faible"][:min(montrer, 10) if arguments.get("max") else 5] \
             if arguments.get("lire") else []
         if not a_lire:

@@ -617,12 +617,20 @@ async def chat_stream(
     reduire = None   # préparation plus petite, si le fournisseur refuse (413)
     taille_image = 0     # capture jointe : taille décodée, contrôlée
 
+    # ODO (chat ordinaire) : l'état des connexions du compte ne dépend que du
+    # compte ; lu pendant que la conversation se charge, abandonné s'il ne
+    # sert pas (chat WhatsApp, consigne).
+    statut_odo = (asyncio.create_task(odo.statut_connexions(user_id))
+                  if odo.actif and body.reply_to is None else None)
+    etapes: dict[str, float] = {}     # durées de préparation (ms), sans contenu
+
     # Préparation : tout échec ici rend la requête au quota.
     try:
         if body.reply_to is not None and body.conversation_id is None:
             raise HTTPException(422, detail="reply_to exige conversation_id")
         if body.conversation_id is not None:
             conversation = await supabase.get_conversation(str(body.conversation_id), user_id)
+            etapes["conversation"] = (time.perf_counter() - debut) * 1000
             if conversation is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
             new_conversation = False
@@ -631,8 +639,10 @@ async def chat_stream(
                 load_context(redis, supabase, conversation["id"], settings),
                 comprehension.contextes(user_id, conversation["id"]),
             )
+            etapes["historique"] = (time.perf_counter() - debut) * 1000 - etapes["conversation"]
         else:
             conversation = await supabase.create_conversation(user_id, conversation_title(body.message))
+            etapes["creation"] = (time.perf_counter() - debut) * 1000
             new_conversation = True
             history = []
             contextes = []
@@ -758,9 +768,13 @@ async def chat_stream(
             except vision.ImageInvalide as exc:
                 raise HTTPException(422, detail=exc.detail()) from None
     except HTTPException:
+        if statut_odo is not None:
+            statut_odo.cancel()
         await quota_service.release(reservation)
         raise
     except httpx.HTTPError:
+        if statut_odo is not None:
+            statut_odo.cancel()
         await quota_service.release(reservation)
         logger.error("Supabase indisponible pendant la préparation du chat", exc_info=True)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Base de données indisponible")
@@ -822,9 +836,11 @@ async def chat_stream(
     # Identité et offre du serveur ; budget du jour revérifié avant chaque tour.
     execution = None
     if odo.actif and preparation is None and consigne is None:
+        avant_odo = time.perf_counter()
         contexte_odo = await odo.contexte_compte(user_id=user_id, demande_id=demande_id,
                                                  plan=reservation.status.plan, conversation_id=conversation_id,
-                                                 decalage_minutes=body.fuseau_minutes)
+                                                 decalage_minutes=body.fuseau_minutes,
+                                                 statut=await statut_odo if statut_odo is not None else None)
         execution = odo.execution(
             llm, contexte_odo,
             verifier_budget=lambda tokens: quota_service.budget_depasse(reservation, tokens),
@@ -838,12 +854,16 @@ async def chat_stream(
         # réponse », « l'autre », reprise après une clarification. Donnée
         # non fiable : jointe à la question, jamais au message système.
         rappel = await odo.rappel(contexte_odo) if execution is not None else None
+        etapes["odo"] = (time.perf_counter() - avant_odo) * 1000
         if rappel and prompt and prompt[-1]["role"] == "user":
             prompt = [*prompt[:-1], {**prompt[-1], "content": f"{rappel}\n\n{prompt[-1]['content']}"}]
+    elif statut_odo is not None:
+        statut_odo.cancel()       # chat WhatsApp ou consigne : ODO ne sert pas
     source = execution.flux if execution is not None else llm.flux
     # Part du serveur avant l'appel au fournisseur (latence réseau et
-    # fournisseur mesurées à part : « premier fragment »).
-    logger.info("Durée : préparation du chat %d ms", (time.perf_counter() - debut) * 1000)
+    # fournisseur mesurées à part : « premier fragment »). Durées seulement.
+    logger.info("Durée : préparation du chat %d ms (%s)", (time.perf_counter() - debut) * 1000,
+                ", ".join(f"{k} {v:.0f}" for k, v in etapes.items()) or "-")
 
     async def event_stream():
         nonlocal prompt, preparation

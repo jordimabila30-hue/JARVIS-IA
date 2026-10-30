@@ -33,9 +33,11 @@ class Trouves(list):
     """Résultats d'une recherche ; [suite] : Gmail en a d'autres au-delà
     (la longueur n'est alors qu'un minimum, jamais un total)."""
 
-    def __init__(self, elements=(), *, suite: bool = False):
+    def __init__(self, elements=(), *, suite: bool = False, estimation: int | None = None):
         super().__init__(elements)
         self.suite = suite
+        # resultSizeEstimate de Gmail : une ESTIMATION, jamais un total exact.
+        self.estimation = estimation
 
 
 @dataclass
@@ -230,7 +232,9 @@ class ClientGmail:
         params = [("format", "metadata")] + [("metadataHeaders", h) for h in ENTETES]
         details = await asyncio.gather(*(self._get(user_id, f"messages/{i}", params) for i in ids))
         # Page suivante annoncée par Gmail : la liste n'est PAS complète.
-        return Trouves([_apercu(m) for m in details], suite=bool(liste.get("nextPageToken")))
+        estimation = liste.get("resultSizeEstimate")
+        return Trouves([_apercu(m) for m in details], suite=bool(liste.get("nextPageToken")),
+                       estimation=int(estimation) if isinstance(estimation, int) else None)
 
     async def non_lus(self, user_id: str) -> tuple[int, int]:
         """Compteurs EXACTS de Gmail pour la boîte de réception : (conversations

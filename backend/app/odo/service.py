@@ -71,11 +71,10 @@ class ServiceODO:
     def _connexions_utiles(self) -> set[str]:
         return {o.connexion for o in self.registre if o.connexion}
 
-    async def contexte_compte(self, *, user_id: str, demande_id: str, plan: str | None,
-                              conversation_id: str | None = None,
-                              decalage_minutes: int | None = None) -> ContexteOutil:
-        """Contexte avec l'état réel des connexions externes du compte (lu
-        seulement si une compétence en dépend)."""
+    async def statut_connexions(self, user_id: str) -> tuple[frozenset[str], frozenset[str]]:
+        """État réel des connexions externes du compte (connectées, à
+        renouveler), lu seulement si une compétence en dépend. Ne dépend que
+        du compte : peut être lu dès l'arrivée de la requête. Jamais d'erreur."""
         connexions, a_renouveler = set(), set()
         if "gmail" in self._connexions_utiles() and self.google is not None:
             try:
@@ -86,8 +85,17 @@ class ServiceODO:
                 connexions.add("gmail")
             elif statut == "a_renouveler":
                 a_renouveler.add("gmail")
+        return frozenset(connexions), frozenset(a_renouveler)
+
+    async def contexte_compte(self, *, user_id: str, demande_id: str, plan: str | None,
+                              conversation_id: str | None = None,
+                              decalage_minutes: int | None = None,
+                              statut: tuple[frozenset[str], frozenset[str]] | None = None) -> ContexteOutil:
+        """Contexte avec l'état réel des connexions externes du compte
+        ([statut] déjà lu par `statut_connexions`, sinon lu ici)."""
+        connexions, a_renouveler = statut if statut is not None else await self.statut_connexions(user_id)
         return self.contexte(user_id=user_id, demande_id=demande_id, plan=plan, conversation_id=conversation_id,
-                             connexions=frozenset(connexions), a_renouveler=frozenset(a_renouveler),
+                             connexions=connexions, a_renouveler=a_renouveler,
                              decalage_minutes=decalage_minutes)
 
     # --- Mémoire de la dernière recherche Gmail (par compte ET par chat) --------

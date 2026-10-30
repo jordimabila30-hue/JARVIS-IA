@@ -175,11 +175,12 @@ async def test_liste_tronquee_jamais_donnee_comme_total(env):
     r = await GmailRechercher(ClientGmail(env.google)).executer({"lire": True, "max": 2}, ctx())
     assert r.donnees["complet"] is False
     assert "au moins 2" in r.contenu
+    assert r.donnees["estimation"] == 5 and "environ 5" in r.contenu
 
     env.faux.messages = {"fa0aaaa": env.faux.messages["fa0aaaa"]}
     r = await GmailRechercher(ClientGmail(env.google)).executer({"lire": True, "max": 2}, ctx())
     assert r.donnees["complet"] is True
-    assert "LIMITÉE" not in r.contenu
+    assert "LIMITÉE" not in r.contenu and "Total EXACT pour cette recherche : 1" in r.contenu
 
 
 # --- G3 / K1-15 : conversation classée sous Gmail -------------------------------
