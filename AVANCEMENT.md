@@ -2089,3 +2089,26 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - `flutter run --profile -t tool/banc_conversation.dart --dart-define=JARVIS_PERF=true --dart-define=JARVIS_TOURS=3 "--dart-define=JARVIS_VARIANTES=fil.fondu;bulle.ombre"` ; puis timeline DevTools sur la frappe multiligne (pics raster quand la barre change de hauteur et que le fil se recompose).
 - Démarrage à froid (`[PERF] demarrage`), clavier Samsung (G7), ouverture depuis le menu.
 - Après déploiement autorisé du backend : comparer « Durée : préparation du chat » et « premier fragment » dans les journaux Render.
+
+## 2026-10-30 — Session CD (optimisations 14 à 29) : audit ciblé
+
+### Constat (code déjà optimisé, rien changé sans gain démontré)
+- 14 / 17 : fil paresseux (seules les bulles visibles sont construites), streaming = une seule notification puis `TexteProgressif` seul. Banc (Windows profile) 120 → 600 messages : défilement raster p50 19,9 → 20,6 ms, ouverture 23 → 28 ms, mémoire 803 → 791 Mo (une série chacune : écarts dans le bruit). `JARVIS_ECHANGES` ajouté au banc.
+- 16 / 8 : conversation déjà ouverte = rouverte depuis la mémoire, synchro silencieuse ensuite.
+- 20 : chemin critique = animation de lancement voulue (3,2 s + transition 0,7 s) ; session restaurée en parallèle derrière. Avant premier écran : 10,6-15,5 ms (Web).
+- 21 / 24 : minuteries bornées (décroissance vocale = session active ; utilisation 30 s seulement écran visible ; Gmail seulement en attente d'OAuth) ; resynchro seulement après ≥ 30 s masqué.
+- 22 : coupure = texte reçu gardé + incident, « Réessayer » sans doublon (UUID), brouillons G7 en mémoire.
+- 23 : `ChronoPerf` inactif hors `JARVIS_PERF` ; seuls journaux avec texte dicté : `kDebugMode`.
+- 25 / 29 : bulle Touch au repos 3 s après interaction (animation coupée), libérée à la fermeture ; niveau vocal regroupé à 60 ms, état envoyé seulement s'il change ; bitmaps recyclés.
+- 26 : minuteries vocales annulées à chaque arrêt / erreur / dispose.
+- 27 / 28 : vignettes décodées réduites (`ResizeImage`, `cacheWidth`), import WhatsApp en flux, capture lue une fois.
+
+### Décisions produit en attente
+- `delaiReflexion` (450 ms) retarde l'ENVOI de chaque question écrite (fenêtre « changer de fil = rien n'est envoyé », testée) : ≈ 0,45 s de plus sur chaque premier fragment IA.
+- Animation de lancement 3,2 s : principal délai avant un accueil utilisable.
+
+### Campagne Android unique (S10+, non faite)
+- Banc : `flutter run --profile -t tool/banc_conversation.dart --dart-define=JARVIS_PERF=true --dart-define=JARVIS_TOURS=3 "--dart-define=JARVIS_VARIANTES=fil.fondu;bulle.ombre"` (+ `JARVIS_ECHANGES=300`) ; timeline DevTools sur la frappe multiligne.
+- Démarrage à froid (`[PERF] demarrage`), clavier Samsung (G7), PIM réel, session de 30 min (mémoire `dumpsys meminfo`, température, batterie).
+- Cycle de vie : verrouillage, changement d'appli, retour ; chat vocal en arrière-plan ; micro / haut-parleur / Bluetooth / écho.
+- JARVIS Touch : bulle (repos 3 s), mini-chat, vocal flottant, capture (accessibilité + MediaProjection), recadrage, envoi d'une capture, canaux `jarvis/touch*`.

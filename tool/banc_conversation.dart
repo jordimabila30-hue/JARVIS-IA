@@ -78,6 +78,9 @@ final _reconstruire = ValueNotifier(0);
 const _variantes = String.fromEnvironment('JARVIS_VARIANTES');
 const _tours = int.fromEnvironment('JARVIS_TOURS', defaultValue: 1);
 
+/// Échanges de la conversation longue (2 messages chacun).
+const _echanges = int.fromEnvironment('JARVIS_ECHANGES', defaultValue: 60);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final moteur = _MoteurBanc();
@@ -103,7 +106,7 @@ Future<void> main() async {
   }
   final idB = session.idCourant!;
   session.effacer();
-  for (var i = 0; i < 60; i++) {
+  for (var i = 0; i < _echanges; i++) {
     await session.envoyer('Question numéro $i : peux-tu m\'aider ?');
   }
   final idA = session.idCourant!;
