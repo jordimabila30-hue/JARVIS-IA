@@ -3,6 +3,7 @@
 
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -499,5 +500,25 @@ void main() {
         );
       }
     });
+  });
+
+  testWidgets('clavier (ordinateur) : Maj+Entrée = retour à la ligne, '
+      'Entrée = envoi', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await afficher(tester);
+    await tester.tap(find.byType(EditableText));
+    await tester.enterText(find.byType(EditableText), 'Bonjour');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await attendre(tester);
+    expect(envoyes, isEmpty);
+    expect(controleur.text, 'Bonjour\n');
+    await tester.enterText(find.byType(EditableText), 'Bonjour\nà toi');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await attendre(tester);
+    expect(envoyes, ['Bonjour\nà toi']);
+    debugDefaultTargetPlatformOverride = null;
   });
 }

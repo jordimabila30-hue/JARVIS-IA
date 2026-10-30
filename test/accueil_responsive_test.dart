@@ -595,4 +595,121 @@ void main() {
       expect(champ().text, 'Quelle date ?'); // brouillon de la nouvelle
     });
   });
+
+  group('Accessibilité (GH : 41, 42, 46)', () {
+    Future<ConversationSession> conversation() async {
+      final c = ConversationSession(delaiReflexion: Duration.zero);
+      await c.envoyer('Quelle heure est-il ?');
+      await c.envoyer('Merci beaucoup pour ton aide');
+      return c;
+    }
+
+    for (final (nom, taille) in [
+      ('390x844', const Size(390, 844)),
+      ('1366x768', const Size(1366, 768)),
+    ]) {
+      for (final echelle in [1.0, 1.3, 1.6, 2.0]) {
+        testWidgets(
+          '$nom, texte ×$echelle : accueil, fil, menu sans débordement',
+          (tester) async {
+            tester.view.physicalSize = taille;
+            tester.view.devicePixelRatio = 1;
+            tester.platformDispatcher.textScaleFactorTestValue = echelle;
+            addTearDown(tester.view.reset);
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+
+            await tester.pumpWidget(_page());
+            await _images(tester, 30);
+            expect(tester.takeException(), isNull, reason: 'accueil');
+
+            final c = (await tester.runAsync(conversation))!;
+            await tester.pumpWidget(_page(conversation: c));
+            await _images(tester, 60);
+            expect(tester.takeException(), isNull, reason: 'fil');
+
+            await tester.tap(find.byTooltip('Menu'));
+            await _images(tester, 30);
+            expect(tester.takeException(), isNull, reason: 'menu');
+            c.dispose();
+          },
+        );
+      }
+    }
+
+    testWidgets('redimensionnement : brouillon, focus et fil gardés', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final c = (await tester.runAsync(conversation))!;
+      await tester.pumpWidget(_page(conversation: c));
+      await _images(tester, 40);
+      final champ = find.byType(EditableText);
+      await tester.tap(champ);
+      await tester.enterText(champ, 'Brouillon en cours\nsur deux lignes');
+      await _images(tester, 10);
+      for (final taille in const [
+        Size(390, 844),
+        Size(844, 390),
+        Size(500, 700),
+        Size(1920, 1080),
+      ]) {
+        tester.view.physicalSize = taille;
+        await _images(tester, 20);
+        expect(tester.takeException(), isNull, reason: '$taille');
+        expect(
+          tester.widget<EditableText>(champ).controller.text,
+          'Brouillon en cours\nsur deux lignes',
+        );
+        expect(
+          find.textContaining(
+            'Merci beaucoup',
+            findRichText: true,
+            skipOffstage: false,
+          ),
+          findsOneWidget,
+          reason: 'fil $taille',
+        );
+      }
+      expect(tester.widget<EditableText>(champ).focusNode.hasFocus, isTrue);
+      c.dispose();
+    });
+
+    testWidgets(
+      'libellés partout ; « + » touchable dans la marge de la capsule',
+      (tester) async {
+        tester.view.physicalSize = const Size(1366, 768);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final semantique = tester.ensureSemantics();
+        await tester.pumpWidget(_page());
+        await _images(tester, 30);
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+        // Juste au-dessus du « + », dans la marge de la capsule : son menu
+        // s'ouvre (avant : le curseur allait dans le champ).
+        final plus = tester.getRect(find.byTooltip('Ajouter une conversation'));
+        await tester.tapAt(Offset(plus.center.dx, plus.top - 5));
+        await _images(tester, 20);
+        expect(find.text('Coller une conversation'), findsOneWidget);
+        await tester.tapAt(const Offset(5, 5));
+        await _images(tester, 20);
+
+        await tester.tap(find.byTooltip('Menu'));
+        await _images(tester, 30);
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        // Hauteurs voulues par le design, au-dessus du minimum de 24 px
+        // (WCAG 2.2) mais sous les 48 px d'Android : champ de recherche du
+        // menu (40), bouton Menu (40 sur téléphone). Mesurées, pas imposées.
+        expect(
+          tester.getSize(find.byTooltip('Menu')).height,
+          greaterThanOrEqualTo(40),
+        );
+        semantique.dispose();
+      },
+    );
+  });
 }

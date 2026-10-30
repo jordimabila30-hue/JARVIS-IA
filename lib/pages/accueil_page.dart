@@ -347,6 +347,9 @@ class _AccueilPageState extends State<AccueilPage> with WidgetsBindingObserver {
     _partages.annonces.addListener(_surPartage);
     WidgetsBinding.instance.addPostFrameCallback((_) => _surPartage());
     _conversation.addListener(_surConversation);
+    // Conversation déjà commencée (page recréée) : le fil s'affiche aussitôt.
+    _enConversation = !_conversation.vide;
+    _pim.conversation = _enConversation;
     _pim.amplitude = _session.amplitude;
     _pim.signal = _session.signal;
     _controleur.addListener(_surFrappe);

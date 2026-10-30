@@ -155,15 +155,35 @@ class MoteurConversationIA {
   /// affiche du texte simple et que la réponse peut être lue à voix
   /// haute : gras, italique, code et titres perdent leurs symboles (les
   /// listes « - » restent lisibles telles quelles).
-  static String texteSimple(String texte) => texte
+  static String texteSimple(String texte) {
+    // Blocs de code (« ``` ») : recopiés tels quels, caractère pour
+    // caractère (« __init__ », « 2**3 », accents graves du code).
+    final b = StringBuffer();
+    var debut = 0;
+    for (final m in _blocCode.allMatches(texte)) {
+      b
+        ..write(_sansMarques(texte.substring(debut, m.start)))
+        ..write(m.group(0));
+      debut = m.end;
+    }
+    b.write(_sansMarques(texte.substring(debut)));
+    return b.toString().trim();
+  }
+
+  /// Bloc de code complet, ou ouvert jusqu'à la fin (réception en cours).
+  static final _blocCode = RegExp(
+    r'^```[^\n]*\n[\s\S]*?(^```[ \t]*$|$(?![\s\S]))',
+    multiLine: true,
+  );
+
+  static String _sansMarques(String texte) => texte
       .replaceAllMapped(RegExp(r'(\*\*|__)(.+?)\1'), (m) => m.group(2)!)
       .replaceAllMapped(
         RegExp(r'(?<![\w*])\*(?!\s)([^*\n]+?)\*(?!\w)'),
         (m) => m.group(1)!,
       )
-      .replaceAllMapped(RegExp(r'`([^`\n]+)`'), (m) => m.group(1)!)
-      .replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '')
-      .trim();
+      .replaceAllMapped(RegExp(r'(?<!`)`([^`\n]+)`(?!`)'), (m) => m.group(1)!)
+      .replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
 
   /// [texteSimple] d'un texte encore en réception : en plus, une syntaxe
   /// Markdown pas encore refermée (« **Lim », « `cod », « ## » en début de
@@ -172,6 +192,8 @@ class MoteurConversationIA {
   /// se prolonge seulement.
   static String texteSimpleProvisoire(String brut) {
     var t = texteSimple(brut);
+    // Bloc de code encore ouvert : rien à masquer, il s'écrit tel quel.
+    if (RegExp(r'^```', multiLine: true).allMatches(t).length.isOdd) return t;
     // Gras ouvert : seul le symbole est masqué, le texte reste visible.
     for (final marque in const ['**', '__']) {
       if (marque.allMatches(t).length.isOdd) {

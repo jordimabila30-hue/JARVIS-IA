@@ -1,5 +1,6 @@
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -150,6 +151,9 @@ class LigneDeCommande extends StatefulWidget {
 
 class _LigneDeCommandeState extends State<LigneDeCommande>
     with SingleTickerProviderStateMixin {
+  // « + » : sa zone de toucher couvre aussi la marge de la capsule.
+  final _clePlus = GlobalKey<_BoutonAjouterState>();
+
   late final _depliage = AnimationController(
     vsync: this,
     duration: MesuresBarre.dureeDepliage,
@@ -223,6 +227,28 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
     if (_depliee != depliee) {
       _depliee ? _depliage.forward() : _depliage.reverse();
     }
+  }
+
+  /// Toucher dans la colonne du « + », entre le bord de la capsule et le
+  /// bouton (jamais au-dessus quand la barre est dépliée : c'est le texte).
+  bool _dansMargePlus(Offset global) {
+    final boite = _clePlus.currentContext?.findRenderObject();
+    if (boite is! RenderBox || !boite.hasSize) return false;
+    final r = boite.localToGlobal(Offset.zero) & boite.size;
+    const marge = MesuresBarre.marge + 2;
+    return global.dx >= r.left - marge &&
+        global.dx <= r.right &&
+        global.dy >= r.top - marge &&
+        global.dy <= r.bottom + marge;
+  }
+
+  /// Retour à la ligne à la place de la sélection (Maj+Entrée).
+  void _nouvelleLigne() {
+    final v = widget.controleur.value;
+    final sel = v.selection.isValid
+        ? v.selection
+        : TextSelection.collapsed(offset: v.text.length);
+    widget.controleur.value = v.replaced(sel, '\n');
   }
 
   void _envoyer() {
@@ -301,50 +327,66 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
 
     // Construits une fois par build : pendant le dépliage, seules leurs
     // positions changent (le champ n'est jamais reconstruit ni recréé).
-    final champ = TextField(
-      controller: widget.controleur,
-      focusNode: widget.focus,
-      minLines: 1,
-      maxLines: MesuresBarre.lignesMax,
-      textInputAction: TextInputAction.send,
-      textAlignVertical: TextAlignVertical.center,
-      // Hauteur de ligne imposée : identique pour toutes les polices de
-      // secours, donc un centrage stable.
-      strutStyle: StrutStyle(
-        fontSize: taille,
-        height: interligne,
-        leadingDistribution: TextLeadingDistribution.even,
-        forceStrutHeight: true,
-      ),
-      onSubmitted: (_) => _envoyer(),
-      cursorColor: CouleursJarvis.signal,
-      cursorWidth: 1.6,
-      cursorRadius: const Radius.circular(2),
-      style: Theme.of(context).textTheme.bodyLarge?.merge(texte),
-      decoration: InputDecoration(
-        hintText: widget.pieceJointe != null
-            ? LigneDeCommande.inviteConsigne
-            : compacte
-            ? LigneDeCommande.inviteCourte
-            : LigneDeCommande.invite,
-        hintMaxLines: 1,
-        hintStyle: texte.copyWith(
-          overflow: TextOverflow.ellipsis,
-          color: CouleursJarvis.texteSecondaire.withValues(alpha: 0.88),
+    // Clavier physique : Entrée envoie, Maj+Entrée passe à la ligne. Pas
+    // sur le Web : le navigateur traite Entrée lui-même (envoi) et le
+    // raccourci ne peut pas l'en empêcher.
+    final champ = CallbackShortcuts(
+      bindings: kIsWeb
+          ? const {}
+          : {
+              const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                  _nouvelleLigne,
+              const SingleActivator(
+                LogicalKeyboardKey.numpadEnter,
+                shift: true,
+              ): _nouvelleLigne,
+            },
+      child: TextField(
+        controller: widget.controleur,
+        focusNode: widget.focus,
+        minLines: 1,
+        maxLines: MesuresBarre.lignesMax,
+        textInputAction: TextInputAction.send,
+        textAlignVertical: TextAlignVertical.center,
+        // Hauteur de ligne imposée : identique pour toutes les polices de
+        // secours, donc un centrage stable.
+        strutStyle: StrutStyle(
+          fontSize: taille,
+          height: interligne,
+          leadingDistribution: TextLeadingDistribution.even,
+          forceStrutHeight: true,
         ),
-        isDense: true,
-        border: InputBorder.none,
-        // Vide égal au-dessus et au-dessous de la ligne, moins la petite
-        // correction optique.
-        contentPadding: EdgeInsets.only(
-          top: vide - MesuresBarre.decalageOptique,
-          bottom: vide + MesuresBarre.decalageOptique,
+        onSubmitted: (_) => _envoyer(),
+        cursorColor: CouleursJarvis.signal,
+        cursorWidth: 1.6,
+        cursorRadius: const Radius.circular(2),
+        style: Theme.of(context).textTheme.bodyLarge?.merge(texte),
+        decoration: InputDecoration(
+          hintText: widget.pieceJointe != null
+              ? LigneDeCommande.inviteConsigne
+              : compacte
+              ? LigneDeCommande.inviteCourte
+              : LigneDeCommande.invite,
+          hintMaxLines: 1,
+          hintStyle: texte.copyWith(
+            overflow: TextOverflow.ellipsis,
+            color: CouleursJarvis.texteSecondaire.withValues(alpha: 0.88),
+          ),
+          isDense: true,
+          border: InputBorder.none,
+          // Vide égal au-dessus et au-dessous de la ligne, moins la petite
+          // correction optique.
+          contentPadding: EdgeInsets.only(
+            top: vide - MesuresBarre.decalageOptique,
+            bottom: vide + MesuresBarre.decalageOptique,
+          ),
         ),
       ),
     );
     final plus = _CentreBouton(
       hauteur: interieur,
       child: _BoutonAjouter(
+        key: _clePlus,
         surColler: _coller,
         surImporter: widget.surImporterWhatsApp,
         surAjouterMessage: widget.surAjouterMessageWhatsApp,
@@ -412,8 +454,16 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
       // la barre ne se replie pas sous le doigt.
       child: TextFieldTapRegion(
         child: GestureDetector(
-          // Toucher l'espace libre de la barre place le curseur.
-          onTap: widget.focus.requestFocus,
+          // Toucher l'espace libre de la barre place le curseur ; dans la
+          // marge au-dessus ou au-dessous du « + », c'est le « + » (cible
+          // de toucher de toute la hauteur de la capsule, rendu inchangé).
+          onTapUp: (d) {
+            if (_dansMargePlus(d.globalPosition)) {
+              _clePlus.currentState?.activer();
+            } else {
+              widget.focus.requestFocus();
+            }
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
@@ -579,6 +629,7 @@ class _BoutonHautParleur extends StatelessWidget {
 /// de l'écran, toujours visible même avec le clavier.
 class _BoutonAjouter extends StatefulWidget {
   const _BoutonAjouter({
+    super.key,
     required this.surColler,
     this.surImporter,
     this.surAjouterMessage,
@@ -601,6 +652,16 @@ class _BoutonAjouter extends StatefulWidget {
 
 class _BoutonAjouterState extends State<_BoutonAjouter> {
   bool _appui = false;
+  final _menu = MenuController();
+
+  /// Même effet qu'un appui sur le bouton.
+  void activer() {
+    if (widget.feuille) {
+      _ouvrirFeuille();
+    } else {
+      _menu.isOpen ? _menu.close() : _menu.open();
+    }
+  }
 
   Future<void> _ouvrirFeuille() async {
     final choix = await afficherFeuilleAjout(
@@ -630,6 +691,7 @@ class _BoutonAjouterState extends State<_BoutonAjouter> {
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
+      controller: _menu,
       alignmentOffset: const Offset(0, 8),
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(CouleursJarvis.coque),

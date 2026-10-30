@@ -2129,7 +2129,7 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - 33 Doublons : champ vidé avant l'envoi (G7) ; UUID idempotents (échanges locaux, pièces jointes, « Réessayer ») ; un seul choix « envoyée » par ensemble (SQL verrouillé).
 - 34 Synchro : Supabase source de vérité, correspondance locale ↔ UUID, conversation supprimée ailleurs signalée ; aucun cache d'un autre compte (utilisation rattachée au compte, effacée à la déconnexion).
 - 35 Sessions : renouvellements simultanés partagés (`_renouvellement ??=`), durée de vie mesurée sans l'heure de l'appareil, jetons jamais journalisés.
-- 36 PWA : build de production (`flutter build web --release`, Flutter 3.47) servie localement et testée avec Render : démarrage sans écran blanc, session restaurée, échange réel, recherche ; 0 service worker actif, 0 cache (le service worker de Flutter se désinscrit et ne recharge que les pages d'un ancien service worker). Jarvis Web n'est pas hébergé : à l'hébergement, mettre `index.html`, `flutter_bootstrap.js`, `version.json` en `no-cache`.
+- 36 PWA : build de production (`flutter build web --release`, Flutter 3.47) servie localement et testée avec Render : démarrage sans écran blanc, session restaurée, échange réel, recherche ; 0 service worker actif, 0 cache (le service worker de Flutter se désinscrit et ne recharge que les pages d'un ancien service worker). CORRIGÉ en GH : Jarvis Web EST hébergé (site statique Render https://jarvis-ia-web.onrender.com, configuré dans le tableau de bord, reconstruit à chaque push) ; en-têtes vérifiés : `Cache-Control: public, max-age=0, s-maxage=300` + ETag (le navigateur revalide à chaque visite ; le CDN peut servir l'ancienne version ≤ 5 min).
 - 37 Navigateur (Web profile, Render) : streaming raster moyen 4,5 ms, 3 images hors budget / 558 ; recherche allégée (31).
 - 38 Effets : conclusions AB (fondu, ombres, PIM sans coût mesurable), fond photo composé une fois ; pas de nouvelle hypothèse.
 
@@ -2139,3 +2139,31 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 
 ### Android (campagne unique, ajouts)
 - Journal release (`[JARVIS erreur]`) sans contenu dans logcat ; recherche sur l'historique réel du compte.
+
+## 2026-10-30 — Session GH (optimisations 41 à 60)
+
+### Fait
+- 41 Texte agrandi : tests ×1 / 1,3 / 1,6 / 2 (téléphone 390×844, ordinateur 1366×768) sur l'accueil, le fil et le menu : aucun débordement. L'accueil affiche désormais une conversation déjà commencée dès sa création (avant : seulement à la notification suivante).
+- 46 Cible du « + » : un toucher dans la marge de la capsule au-dessus / au-dessous du « + » l'ouvre (avant : curseur dans le champ) ; rendu inchangé. Mesuré : bouton Menu 48×40 (barre du haut de 40 px sur téléphone), recherche du menu 40 px de haut : au-dessus du minimum WCAG (24 px), sous les 48 px d'Android, laissés tels quels (design).
+- 43 Clavier (Windows, Android/iOS avec clavier physique) : Maj+Entrée = retour à la ligne, Entrée = envoi. Web : inchangé (le navigateur envoie sur Entrée, le raccourci ne peut pas l'empêcher ; vérifié sur le Web réel).
+- 51-54 Réponses : `texteSimple` ne touche plus aux blocs de code (avant : « __init__ » → « init », « ** » et accents graves du code supprimés) ; `TexteRiche` (réponse terminée seulement) : bloc de code à défilement horizontal + « Copier le code » (copie exacte), tableau Markdown à défilement horizontal (colonnes ≤ 260 px, cellules complétées, « \| » gardé), liens http/https cliquables (destination exacte, ponctuation finale exclue, parenthèses équilibrées, autres schémas jamais ouverts). Vérifié sur le Web réel avec Render (code, tableau, lien encodé). Limite : sur le Web, pas de police à chasse fixe (CanvasKit) : indentation gardée, colonnes pas parfaitement alignées.
+- 60 Gmail : une recherche dont Gmail annonce une page suivante (`nextPageToken`) est marquée `complet: false` et l'outil impose « au moins N » (avant : N pouvait être donné comme total). Compteur des non-lus : déjà exact (`labels/INBOX`).
+
+### Déjà en place (vérifié)
+- 42 Libellés : `labeledTapTargetGuideline` réussie (accueil, menu) ; « Préparation… » : annonce seulement au changement de libellé.
+- 44 Animations réduites : menu, indicateur, curseur, transition d'apparence respectent la préférence.
+- 45 Contraste : `apparence_test` (14 palettes).
+- 47 Haptique : une impulsion au seuil du balayage (protégée), une à la fin de l'appui long ; rien par caractère.
+- 48 Gestes, 50 ancrage du fil : tests existants (menu, `_garder`).
+- 49 Redimensionnement : test ajouté (390×844 → 844×390 → 500×700 → 1920×1080 : brouillon multiligne, focus et fil gardés, aucun débordement).
+- 55 EXIF : photo JPEG à orientation 6 décodée en portrait, y compris réduite (test avec vraies photos).
+- 57 Dépôt : plusieurs fichiers → choix, format vérifié d'après le contenu. 58 Collage : sur action seulement, 4 lignes (G7).
+- 59 HTML Gmail : converti en texte côté serveur (script/style retirés), jamais rendu : aucun JavaScript, aucune ressource externe.
+- 56 Lecteur audio : non applicable (aucun fichier audio lu dans les conversations).
+
+### Tests
+- Flutter : 998 / 998, analyse propre.
+- Backend : 681 réussis, 1 ignoré (dont Gmail + ODO : 160). Docker Desktop démarré avec l'accord de l'utilisateur.
+
+### Android (campagne unique, ajouts GH)
+- TalkBack (liens annoncés « Lien : … », bloc de code, tableau), texte agrandi système, « + » touché dans la marge, clavier physique Bluetooth (Maj+Entrée), rotation, photo EXIF réelle, vibrations du balayage.

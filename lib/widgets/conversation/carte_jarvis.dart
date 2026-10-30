@@ -16,6 +16,7 @@ import '../../models/importation/propositions_reponse.dart';
 import 'propositions_jarvis.dart';
 import 'references_jarvis.dart';
 import 'signature_jarvis.dart';
+import 'texte_riche.dart';
 import 'reponse_proposee.dart';
 
 /// Habillage commun des messages de JARVIS : carte du style (ivoire nuancée
@@ -223,7 +224,9 @@ class CarteJarvis extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message.texte, style: style),
+            TexteRiche.utile(message.texte)
+                ? TexteRiche(texte: message.texte, style: style)
+                : Text(message.texte, style: style),
             ..._suite(),
           ],
         ),
@@ -245,7 +248,17 @@ class CarteJarvis extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          TexteProgressif(ecriture: ecriture, style: style),
+          // Code ou tableau : mis en forme une fois la réponse terminée
+          // (pendant l'écriture, le texte se prolonge sans changer de forme).
+          if (TexteRiche.utile(message.texte))
+            ValueListenableBuilder<bool>(
+              valueListenable: ecriture.finie,
+              builder: (context, finie, _) => finie && !message.redaction
+                  ? TexteRiche(texte: message.texte, style: style)
+                  : TexteProgressif(ecriture: ecriture, style: style),
+            )
+          else
+            TexteProgressif(ecriture: ecriture, style: style),
           if (preparation && message.redaction)
             const Padding(
               padding: EdgeInsets.only(top: 12),
