@@ -629,17 +629,20 @@ async def chat_stream(
         if body.reply_to is not None and body.conversation_id is None:
             raise HTTPException(422, detail="reply_to exige conversation_id")
         if body.conversation_id is not None:
-            conversation = await supabase.get_conversation(str(body.conversation_id), user_id)
-            etapes["conversation"] = (time.perf_counter() - debut) * 1000
+            # Propriété, historique et pièces jointes lus EN MÊME TEMPS : rien
+            # n'est utilisé avant que Supabase ait confirmé que la
+            # conversation appartient au compte (sinon 404, comme avant).
+            # Les pièces jointes sont de toute façon filtrées par compte.
+            demandee = str(body.conversation_id)
+            conversation, history, contextes = await asyncio.gather(
+                supabase.get_conversation(demandee, user_id),
+                load_context(redis, supabase, demandee, settings),
+                comprehension.contextes(user_id, demandee),
+            )
+            etapes["conversation+historique"] = (time.perf_counter() - debut) * 1000
             if conversation is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
             new_conversation = False
-            # Indépendants (propriété déjà vérifiée) : lus en même temps.
-            history, contextes = await asyncio.gather(
-                load_context(redis, supabase, conversation["id"], settings),
-                comprehension.contextes(user_id, conversation["id"]),
-            )
-            etapes["historique"] = (time.perf_counter() - debut) * 1000 - etapes["conversation"]
         else:
             conversation = await supabase.create_conversation(user_id, conversation_title(body.message))
             etapes["creation"] = (time.perf_counter() - debut) * 1000
