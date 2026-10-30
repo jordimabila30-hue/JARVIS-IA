@@ -2113,3 +2113,29 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Démarrage à froid (`[PERF] demarrage`), clavier Samsung (G7), PIM réel, session de 30 min (mémoire `dumpsys meminfo`, température, batterie).
 - Cycle de vie : verrouillage, changement d'appli, retour ; chat vocal en arrière-plan ; micro / haut-parleur / Bluetooth / écho.
 - JARVIS Touch : bulle (repos 3 s), mini-chat, vocal flottant, capture (accessibilité + MediaProjection), recadrage, envoi d'une capture, canaux `jarvis/touch*`.
+
+## 2026-10-30 — Session EF (optimisations 30 à 40)
+
+### Complément CD
+- 15 (ressources selon l'activité) : déjà optimisée. Aucune tâche secondaire pendant la saisie ni le défilement ; synchronisation seulement sur événement (connexion, menu, échange, retour au premier plan ≥ 30 s) ; utilisation relue toutes les 30 s seulement écran visible.
+
+### Fait
+- 31 Recherche du menu : titre + aperçu normalisés mis en cache par aperçu (`Expando`, aperçus immuables) et passage rapide ASCII. 2 000 conversations : 11,4 → 3,3 ms par frappe (VM de test, premier remplissage compris). Toujours le texte actuel, aucun réseau. Test `recherche_conversations_test`.
+- 39 Erreurs : `ErreursJarvis` (installé dans `main`) ; hors debug, journal = module + TYPE d'erreur, jamais le message (texte de conversation, e-mail possibles) ; erreur asynchrone marquée traitée ; debug inchangé. Test `erreurs_jarvis_test` (y compris : un widget en panne ne remplace que lui-même).
+
+### Déjà en place (vérifié, rien changé)
+- 30 Stockage : petites valeurs `SharedPreferences`, écrites seulement sur changement (utilisation : après une lecture réussie, ≤ 1 / 30 s écran ouvert) ; brouillons en mémoire ; aucune base locale à indexer.
+- 32 Résultats périmés : chargement d'une conversation vérifié par génération + identifiant ; état « chargement » propre à la conversation affichée ; réponse IA rangée dans sa conversation d'origine.
+- 33 Doublons : champ vidé avant l'envoi (G7) ; UUID idempotents (échanges locaux, pièces jointes, « Réessayer ») ; un seul choix « envoyée » par ensemble (SQL verrouillé).
+- 34 Synchro : Supabase source de vérité, correspondance locale ↔ UUID, conversation supprimée ailleurs signalée ; aucun cache d'un autre compte (utilisation rattachée au compte, effacée à la déconnexion).
+- 35 Sessions : renouvellements simultanés partagés (`_renouvellement ??=`), durée de vie mesurée sans l'heure de l'appareil, jetons jamais journalisés.
+- 36 PWA : build de production (`flutter build web --release`, Flutter 3.47) servie localement et testée avec Render : démarrage sans écran blanc, session restaurée, échange réel, recherche ; 0 service worker actif, 0 cache (le service worker de Flutter se désinscrit et ne recharge que les pages d'un ancien service worker). Jarvis Web n'est pas hébergé : à l'hébergement, mettre `index.html`, `flutter_bootstrap.js`, `version.json` en `no-cache`.
+- 37 Navigateur (Web profile, Render) : streaming raster moyen 4,5 ms, 3 images hors budget / 558 ; recherche allégée (31).
+- 38 Effets : conclusions AB (fondu, ombres, PIM sans coût mesurable), fond photo composé une fois ; pas de nouvelle hypothèse.
+
+### Résistance (40, Windows profile, 600 messages, 3 tours)
+- Tour 1 → 2 : build p50 5,4 → 7,3 ms, mémoire 949 → 1 028 Mo (le fil grandit à chaque tour) ; tour 3 stable (build 7,1-7,6 ms, raster inchangé). Pas de dégradation continue démontrée ; mémoire du 3ᵉ tour non relevée.
+- Tests : 977 / 977, analyse propre.
+
+### Android (campagne unique, ajouts)
+- Journal release (`[JARVIS erreur]`) sans contenu dans logcat ; recherche sur l'historique réel du compte.

@@ -67,10 +67,7 @@ class ConversationsMulticanal extends ChangeNotifier {
     final q = normaliser(requete.trim());
     final filtrees = [
       for (final c in toutes)
-        if (q.isEmpty ||
-            normaliser(c.titre).contains(q) ||
-            normaliser(c.apercu).contains(q))
-          c,
+        if (q.isEmpty || _texteRecherche(c).contains(q)) c,
     ];
     filtrees.sort((a, b) {
       final ra = epingles.rang(a), rb = epingles.rang(b);
@@ -103,9 +100,19 @@ class ConversationsMulticanal extends ChangeNotifier {
   String? avertissement(SourceConversation source) =>
       _fournisseurs[source]?.avertissement;
 
+  /// Titre et aperçu normalisés, calculés une fois par aperçu (un aperçu
+  /// est immuable : une liste relue en apporte de nouveaux). Séparés par un
+  /// saut de ligne : une requête ne chevauche jamais les deux.
+  static final _normalises = Expando<String>('recherche');
+
+  static String _texteRecherche(ApercuConversation c) =>
+      _normalises[c] ??= '${normaliser(c.titre)}\n${normaliser(c.apercu)}';
+
   /// Minuscules sans accents, pour la recherche.
   static String normaliser(String texte) {
     final s = texte.toLowerCase();
+    // Cas courant : rien à retirer.
+    if (!s.runes.any((r) => r > 0x7F)) return s;
     final b = StringBuffer();
     for (final r in s.runes) {
       final ch = String.fromCharCode(r);

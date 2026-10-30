@@ -15,10 +15,13 @@ import 'services/integrations/service_gmail.dart';
 import 'services/utilisation/service_utilisation.dart';
 import 'theme/theme_jarvis.dart';
 import 'utils/chrono_perf.dart';
+import 'utils/erreurs_jarvis.dart';
 import 'widgets/apparence/transition_apparence.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Panne d'un module : locale, journalisée sans contenu privé.
+  ErreursJarvis.installer();
   // Mesures de performance (JARVIS_PERF) : rien hors mesure.
   ChronoPerf.enregistrerExtension();
   ChronoPerf.suivreImages();
