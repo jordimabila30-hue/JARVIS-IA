@@ -2202,3 +2202,11 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 
 ### Android (campagne unique, ajouts IJ)
 - Clavier physique Bluetooth : Maj+Entrée ; police du code ; calculs dictés (« 3 et 4 ») toujours locaux.
+
+### Validation finale IJ (2026-10-30, Render `1892eca`, /health/ready ok, Redis et Supabase ok)
+- 5 échanges courts dans une conversation existante (offre Free, GroqCloud), journaux Render :
+  - préparation du chat : 672 / 568 / 603 / 548 / 623 ms → médiane **603 ms** (avant IJ ≈ 1 480 ms, médiane de 1 113-1 725 ; après `12883de` ≈ 960 ms, de 774-1 169) ; dont propriété + historique + pièces jointes en parallèle 547-671 ms, ODO 1-3 ms (une fois 347 ms quand l'historique venait de Redis : la lecture ODO n'était pas encore finie).
+  - premier fragment du fournisseur : 1 350-2 457 ms (médiane 1 417 ms) ; réponse principale : médiane 1 435 ms ; enregistrement Supabase (après la réponse, hors délai perçu) 204-575 ms.
+  - Gain MESURÉ côté serveur : ≈ 0,9 s par message depuis le début d'IJ. La latence du fournisseur varie seule (non attribuée au backend).
+  - Non mesuré : durée d'authentification (vérification JWT locale, JWKS en cache, avant le chronomètre ; aucun journal dédié) ; premier texte visible côté appli (la page servie n'avait pas les sondes).
+- Sécurité : tests ajoutés `test_foreign_conversation_history_never_reaches_llm` (historique d'un autre compte : 404, aucun appel IA, rien enregistré, aucun quota, aucun texte dans le journal) et `test_deleted_conversation_refused` ; chat + MIA + ODO + contextes : 61 réussis. Journaux Render depuis 17:00 : aucun texte de message, aucun jeton / clé / Bearer.

@@ -248,6 +248,29 @@ async def test_foreign_conversation_404_and_quota_released(env):
     assert env.llm.calls == []
 
 
+async def test_foreign_conversation_history_never_reaches_llm(env, caplog):
+    """IJ : propriété, historique et pièces jointes sont lus en parallèle ;
+    l'historique d'un autre compte n'atteint jamais le fournisseur, rien
+    n'est enregistré ni consommé, et le journal ne contient aucun texte."""
+    env.supa.history[OTHER_CONV] = [{"role": "user", "content": "SECRET de l'autre compte"}]
+    with caplog.at_level("INFO"):
+        resp = await post_chat(env, message="Hack", conversation_id=OTHER_CONV)
+    assert resp.status_code == 404
+    assert env.llm.calls == []
+    assert env.supa.inserted == []
+    assert env.supa.increments == []
+    assert await requests_count(env) == "0"
+    assert "SECRET" not in caplog.text and "Hack" not in caplog.text
+
+
+async def test_deleted_conversation_refused(env):
+    """Conversation supprimée (ou inconnue) : 404, aucun appel, quota rendu."""
+    resp = await post_chat(env, message="Toujours là ?", conversation_id="55555555-5555-5555-5555-555555555555")
+    assert resp.status_code == 404
+    assert env.llm.calls == []
+    assert await requests_count(env) == "0"
+
+
 async def test_llm_failure_sends_error_and_releases_quota(env):
     env.llm._fail = True
     resp = await post_chat(env, message="Bonjour")
