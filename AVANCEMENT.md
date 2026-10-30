@@ -2103,9 +2103,10 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - 26 : minuteries vocales annulées à chaque arrêt / erreur / dispose.
 - 27 / 28 : vignettes décodées réduites (`ResizeImage`, `cacheWidth`), import WhatsApp en flux, capture lue une fois.
 
-### Décisions produit en attente
-- `delaiReflexion` (450 ms) retarde l'ENVOI de chaque question écrite (fenêtre « changer de fil = rien n'est envoyé », testée) : ≈ 0,45 s de plus sur chaque premier fragment IA.
-- Animation de lancement 3,2 s : principal délai avant un accueil utilisable.
+### Décisions de l'utilisateur, appliquées
+- Envoi immédiat : la question écrite part au serveur sans attendre `delaiReflexion` (450 ms) ; ce délai ne retarde plus que l'affichage d'une réponse locale. Fil changé juste après l'envoi : une seule demande, réponse rangée dans sa conversation (comme une réponse tardive). Gain ≈ 0,45 s par construction ; Web + Render, réponses courtes à chaud : totale 3,3-4,3 s après contre 3,8-5,8 s avant (variance du fournisseur dominante).
+- Écran de lancement : un appui passe l'animation (suite demandée une seule fois, session vérifiée comme avant). Vérifié sur le Web réel.
+- Tests : `conversation_ia_test` adapté, `ecran_de_lancement_test` ajouté ; suite complète 973 / 973, analyse propre.
 
 ### Campagne Android unique (S10+, non faite)
 - Banc : `flutter run --profile -t tool/banc_conversation.dart --dart-define=JARVIS_PERF=true --dart-define=JARVIS_TOURS=3 "--dart-define=JARVIS_VARIANTES=fil.fondu;bulle.ombre"` (+ `JARVIS_ECHANGES=300`) ; timeline DevTools sur la frappe multiligne.

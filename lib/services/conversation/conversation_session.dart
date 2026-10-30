@@ -1006,18 +1006,12 @@ class ConversationSession extends ChangeNotifier {
       notifyListeners();
     }
 
+    // La demande part tout de suite (aucune attente avant le serveur) ;
+    // la courte réflexion ne retarde que l'affichage d'une réponse
+    // immédiate (locale), jamais l'IA.
+    final reflexion = vocal ? null : Future<void>.delayed(delaiReflexion);
     ReponseJarvis reponse;
     try {
-      if (!vocal) await Future<void>.delayed(delaiReflexion);
-      // Fil changé pendant la réflexion : la demande n'est pas envoyée
-      // (aucune conversation créée pour rien sur le serveur).
-      if (_ferme || generation != _generation) {
-        _enCours--;
-        finAttente();
-        ecriture.arreter();
-        if (!_ferme) notifyListeners();
-        return null;
-      }
       reponse = await moteur.repondre(
         demande.avecFragments(
           surFragment,
@@ -1044,6 +1038,8 @@ class ConversationSession extends ChangeNotifier {
                   'pour obtenir la réponse complète.',
             );
     }
+    // Fil changé entre-temps : la réponse rejoint sa conversation (plus bas).
+    await reflexion;
     _enCours--;
     ChronoPerf.fin('reponse.totale', mesure);
     if (ChronoPerf.actif) {

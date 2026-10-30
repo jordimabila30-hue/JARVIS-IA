@@ -47,7 +47,7 @@ class _EcranDeLancementState extends State<EcranDeLancement>
             duration: const Duration(milliseconds: _dureeMs),
           )
           ..addStatusListener((statut) {
-            if (statut == AnimationStatus.completed) widget.onTermine?.call();
+            if (statut == AnimationStatus.completed) _terminer();
           })
           ..forward();
 
@@ -55,6 +55,16 @@ class _EcranDeLancementState extends State<EcranDeLancement>
       vsync: this,
       duration: const Duration(seconds: 24),
     )..repeat();
+  }
+
+  bool _termine = false;
+
+  /// Fin de l'animation, ou appui pour passer : la suite (session vérifiée
+  /// comme d'habitude) n'est demandée qu'une fois.
+  void _terminer() {
+    if (_termine) return;
+    _termine = true;
+    widget.onTermine?.call();
   }
 
   @override
@@ -74,103 +84,112 @@ class _EcranDeLancementState extends State<EcranDeLancement>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FondJarvis(
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, contraintes) {
-              final cote = math.min(
-                contraintes.maxWidth,
-                contraintes.maxHeight,
-              );
-              final diametre = math.min(cote * 0.8, 520.0);
-              final tailleTexte = diametre * 0.13;
+      body: GestureDetector(
+        // Un appui passe l'animation (rien d'autre ne change).
+        behavior: HitTestBehavior.opaque,
+        onTap: _terminer,
+        child: Semantics(
+          button: true,
+          label: 'Passer l’animation de lancement',
+          child: FondJarvis(
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, contraintes) {
+                  final cote = math.min(
+                    contraintes.maxWidth,
+                    contraintes.maxHeight,
+                  );
+                  final diametre = math.min(cote * 0.8, 520.0);
+                  final tailleTexte = diametre * 0.13;
 
-              return AnimatedBuilder(
-                animation: Listenable.merge([_sequence, _rotation]),
-                builder: (context, _) {
-                  // Flash au moment où toutes les lettres sont verrouillées.
-                  final flash = math.sin(_etape(0.62, 0.80) * math.pi);
-                  final lueur = _etape(0.0, 0.15) * (1 + flash * 0.8);
-                  final intensite = 0.8 + 0.2 * flash;
+                  return AnimatedBuilder(
+                    animation: Listenable.merge([_sequence, _rotation]),
+                    builder: (context, _) {
+                      // Flash au moment où toutes les lettres sont verrouillées.
+                      final flash = math.sin(_etape(0.62, 0.80) * math.pi);
+                      final lueur = _etape(0.0, 0.15) * (1 + flash * 0.8);
+                      final intensite = 0.8 + 0.2 * flash;
 
-                  // SizedBox.expand : le Stack occupe tout l'écran, ce qui centre
-                  // le contenu et place la version tout en bas.
-                  return SizedBox.expand(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Lueur centrale.
-                        SizedBox.square(
-                          dimension: diametre * 1.3,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  CouleursJarvis.violet.withValues(
-                                    alpha: 0.16 * lueur,
-                                  ),
-                                  _bleu.withValues(alpha: 0),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        RepaintBoundary(
-                          child: CustomPaint(
-                            size: Size.square(diametre),
-                            painter: _AnneauxHud(
-                              traceExterieur: _etape(
-                                0.03,
-                                0.30,
-                                Curves.easeInOutCubic,
-                              ),
-                              traceInterieur: _etape(
-                                0.10,
-                                0.36,
-                                Curves.easeInOutCubic,
-                              ),
-                              graduations: _etape(0.20, 0.40),
-                              progression: _etape(
-                                0.45,
-                                0.88,
-                                Curves.easeInOutCubic,
-                              ),
-                              rotation: _rotation.value,
-                              intensite: intensite,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+                      // SizedBox.expand : le Stack occupe tout l'écran, ce qui centre
+                      // le contenu et place la version tout en bas.
+                      return SizedBox.expand(
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
-                            for (var i = 0; i < _nom.length; i++)
-                              _construireLettre(i, tailleTexte, flash),
+                            // Lueur centrale.
+                            SizedBox.square(
+                              dimension: diametre * 1.3,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      CouleursJarvis.violet.withValues(
+                                        alpha: 0.16 * lueur,
+                                      ),
+                                      _bleu.withValues(alpha: 0),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                size: Size.square(diametre),
+                                painter: _AnneauxHud(
+                                  traceExterieur: _etape(
+                                    0.03,
+                                    0.30,
+                                    Curves.easeInOutCubic,
+                                  ),
+                                  traceInterieur: _etape(
+                                    0.10,
+                                    0.36,
+                                    Curves.easeInOutCubic,
+                                  ),
+                                  graduations: _etape(0.20, 0.40),
+                                  progression: _etape(
+                                    0.45,
+                                    0.88,
+                                    Curves.easeInOutCubic,
+                                  ),
+                                  rotation: _rotation.value,
+                                  intensite: intensite,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < _nom.length; i++)
+                                  _construireLettre(i, tailleTexte, flash),
+                              ],
+                            ),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 24,
+                              child: Opacity(
+                                opacity: _etape(0.70, 0.85) * 0.35,
+                                child: Text(
+                                  _version,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: CouleursJarvis.texte,
+                                    fontSize: 12,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 24,
-                          child: Opacity(
-                            opacity: _etape(0.70, 0.85) * 0.35,
-                            child: Text(
-                              _version,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: CouleursJarvis.texte,
-                                fontSize: 12,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
-              );
-            },
+              ),
+            ),
           ),
         ),
       ),

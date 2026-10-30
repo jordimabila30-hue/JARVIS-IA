@@ -208,14 +208,22 @@ void main() {
             'kind': 'messages',
             'message': 'Limite quotidienne de messages atteinte',
             'resets_in': 3 * 3600 - 20,
-            'resets_at': DateTime.now().toUtc().add(const Duration(hours: 3)).toIso8601String(),
+            'resets_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 3))
+                .toIso8601String(),
             'quota': {'resets_in': 3 * 3600 - 20},
           },
         }),
       );
       final r = await s.api().discuter('Bonjour') as EchecApi;
       expect(r.type, ErreurApi.quotaAtteint);
-      expect(r.detail, startsWith('Votre limite quotidienne de messages est atteinte. Réinitialisation '));
+      expect(
+        r.detail,
+        startsWith(
+          'Votre limite quotidienne de messages est atteinte. Réinitialisation ',
+        ),
+      );
       expect(MoteurConversationIA.messageErreur(r.type, r.detail), r.detail);
     });
 
@@ -511,7 +519,10 @@ void main() {
       final c = _session(quota);
       await c.envoyer('Raconte-moi l’histoire de Rome');
       // Refus sans type de limite (ancien serveur) : message générique.
-      expect(c.messages.last.texte, 'Vous avez atteint votre limite d’utilisation de l’IA.');
+      expect(
+        c.messages.last.texte,
+        'Vous avez atteint votre limite d’utilisation de l’IA.',
+      );
 
       final sansCompte = _serveurIA();
       final c2 = ConversationSession(
@@ -578,7 +589,23 @@ void main() {
       },
     );
 
-    test('fil changé pendant la réflexion : rien n’est envoyé', () async {
+    test('la question part sans attendre la réflexion affichée', () async {
+      final s = _serveurIA();
+      final c = ConversationSession(
+        delaiReflexion: const Duration(seconds: 5),
+        moteur: MoteurConversationHybride(ia: MoteurConversationIA(s.api())),
+      );
+      final envoi = c.envoyer('Une question ?');
+      for (var i = 0; i < 20 && s.requetes.isEmpty; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(s.requetes, hasLength(1));
+      c.dispose();
+      await envoi.timeout(const Duration(seconds: 6), onTimeout: () {});
+    });
+
+    test('fil changé juste après l’envoi : une seule demande, réponse rangée '
+        'dans sa conversation', () async {
       final s = _serveurIA();
       final c = ConversationSession(
         delaiReflexion: const Duration(milliseconds: 30),
@@ -588,7 +615,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       c.effacer();
       await envoi;
-      expect(s.requetes, isEmpty);
+      expect(s.requetes, hasLength(1));
+      expect(c.messages, isEmpty);
       expect(c.enReflexion, isFalse);
     });
 
@@ -615,7 +643,10 @@ void main() {
           [
             _evenement('meta', {'conversation_id': _uuidA, 'message_id': 'm1'}),
             _evenement('delta', {'text': 'Voici des idées.'}),
-            _evenement('preparation', {'message_id': 'm1', 'etape': 'propositions'}),
+            _evenement('preparation', {
+              'message_id': 'm1',
+              'etape': 'propositions',
+            }),
             _evenement('evenement_inconnu', {'x': 1}),
             _evenement('done', {'message_id': 'm1', 'usage': {}, 'quota': {}}),
           ].join(),
@@ -630,52 +661,58 @@ void main() {
       expect(preparations, 1);
     });
 
-    test('la bulle garde un indicateur vivant jusqu’à la fin du flux', () async {
-      final flux = StreamController<List<int>>();
-      final client = MockClient.streaming(
-        (_, _) async => http.StreamedResponse(
-          flux.stream,
-          200,
-          headers: {'content-type': 'text/event-stream; charset=utf-8'},
-        ),
-      );
-      final c = ConversationSession(
-        delaiReflexion: Duration.zero,
-        moteur: MoteurConversationHybride(
-          ia: MoteurConversationIA(
-            ApiJarvis(
-              adresse: Uri.parse('http://localhost:8000'),
-              jeton: () async => 'jeton-acces',
-              client: client,
+    test(
+      'la bulle garde un indicateur vivant jusqu’à la fin du flux',
+      () async {
+        final flux = StreamController<List<int>>();
+        final client = MockClient.streaming(
+          (_, _) async => http.StreamedResponse(
+            flux.stream,
+            200,
+            headers: {'content-type': 'text/event-stream; charset=utf-8'},
+          ),
+        );
+        final c = ConversationSession(
+          delaiReflexion: Duration.zero,
+          moteur: MoteurConversationHybride(
+            ia: MoteurConversationIA(
+              ApiJarvis(
+                adresse: Uri.parse('http://localhost:8000'),
+                jeton: () async => 'jeton-acces',
+                client: client,
+              ),
             ),
           ),
-        ),
-      );
-      final envoi = c.envoyer('Propose-moi des réponses pour Lina');
-      flux.add(
-        utf8.encode(
-          _evenement('meta', {'conversation_id': _uuidA, 'message_id': 'm1'}) +
-              _evenement('delta', {'text': 'Voici des idées.'}),
-        ),
-      );
-      await pumpEventQueue();
-      final bulle = c.messages.last;
-      expect(bulle.auteur, AuteurMessage.jarvis);
-      expect(c.preparationEnCours(bulle.id), isFalse);
-      // Texte fini, lots en cours côté serveur : indicateur, chat vivant.
-      flux.add(utf8.encode(_evenement('preparation', {'message_id': 'm1'})));
-      await pumpEventQueue();
-      expect(c.preparationEnCours(bulle.id), isTrue);
-      expect(c.messages.last.redaction, isTrue);
-      flux.add(
-        utf8.encode(
-          _evenement('done', {'message_id': 'm1', 'usage': {}, 'quota': {}}),
-        ),
-      );
-      await flux.close();
-      await envoi;
-      expect(c.preparationEnCours(bulle.id), isFalse);
-      expect(c.messages.last.texte, 'Voici des idées.');
-    });
+        );
+        final envoi = c.envoyer('Propose-moi des réponses pour Lina');
+        flux.add(
+          utf8.encode(
+            _evenement('meta', {
+                  'conversation_id': _uuidA,
+                  'message_id': 'm1',
+                }) +
+                _evenement('delta', {'text': 'Voici des idées.'}),
+          ),
+        );
+        await pumpEventQueue();
+        final bulle = c.messages.last;
+        expect(bulle.auteur, AuteurMessage.jarvis);
+        expect(c.preparationEnCours(bulle.id), isFalse);
+        // Texte fini, lots en cours côté serveur : indicateur, chat vivant.
+        flux.add(utf8.encode(_evenement('preparation', {'message_id': 'm1'})));
+        await pumpEventQueue();
+        expect(c.preparationEnCours(bulle.id), isTrue);
+        expect(c.messages.last.redaction, isTrue);
+        flux.add(
+          utf8.encode(
+            _evenement('done', {'message_id': 'm1', 'usage': {}, 'quota': {}}),
+          ),
+        );
+        await flux.close();
+        await envoi;
+        expect(c.preparationEnCours(bulle.id), isFalse);
+        expect(c.messages.last.texte, 'Voici des idées.');
+      },
+    );
   });
 }
