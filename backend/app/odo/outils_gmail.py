@@ -239,7 +239,12 @@ class GmailRechercher(_OutilGmail):
                 f"{x.email.de.split('<')[0].strip() or x.email.de} : {masquer_secrets(x.email.objet)[:60]}"
                 for x in fiables[:3]) + "). Si la demande en vise un seul, pose UNE question courte puis reprends "
                 "la demande initiale.")
-        donnees.update(nombre=len(trouves), candidats=[_memo(x) for x in montres])
+        complet = not getattr(trouves, "suite", False)
+        if not complet:
+            lignes.append(f"Liste LIMITÉE : Gmail a d'autres résultats au-delà des {len(trouves)} consultés. "
+                          f"Ce nombre n'est PAS un total : dis « au moins {len(trouves)} » (jamais "
+                          f"« {len(trouves)} » seul) ou propose de préciser la recherche.")
+        donnees.update(nombre=len(trouves), complet=complet, candidats=[_memo(x) for x in montres])
         a_lire = [x for x in montres if x.pertinence != "faible"][:min(montrer, 10) if arguments.get("max") else 5] \
             if arguments.get("lire") else []
         if not a_lire:

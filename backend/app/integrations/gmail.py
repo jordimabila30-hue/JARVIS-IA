@@ -29,6 +29,15 @@ _ID = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 _INTERDITS = re.compile(r'["(){}\[\]:<>\\]')
 
 
+class Trouves(list):
+    """Résultats d'une recherche ; [suite] : Gmail en a d'autres au-delà
+    (la longueur n'est alors qu'un minimum, jamais un total)."""
+
+    def __init__(self, elements=(), *, suite: bool = False):
+        super().__init__(elements)
+        self.suite = suite
+
+
 @dataclass
 class ApercuEmail:
     id: str
@@ -215,12 +224,13 @@ class ClientGmail:
             return r.json()
         raise ConnexionARenouveler()
 
-    async def rechercher(self, user_id: str, requete: str, maximum: int) -> list[ApercuEmail]:
+    async def rechercher(self, user_id: str, requete: str, maximum: int) -> "Trouves":
         liste = await self._get(user_id, "messages", {"q": requete, "maxResults": maximum})
         ids = [m["id"] for m in (liste.get("messages") or [])[:maximum] if _ID.match(m.get("id", ""))]
         params = [("format", "metadata")] + [("metadataHeaders", h) for h in ENTETES]
         details = await asyncio.gather(*(self._get(user_id, f"messages/{i}", params) for i in ids))
-        return [_apercu(m) for m in details]
+        # Page suivante annoncée par Gmail : la liste n'est PAS complète.
+        return Trouves([_apercu(m) for m in details], suite=bool(liste.get("nextPageToken")))
 
     async def non_lus(self, user_id: str) -> tuple[int, int]:
         """Compteurs EXACTS de Gmail pour la boîte de réception : (conversations

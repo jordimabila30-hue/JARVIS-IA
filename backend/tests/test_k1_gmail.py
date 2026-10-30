@@ -164,6 +164,24 @@ async def test_plusieurs_sujets_une_question(env):
     assert "pose UNE question courte" in r.contenu
 
 
+async def test_liste_tronquee_jamais_donnee_comme_total(env):
+    """GH-60 : Gmail annonce une page suivante → « au moins N », jamais N."""
+    await connecter(env)
+    env.faux.filtrer = True
+    env.faux.messages = {
+        f"fa{i}aaaa": message(f"fa{i}aaaa", de="Banque <b@banque.test>", objet=f"Relevé {i}", texte="Relevé.")
+        for i in range(5)
+    }
+    r = await GmailRechercher(ClientGmail(env.google)).executer({"lire": True, "max": 2}, ctx())
+    assert r.donnees["complet"] is False
+    assert "au moins 2" in r.contenu
+
+    env.faux.messages = {"fa0aaaa": env.faux.messages["fa0aaaa"]}
+    r = await GmailRechercher(ClientGmail(env.google)).executer({"lire": True, "max": 2}, ctx())
+    assert r.donnees["complet"] is True
+    assert "LIMITÉE" not in r.contenu
+
+
 # --- G3 / K1-15 : conversation classée sous Gmail -------------------------------
 
 async def test_reponse_gmail_marquee_source_gmail(env):
