@@ -77,6 +77,15 @@ class CalculVocal {
 
     final jetons = <_Jeton>[];
     var i = 0;
+    // Position (en mots) juste après le dernier nombre lu : un opérateur
+    // n'en est un que collé à ses nombres (« 3 et 4 », pas « 3 clés et une
+    // fonction », ni « 3 heures sur 5 sites »).
+    var finNombre = -1;
+    bool nombreEn(int j) =>
+        j < mots.length &&
+        (double.tryParse(mots[j]) != null ||
+            _lireNombreEnLettres(mots, j).$2 > 0);
+    bool apresNombre() => jetons.lastOrNull is _Nombre && finNombre == i;
     bool suite(List<String> attendus) {
       if (i + attendus.length > mots.length) return false;
       for (var k = 0; k < attendus.length; k++) {
@@ -93,6 +102,7 @@ class CalculVocal {
       if (valeur != null) {
         jetons.add(_Nombre(valeur, m.replaceAll('.', ',')));
         i++;
+        finNombre = i;
         continue;
       }
 
@@ -101,45 +111,53 @@ class CalculVocal {
       if (longueur > 0) {
         jetons.add(_Nombre(lettres.toDouble(), '$lettres'));
         i += longueur;
+        finNombre = i;
         continue;
       }
 
-      // Opérateurs (du plus long au plus court).
-      if (suite(['racine', 'carree', 'de']) || suite(['racine', 'de'])) {
+      // Opérateurs (du plus long au plus court), seulement entre nombres.
+      // Binaire : nombre juste avant, nombre juste après.
+      bool binaire(int longueur) => apresNombre() && nombreEn(i + longueur);
+      if ((suite(['racine', 'carree', 'de']) || suite(['racine', 'de'])) &&
+          nombreEn(i + (mots[i + 1] == 'carree' ? 3 : 2))) {
         jetons.add(const _Operateur('racine', 'racine carrée de'));
         i += mots[i + 1] == 'carree' ? 3 : 2;
-      } else if (suite(['au', 'carre'])) {
+      } else if (suite(['au', 'carre']) && apresNombre()) {
         jetons.add(const _Operateur('carre', 'au carré'));
         i += 2;
-      } else if (suite(['au', 'cube'])) {
+      } else if (suite(['au', 'cube']) && apresNombre()) {
         jetons.add(const _Operateur('cube', 'au cube'));
         i += 2;
-      } else if (suite(['pour', 'cent', 'de']) || suite(['pourcent', 'de'])) {
+      } else if (suite(['pour', 'cent', 'de']) && binaire(3) ||
+          suite(['pourcent', 'de']) && binaire(2)) {
         jetons.add(const _Operateur('%', 'pour cent de'));
         i += mots[i] == 'pourcent' ? 2 : 3;
-      } else if (suite(['multiplie', 'par'])) {
+      } else if (suite(['multiplie', 'par']) && binaire(2)) {
         jetons.add(const _Operateur('*', 'fois'));
         i += 2;
-      } else if (suite(['divise', 'par'])) {
+      } else if (suite(['divise', 'par']) && binaire(2)) {
         jetons.add(const _Operateur('/', 'divisé par'));
         i += 2;
-      } else if (suite(['a', 'la', 'puissance'])) {
+      } else if (suite(['a', 'la', 'puissance']) && binaire(3)) {
         jetons.add(const _Operateur('^', 'puissance'));
         i += 3;
-      } else if (m == 'plus' || m == 'et' && jetons.lastOrNull is _Nombre) {
+      } else if ((m == 'plus' || m == 'et') && binaire(1)) {
         // « et » entre deux nombres (« 3 et 4 ») vaut une addition.
         jetons.add(const _Operateur('+', 'plus'));
         i++;
-      } else if (m == 'moins') {
+      } else if (m == 'moins' &&
+          (binaire(1) ||
+              // Nombre négatif en tête (« moins 5 plus 3 »).
+              jetons.isEmpty && nombreEn(i + 1))) {
         jetons.add(const _Operateur('-', 'moins'));
         i++;
-      } else if (m == 'fois' || m == 'x') {
+      } else if ((m == 'fois' || m == 'x') && binaire(1)) {
         jetons.add(const _Operateur('*', 'fois'));
         i++;
-      } else if (m == 'sur') {
+      } else if (m == 'sur' && binaire(1)) {
         jetons.add(const _Operateur('/', 'divisé par'));
         i++;
-      } else if (m == 'puissance' || m == 'exposant') {
+      } else if ((m == 'puissance' || m == 'exposant') && binaire(1)) {
         jetons.add(const _Operateur('^', 'puissance'));
         i++;
       } else {

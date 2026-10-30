@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/theme_jarvis.dart';
 import 'feuille_ajout.dart';
+import '../services/clavier/retour_ligne.dart';
 import '../services/ouverture_messageries.dart';
 import 'importation/logo_whatsapp.dart';
 import 'bouton_vocal.dart';
@@ -185,6 +186,8 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
   void initState() {
     super.initState();
     _focusConnu = widget.focus.hasFocus;
+    // Web : Maj+Entrée laissé au navigateur (retour à la ligne natif).
+    installerRetourLigneWeb();
     widget.focus.addListener(_surFocus);
     widget.controleur.addListener(_suivre);
   }
@@ -327,9 +330,8 @@ class _LigneDeCommandeState extends State<LigneDeCommande>
 
     // Construits une fois par build : pendant le dépliage, seules leurs
     // positions changent (le champ n'est jamais reconstruit ni recréé).
-    // Clavier physique : Entrée envoie, Maj+Entrée passe à la ligne. Pas
-    // sur le Web : le navigateur traite Entrée lui-même (envoi) et le
-    // raccourci ne peut pas l'en empêcher.
+    // Clavier physique : Entrée envoie, Maj+Entrée passe à la ligne. Web :
+    // c'est le navigateur qui insère la ligne (installerRetourLigneWeb).
     final champ = CallbackShortcuts(
       bindings: kIsWeb
           ? const {}

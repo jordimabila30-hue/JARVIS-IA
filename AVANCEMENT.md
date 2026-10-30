@@ -2167,3 +2167,38 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 
 ### Android (campagne unique, ajouts GH)
 - TalkBack (liens annoncés « Lien : … », bloc de code, tableau), texte agrandi système, « + » touché dans la marge, clavier physique Bluetooth (Maj+Entrée), rotation, photo EXIF réelle, vibrations du balayage.
+
+## 2026-10-30 — Finition GH + session IJ (optimisations 61 à 80)
+
+### Finition GH
+- GH-1 Police du code : Roboto Mono embarquée (`assets/polices/RobotoMono.ttf`, 109 Ko, Apache 2.0, copie locale du cache pub) : le Web (CanvasKit) n'a pas les polices du système. Utilisée par les seuls blocs de code.
+- GH-2 Maj+Entrée sur le Web : le champ HTML de Flutter envoyait avant que le framework ne voie la touche. `services/clavier/retour_ligne_web.dart` : écouteur en capture qui arrête la PROPAGATION de Maj+Entrée (textarea seulement, jamais pendant une composition IME) ; le navigateur insère la ligne, Flutter la relit. Vérifié sur le Web réel : Maj+Entrée = ligne, Entrée = envoi du message multiligne. Windows : raccourci Flutter (test).
+- GH-3 Site Web : jarvis-ia-web sert la version GH (reconstruite 16:56 UTC ; « Copier le code », liens présents), `max-age=0` + ETag ; aucun déploiement déclenché.
+- GH-4 Gmail : trois cas distincts dans le résultat de recherche : total EXACT (pas de page suivante), minimum « au moins N », estimation Gmail (`resultSizeEstimate`, dite « environ »). Pas de pagination exhaustive.
+- GH-5 Bouton Menu (40 px) : non modifié (agrandir déplacerait la barre du haut) ; à juger au doigt sur Android.
+- Bug trouvé pendant l'essai réel : « Donne un JSON de 3 clés… et une fonction » répondu « 3 plus 1 égale 4 » par le moteur local. `CalculVocal` : un opérateur écrit en mots n'est retenu que collé à un nombre de chaque côté (« 3 et 4 », « 12 sur 4 », « moins 5 » en tête) ; ces demandes vont à l'IA. Tests ajoutés.
+
+### Réseau, streaming, traçage (61-70)
+- 61 Déjà : fournisseurs IA en instances partagées (un pool par fournisseur-modèle), client unique Supabase / Google / Flutter.
+- 62 Déjà : délais distincts côté appli (requête, en-têtes du chat, silence du flux 30 s), battements SSE pendant les lots.
+- 63 Déjà : aucun réessai automatique d'une action non idempotente ; nouvel essai du serveur seulement si rien n'a été diffusé ; « Token expiré » refusé avant toute génération.
+- 64 Non applicable : données privées et changeantes (quota, conversations) ; aucun point d'API public à mettre en cache.
+- 65-67 Déjà : colonnes explicites, pages de messages et de contextes, rien de secondaire préchargé.
+- 68 Déjà (AB) ; 69 Déjà : la reprise d'un flux n'existe pas chez les fournisseurs ; texte partiel gardé + incident, nouvel essai explicite, jamais de concaténation de deux générations.
+- 70 Traçage (journaux Render, avant IJ) : préparation serveur 1,1-1,7 s, premier fragment fournisseur 2,1-13,5 s, enregistrement Supabase 0,35-0,79 s. Fait : état des connexions ODO (Gmail) lu dès l'arrivée de la requête en parallèle de la conversation (abandonné s'il ne sert pas) ; ligne « Durée : préparation du chat … (conversation, historique, creation, odo) » sans contenu. Gain à mesurer après déploiement.
+
+### MIA universel, ODO (71-80)
+- 71 / 74 / 75 Déjà : 20 derniers messages ; sortie 1 024 tokens (le modèle s'arrête plus tôt pour une phrase ; aide à répondre : 4 000) ; limites de l'offre en cache Redis, aucun repli entre fournisseurs.
+- 72 Non fait : aucun résumé des chats ordinaires ; le créer changerait la logique IA sans mesure de qualité.
+- 73 En attente de décision : l'adaptateur Claude lit les métriques de cache mais n'envoie aucun `cache_control` ; le prompt système contient l'heure (préfixe changeant) : il faudrait le scinder et valider avec des appels Claude payants.
+- 76 Déjà : compteur des non-lus direct (sans IA) ; corrigé : faux calculs locaux (voir plus haut).
+- 77 / 78 Déjà : métadonnées Gmail et lectures en parallèle (`asyncio.gather`).
+- 79 Déjà : messages des pièces jointes WhatsApp en cache Redis par contexte et par compte.
+- 80 Déjà : résultats d'outils plafonnés (`LECTURE_TOTAL`, extraits), secrets masqués.
+
+### Tests IJ
+- Flutter : 998 / 998, analyse propre. Backend : 681 réussis, 1 ignoré (Gmail : 150).
+- Web réel (Render) : Maj+Entrée, police du code (JSON / Dart alignés), demande « JSON … et une fonction » envoyée à l'IA.
+
+### Android (campagne unique, ajouts IJ)
+- Clavier physique Bluetooth : Maj+Entrée ; police du code ; calculs dictés (« 3 et 4 ») toujours locaux.

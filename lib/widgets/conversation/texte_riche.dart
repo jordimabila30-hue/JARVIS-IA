@@ -246,13 +246,9 @@ class _VueCodeState extends State<_VueCode> {
               widget.bloc.code,
               softWrap: false,
               style: widget.style.copyWith(
-                fontFamily: 'monospace',
-                fontFamilyFallback: const [
-                  'Consolas',
-                  'Menlo',
-                  'Roboto Mono',
-                  'Courier New',
-                ],
+                // Embarquée (le Web n'a pas les polices du système).
+                fontFamily: 'RobotoMono',
+                fontFamilyFallback: const ['monospace', 'Consolas', 'Menlo'],
                 fontSize: taille * 0.88,
                 height: 1.45,
                 letterSpacing: 0,

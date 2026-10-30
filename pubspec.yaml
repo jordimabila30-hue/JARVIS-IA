@@ -80,6 +80,12 @@ flutter:
     - family: Baloo2
       fonts:
         - asset: assets/polices/Baloo2.ttf
+    # Blocs de code des réponses (chasse fixe : le Web n'a pas les polices
+    # du système). Roboto Mono, licence Apache 2.0, Google Fonts (copie
+    # locale du paquet flutter_gallery_assets 1.0.2).
+    - family: RobotoMono
+      fonts:
+        - asset: assets/polices/RobotoMono.ttf
 
   # Logos des messageries (sélecteur du menu latéral). Voir SOURCES.md.
   assets:

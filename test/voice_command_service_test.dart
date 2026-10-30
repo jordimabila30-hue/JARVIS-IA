@@ -153,6 +153,19 @@ void main() {
     test('pas de faux calcul', () {
       expect(CalculVocal.calculer('ca va et toi'), isNull);
       expect(CalculVocal.calculer('il est 3 heures'), isNull);
+      // Opérateur jamais pris hors d'une expression (session IJ) : ces
+      // demandes vont à l'IA.
+      for (final phrase in [
+        'donne un json de 3 cles indente et une fonction dart de 3 lignes',
+        'il y a 3 cles et 2 portes',
+        'resume 3 mails sur 10 recus',
+        'ecris 2 phrases plus courtes',
+        'un tableau de 3 colonnes et 2 lignes',
+      ]) {
+        expect(CalculVocal.calculer(phrase), isNull, reason: phrase);
+      }
+      expect(CalculVocal.calculer('3 et 4')?.valeur, 7);
+      expect(CalculVocal.calculer('12 sur 4')?.valeur, 3);
     });
   });
 
