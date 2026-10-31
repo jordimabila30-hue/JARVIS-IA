@@ -4,6 +4,7 @@ import '../../services/jarvis_touch_service.dart';
 import '../../theme/theme_jarvis.dart';
 import 'elements_parametres.dart';
 import 'pages_jarvis_touch.dart';
+import '../../utils/version_jarvis.dart';
 
 /// Paramètres › Général : une entrée JARVIS Touch (Android seulement, page
 /// dédiée) et les informations de l'application. [page] : sous-page
@@ -44,9 +45,9 @@ class PanneauGeneral extends StatelessWidget {
             ),
             const SizedBox(height: 24),
           ],
-          const CarteReglages(
+          CarteReglages(
             enfants: [
-              LigneReglage(
+              const LigneReglage(
                 titre: 'Langue de l’interface',
                 largeurControle: 180,
                 controle: _Valeur('Français'),
@@ -54,7 +55,8 @@ class PanneauGeneral extends StatelessWidget {
               LigneReglage(
                 titre: 'Version',
                 largeurControle: 180,
-                controle: _Valeur('1.0.0'),
+                // Version réellement construite (pubspec.yaml).
+                controle: _Valeur(VersionJarvis.valeur),
               ),
             ],
           ),

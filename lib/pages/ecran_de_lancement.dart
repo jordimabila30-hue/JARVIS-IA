@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/theme_jarvis.dart';
+import '../utils/version_jarvis.dart';
 
 /// Écran affiché au démarrage de JARVIS.
 ///
@@ -26,8 +27,8 @@ class _EcranDeLancementState extends State<EcranDeLancement>
     with TickerProviderStateMixin {
   static const _nom = 'JARVIS';
 
-  // À garder synchronisé avec `version` dans pubspec.yaml.
-  static const _version = 'v1.0.0';
+  // Version réellement construite (pubspec.yaml), jamais écrite à la main.
+  static final _version = VersionJarvis.courte;
 
   static Color get _bleu => CouleursJarvis.signal;
   static const _dureeMs = 3200;
