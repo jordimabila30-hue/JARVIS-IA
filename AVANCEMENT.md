@@ -2267,3 +2267,13 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 
 ### Tests
 - Flutter 1 010 / 1 010, analyse propre ; backend 691 réussis, 1 ignoré.
+
+## 2026-10-31 — Version 1.1.0+2 (validée par ChatGPT)
+
+- `pubspec.yaml` : `1.1.0+2` ; build Web : `version.json` = 1.1.0 / 2, lancement « v1.1.0 » (vérifié dans le navigateur). Android / Windows lisent le pubspec. `CHANGELOG.md` et `docs/VERSIONING.md` à jour.
+- « bonjours », « bjr », « slt », « bonsoirs »… : réponse locale (vérifié en réel : aucune requête `chat/stream`) ; une vraie question après la salutation reste à l'IA (test).
+- Cache Claude sur le vrai backend (`8411fb4`, conversation existante, 2 messages) : AUCUNE ligne « Cache fournisseur » dans les journaux. Cause trouvée : avec ODO actif (Gmail connecté), l'orchestrateur fusionnait le détail du cache dans l'entrée en cumulant les tours (total et quota justes, détail perdu). Corrigé (`ExecutionODO._cumuler` / `_usage`, test) — NON déployé : la lecture réelle du cache en production reste à constater.
+- Résumé (72) en production : non testé — il faut 3 appels (déclenchement, résumé, question qui l'utilise) ; le plafond de la campagne est atteint.
+- Campagne payante : 10 appels sur 10 (7 évaluation, 1 reprise réseau, 2 cache), coût estimé ≈ 0,12 $.
+- Tests : Flutter 1 011 / 1 011, analyse propre ; backend 692 réussis, 1 ignoré.
+- Préparation (sans IA) d'une conversation de test de plus de 30 messages : prévue par la route `POST /api/v1/conversations/local-exchanges` (aucune IA, aucun quota), au moment de l'essai.

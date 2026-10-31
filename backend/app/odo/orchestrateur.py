@@ -91,8 +91,10 @@ class ExecutionODO:
         self._reinitialiser()
 
     def _reinitialiser(self) -> None:
-        self.entree = 0            # tokens d'entrée des tours TERMINÉS
+        self.entree = 0            # tokens d'entrée des tours TERMINÉS (cache compris)
         self.sortie = 0
+        self.cache_lecture = 0     # dont lus en cache (Claude)
+        self.cache_ecriture = 0    # dont écrits en cache
         self.tours = 0
         self.appels = 0
         self.prompt_courant: list[Message] = []
@@ -131,6 +133,19 @@ class ExecutionODO:
                 return outil, arguments
         return None
 
+
+    def _cumuler(self, usage: Usage) -> None:
+        self.entree += usage.entree_totale
+        self.sortie += usage.sortie
+        self.cache_lecture += usage.cache_lecture
+        self.cache_ecriture += usage.cache_ecriture
+
+    def _usage(self) -> Usage:
+        """Cumul des tours : total d'entrée (quota) inchangé, détail du
+        cache gardé visible."""
+        lu, ecrit = self.cache_lecture, self.cache_ecriture
+        return Usage(entree=self.entree - lu - ecrit, sortie=self.sortie, cache_lecture=lu,
+                     cache_ecriture=ecrit)
     async def _direct(self, outil: Outil, arguments: dict[str, Any], prompt: Sequence[Message],
                       max_sortie: int) -> AsyncIterator[EvenementODO]:
         """UN appel IA : ODO exécute l'outil, le modèle reçoit les données et
@@ -174,15 +189,14 @@ class ExecutionODO:
         if fin is None:
             return
         self.tours += 1
-        self.entree += fin.usage.entree_totale
-        self.sortie += fin.usage.sortie
+        self._cumuler(fin.usage)
         self.prompt_courant, self.texte_tour = [], ""
         journaliser("fin", demande=self.contexte.demande_id, tours=self.tours, appels=self.appels,
                     duree_ms=(time.perf_counter() - self._debut) * 1000, premier_outil_ms=self._premier_outil_ms,
                     entree=self.entree, sortie=self.sortie, direct=1,
                     requetes_gmail=sum(int(d.get("requetes_gmail", 0)) for _, d in self.donnees) or None,
                     fournisseur=self.llm.nom)
-        yield replace(fin, usage=Usage(entree=self.entree, sortie=self.sortie), tour=None)
+        yield replace(fin, usage=self._usage(), tour=None)
 
     async def flux(self, prompt: Sequence[Message], *, max_sortie: int) -> AsyncIterator[EvenementODO]:
         self._reinitialiser()
@@ -232,8 +246,7 @@ class ExecutionODO:
             if fin is None:
                 return                          # la route signale la réponse incomplète
             self.tours += 1
-            self.entree += fin.usage.entree_totale
-            self.sortie += fin.usage.sortie
+            self._cumuler(fin.usage)
             self.prompt_courant, self.texte_tour = [], ""
             if fin.raison is not RaisonArret.OUTIL or not fin.appels:
                 # Mesures pour comparer les phases (aucun contenu, aucune identité).
@@ -242,7 +255,7 @@ class ExecutionODO:
                             premier_outil_ms=self._premier_outil_ms, entree=self.entree, sortie=self.sortie,
                             requetes_gmail=sum(int(d.get("requetes_gmail", 0)) for _, d in self.donnees) or None,
                             fournisseur=self.llm.nom)
-                yield replace(fin, usage=Usage(entree=self.entree, sortie=self.sortie), tour=None)
+                yield replace(fin, usage=self._usage(), tour=None)
                 return
             resultats: list[ResultatAppel] = []
             for appel in fin.appels:

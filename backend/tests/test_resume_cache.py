@@ -129,3 +129,17 @@ async def redis():
     r = fakeredis.aioredis.FakeRedis(decode_responses=True)
     yield r
     await r.aclose()
+
+
+def test_odo_garde_le_detail_du_cache_sans_changer_le_total():
+    """Opt. 73 : avec ODO, le détail du cache restait invisible (fondu dans
+    l'entrée) ; le total compté au quota reste identique."""
+    from app.odo.orchestrateur import ExecutionODO
+
+    ex = object.__new__(ExecutionODO)
+    ex.entree = ex.sortie = ex.cache_lecture = ex.cache_ecriture = 0
+    ex._cumuler(Usage(entree=100, sortie=20, cache_lecture=900, cache_ecriture=0))
+    ex._cumuler(Usage(entree=50, sortie=10, cache_lecture=0, cache_ecriture=300))
+    u = ex._usage()
+    assert (u.cache_lecture, u.cache_ecriture, u.sortie) == (900, 300, 30)
+    assert u.entree_totale == 100 + 900 + 50 + 300
