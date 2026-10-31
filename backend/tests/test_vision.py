@@ -140,7 +140,9 @@ async def test_question_suivante_sur_la_meme_image(env):
     await post_chat(env, message="Et la deuxième ligne ?", conversation_id=cid)
     suite = serveur.requetes[1]["messages"]
     assert suite[0]["content"][0]["type"] == "image"                         # l'image reste dans le contexte
-    assert suite[-1]["content"] == [{"type": "text", "text": "Et la deuxième ligne ?"}]
+    # La date (opt. 73) précède la question dans le même tour, sans image.
+    assert suite[-1]["content"][-1] == {"type": "text", "text": "Et la deuxième ligne ?"}
+    assert all(b["type"] == "text" for b in suite[-1]["content"])
 
     # Contexte expiré : l'image n'est plus envoyée, le modèle en est prévenu.
     await env.redis.delete(f"chat:image:{cid}")

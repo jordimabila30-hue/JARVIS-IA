@@ -85,7 +85,12 @@ async def test_historique_redis_puis_suite_de_conversation(env):
     second = serveur.requetes[1]["messages"]
     assert [m["role"] for m in second] == ["user", "assistant", "user"]
     assert second[1]["content"][0]["text"] == "Bonjour Tony."          # relu depuis le contexte court
-    assert second[-1]["content"][0]["text"] == "Et ensuite ?"
+    # Opt. 73 : préfixe stable mis en cache (fin de l'historique) ; la date,
+    # qui change, est jointe à la question, après le point de cache.
+    assert second[1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert second[-1]["content"][-1]["text"] == "Et ensuite ?"
+    assert "Date du jour" in second[-1]["content"][0]["text"]
+    assert "Date du jour" not in serveur.requetes[1]["system"]
 
 
 # --- Réponses interrompues : jamais présentées comme terminées --------------------

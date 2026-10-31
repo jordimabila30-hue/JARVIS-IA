@@ -257,6 +257,8 @@ class FournisseurLLM(ABC):
     # Lit les images jointes (clé "images" d'un message user :
     # [{"media_type", "data" base64}]). Faux : jamais d'image envoyée.
     vision: bool = False
+    # Cache de prompt explicite (Claude) : préfixe stable marqué par `cache`.
+    cache_prompt: bool = False
     #: Budget d'entrée du moteur de compréhension (tokens estimés) propre à
     #: ce fournisseur ; None : réglage commun (calé sur GroqCloud).
     budget_comprehension: int | None = None

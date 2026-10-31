@@ -186,6 +186,10 @@ def convertir(messages: Sequence[Message]) -> tuple[str | None, list[dict[str, A
             blocs += [{"type": "image", "source": {"type": "base64", "media_type": i["media_type"],
                                                    "data": i["data"]}} for i in m.get("images") or ()]
             blocs.append({"type": "text", "text": neutraliser(contenu)})
+        if m.get("cache") and blocs:
+            # Fin du préfixe stable (outils, système, historique) : point de
+            # cache (5 min) ; la suite (date, question) varie à chaque appel.
+            blocs[-1] = {**blocs[-1], "cache_control": {"type": "ephemeral"}}
         if tours and tours[-1]["role"] == role and "tour" not in m and not _a_outils(tours[-1]):
             tours[-1]["content"].extend(blocs)
         else:
@@ -212,6 +216,7 @@ class FournisseurAnthropic(FournisseurLLM):
     nom = "anthropic"
     reflexion_dans_sortie = True
     vision = True
+    cache_prompt = True
 
     def __init__(self, *, cle: str, modele: str, effort: Effort | None = None,
                  budget_comprehension: int | None = None, client: AsyncAnthropic | None = None) -> None:

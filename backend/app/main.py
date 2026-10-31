@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import httpx
@@ -100,8 +101,9 @@ app.include_router(console.router)
 
 @app.get("/health")
 async def health() -> dict:
-    """Vivacité : le processus répond."""
-    return {"status": "ok"}
+    """Vivacité : le processus répond. `commit` : version du SERVEUR (commit
+    déployé par Render), distincte de celle de l'application (pubspec)."""
+    return {"status": "ok", "commit": (os.environ.get("RENDER_GIT_COMMIT") or "")[:7] or None}
 
 
 @app.get("/health/ready")

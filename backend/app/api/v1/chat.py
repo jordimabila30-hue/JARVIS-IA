@@ -96,6 +96,7 @@ from ...odo.service import ServiceODO, get_odo
 # Marqueur de source (dans `messages.attachments` de la réponse, sans migration).
 SOURCE_GMAIL = {"type": "source", "source": "gmail"}
 from ...comprehension.instructions import NOTE_PIECE_SUPPRIMEE
+from ... import resume
 from ...comprehension import aide_libre, ciblage, controle, etat, generation, memoire, propositions as aide, reperes, restauration
 from ...comprehension.attribution import CorrecteurAttributions
 from ...comprehension.moteur import MoteurComprehension, Preparation, choisir
@@ -421,6 +422,8 @@ async def finalize_exchange(
     provider: str | None = None,
     attachments: list[dict] | None = None,
     consomme_sans_texte: bool = False,
+    llm: FournisseurLLM | None = None,
+    resumer: bool = False,
 ) -> None:
     """[user_row] None : la question est une consigne déjà enregistrée
     (pièce jointe) ; seule la réponse est insérée. [attachments] :
@@ -457,6 +460,21 @@ async def finalize_exchange(
         logger.info("Durée : enregistrement Supabase %d ms", (time.perf_counter() - t) * 1000)
     except httpx.HTTPError:
         logger.error("Échec d'enregistrement des messages (conversation=%s)", conversation_id, exc_info=True)
+
+    # Opt. 72 : résumé des messages anciens, si la conversation l'exige
+    # (après l'enregistrement, hors du délai perçu), compté dans la même
+    # comptabilisation ; jamais si le budget du jour est presque atteint.
+    if resumer and llm is not None and not quota_service.budget_depasse(reservation, resume.SORTIE_MAX * 4):
+        try:
+            consomme = await resume.mettre_a_jour(
+                redis=redis, supabase=supabase, llm=llm, conversation_id=conversation_id,
+                fenetre=settings.chat_history_messages, ttl=settings.chat_context_ttl)
+        except Exception:     # noqa: BLE001 : un résumé raté ne compromet jamais l'échange
+            logger.warning("Résumé non calculé (conversation=%s)", conversation_id, exc_info=True)
+            consomme = None
+        if consomme:
+            prompt_tokens += consomme[0]
+            completion_tokens += consomme[1]
 
     # Une seule comptabilisation (jour, session, suivi par fournisseur), lots
     # de propositions compris.
@@ -634,10 +652,11 @@ async def chat_stream(
             # conversation appartient au compte (sinon 404, comme avant).
             # Les pièces jointes sont de toute façon filtrées par compte.
             demandee = str(body.conversation_id)
-            conversation, history, contextes = await asyncio.gather(
+            conversation, history, contextes, resume_ancien = await asyncio.gather(
                 supabase.get_conversation(demandee, user_id),
                 load_context(redis, supabase, demandee, settings),
                 comprehension.contextes(user_id, demandee),
+                resume.lire(redis, demandee),
             )
             etapes["conversation+historique"] = (time.perf_counter() - debut) * 1000
             if conversation is None:
@@ -649,6 +668,7 @@ async def chat_stream(
             new_conversation = True
             history = []
             contextes = []
+            resume_ancien = None
 
         if body.reply_to is not None:
             consigne = await supabase.get_user_message(str(body.reply_to), user_id)
@@ -814,9 +834,24 @@ async def chat_stream(
                              and reperes.analyser(question, [], now.date()).aide_reponse)
         if aide_libre_active:
             systeme = f"{systeme}\n\n{aide_libre.CONSIGNE}"
+        # Opt. 72 : mémoire des échanges anciens (propriété déjà vérifiée).
+        bloc_memoire = resume.bloc(resume_ancien) if resume_ancien else ""
+        if bloc_memoire:
+            systeme = f"{systeme}\n\n{bloc_memoire}"
+        historique = await vision.joindre(redis, conversation["id"], history)
+        date_courante: list[dict] = []
+        if llm.cache_prompt:
+            # Opt. 73 : préfixe stable (outils, système, historique) mis en
+            # cache ; l'heure (qui change chaque minute) suit l'historique.
+            ligne = ligne_date(now, body.fuseau_minutes)
+            systeme = systeme.replace(ligne + "\n", "", 1)
+            date_courante = [{"role": "system", "content": ligne}]
+            if historique:
+                historique = [*historique[:-1], {**historique[-1], "cache": True}]
         prompt = [
             {"role": "system", "content": systeme},
-            *(await vision.joindre(redis, conversation["id"], history)),
+            *historique,
+            *date_courante,
             derniere,
         ]
         max_sortie = plafond(llm, settings.chat_max_output_tokens, settings)
@@ -1066,6 +1101,11 @@ async def chat_stream(
                     verification.attributions_contredites, correcteur.corrigees, correcteur.ecartees,
                 )
 
+            if fin is not None and (fin.usage.cache_lecture or fin.usage.cache_ecriture):
+                # Volumes seulement (opt. 73).
+                logger.info("Cache fournisseur : %d lus, %d écrits, %d hors cache, %d en sortie",
+                            fin.usage.cache_lecture, fin.usage.cache_ecriture, fin.usage.entree,
+                            fin.usage.sortie)
             logger.info("Durée : premier fragment %s ms, réponse principale %d ms",
                         "-" if premier is None else int((premier - appel) * 1000),
                         (time.perf_counter() - appel) * 1000)
@@ -1132,6 +1172,8 @@ async def chat_stream(
                 provider=llm.nom,
                 attachments=stockees,
                 consomme_sans_texte=execution is not None and execution.tours > 0,
+                llm=llm,
+                resumer=preparation is None and consigne is None,
             ))
             if execution is not None and execution.donnees:
                 _spawn(odo.memoriser(execution, conversation_id))

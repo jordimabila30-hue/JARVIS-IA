@@ -247,6 +247,36 @@ class SupabaseAdmin:
         resp.raise_for_status()
         return list(reversed(resp.json()))
 
+    async def count_messages(self, conversation_id: str) -> int:
+        """Nombre exact de messages de la conversation (aucune ligne lue)."""
+        resp = await self._http.get(
+            "/messages",
+            params={"conversation_id": f"eq.{conversation_id}", "select": "id", "limit": "1"},
+            headers={"Prefer": "count=exact"},
+        )
+        resp.raise_for_status()
+        plage = resp.headers.get("content-range", "")
+        total = plage.rsplit("/", 1)[-1]
+        return int(total) if total.isdigit() else len(resp.json())
+
+    async def get_messages_range(self, conversation_id: str, *, offset: int, limit: int) -> list[dict]:
+        """Messages [offset, offset+limit) du plus ancien au plus récent
+        (résumé des parties anciennes)."""
+        if limit <= 0:
+            return []
+        resp = await self._http.get(
+            "/messages",
+            params={
+                "conversation_id": f"eq.{conversation_id}",
+                "select": "role,content",
+                "order": "created_at.asc,id.asc",
+                "offset": str(max(0, offset)),
+                "limit": str(limit),
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_message(self, message_id: str) -> dict | None:
         """Propriétaire et conversation d'un message (tous comptes : le
         contrôle d'appartenance est fait par l'appelant)."""
