@@ -150,6 +150,29 @@ void main() {
       expect(repondre('fais un calcul 3 plus 4'), '3 plus 4 égale 7.');
       expect(CalculVocal.calculer('moins 5 plus 3')?.valeur, -2);
     });
+    test('salutations mal tapées : réponse locale, jamais l’IA', () {
+      final ia = VoiceCommandService();
+      for (final (phrase, debut) in [
+        ('bonjours', 'Bonjour'),
+        ('Bonjours Jarvis !', 'Bonjour'),
+        ('bjr', 'Bonjour'),
+        ('bonsoirs', 'Bonsoir'),
+        ('slt', ''),
+      ]) {
+        final r = ia.reponseLocale(phrase, avecIA: true);
+        expect(r, isNotNull, reason: phrase);
+        expect(r!.texte, startsWith(debut), reason: phrase);
+      }
+      // Une vraie question qui commence par une salutation reste à l'IA.
+      expect(
+        ia.reponseLocale(
+          'bonjours, explique-moi la photosynthèse en détail',
+          avecIA: true,
+        ),
+        isNull,
+      );
+    });
+
     test('pas de faux calcul', () {
       expect(CalculVocal.calculer('ca va et toi'), isNull);
       expect(CalculVocal.calculer('il est 3 heures'), isNull);

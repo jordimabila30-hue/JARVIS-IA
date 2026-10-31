@@ -2,10 +2,10 @@
 
 Politique : `docs/VERSIONING.md`. Détail technique : `AVANCEMENT.md`.
 
-## [Non publiée] — depuis 1.0.0+1
+## 1.1.0+2 — 2026-10-31
 
-Proposition pour la prochaine livraison : **1.1.0+2** (nouvelles fonctions
-compatibles, aucune incompatibilité). Numéro à confirmer par ChatGPT.
+Version validée par ChatGPT (MINEURE : nouvelles fonctions compatibles,
+aucune incompatibilité).
 
 ### Ajouté
 - Réponses : blocs de code (police à chasse fixe, défilement, « Copier le
@@ -28,6 +28,8 @@ compatibles, aucune incompatibilité). Numéro à confirmer par ChatGPT.
 - Faux calculs locaux (« 3 clés … et une fonction » → « 3 plus 1 égale 4 »).
 - Code abîmé dans les réponses (`__init__`, `**`, accents graves).
 - Restitution de quota en double (requête offerte).
+- Salutations mal tapées (« bonjours », « bjr », « slt »…) : réponse locale
+  au lieu d'une requête IA.
 - Journaux sans contenu privé (erreurs : module et type seulement).
 
 ## 1.0.0+1 — 2026-10-12 → 2026-10-28

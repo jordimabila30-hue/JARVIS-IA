@@ -553,10 +553,21 @@ class VoiceCommandService {
       'coucou',
       'hey jarvis',
       'hey',
+      // Fautes de frappe et abréviations courantes : jamais une requête IA
+      // pour un simple bonjour.
+      'bonjours',
+      'bonjoure',
+      'bonjur',
+      'bjr',
+      'bonsoirs',
+      'bsr',
+      'saluts',
+      'slt',
+      'coucous',
     ])) {
-      final mot = phrase.contains('bonsoir')
+      final mot = phrase.contains('bonsoir') || contient(['bsr'])
           ? 'Bonsoir'
-          : phrase.contains('bonjour')
+          : phrase.contains('bonjour') || contient(['bonjur', 'bjr'])
           ? 'Bonjour'
           : salutation(maintenant);
       final nom = c.prenom == null ? '' : ' ${c.prenom}';

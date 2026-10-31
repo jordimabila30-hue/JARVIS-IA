@@ -24,6 +24,8 @@ dont le numéro de build n'augmente pas).
 ## Où est la version
 
 Une seule source : `version:` dans `pubspec.yaml`.
+Version actuelle : **1.1.0+2** (validée le 2026-10-31, historique dans
+`CHANGELOG.md`).
 
 - Android : `versionName` / `versionCode` lus par Gradle (`flutter.versionName`,
   `flutter.versionCode`).
@@ -32,8 +34,8 @@ Une seule source : `version:` dans `pubspec.yaml`.
 - Code Dart : `VersionJarvis` (`lib/utils/version_jarvis.dart`) lit
   `appBuildName` / `appBuildNumber`, constantes injectées par Flutter dans la
   build : le numéro affiché est celui réellement construit. Affichage :
-  Paramètres › Général › Version (« 1.0.0 (build 1) ») et écran de lancement
-  (« v1.0.0 »). Aucune version écrite à la main ailleurs.
+  Paramètres › Général › Version (« 1.1.0 (build 2) ») et écran de lancement
+  (« v1.1.0 »). Aucune version écrite à la main ailleurs.
 - Serveur : sa version est son commit déployé, `GET /health` → `commit`
   (variable `RENDER_GIT_COMMIT` de Render). Les deux versions sont
   indépendantes : une application installée doit rester compatible avec le
