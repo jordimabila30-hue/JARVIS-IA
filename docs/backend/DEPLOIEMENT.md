@@ -109,3 +109,24 @@ flutter build web --release
 ```
 Puis déposer le dossier `build/web` sur Vercel (`vercel deploy build/web --prod`)
 ou Cloudflare Pages, avec l'URL Render comme `baseUrl` du `MoteurConversationIA`.
+
+## Vérifier un déploiement et revenir en arrière (2026-10-31)
+
+Deux services Render indépendants, tous deux redéployés à chaque push sur
+`integration-backend-unifie` :
+- API `jarvis-api` (service `srv-dbc43abncjis7389u8gg`, https://jarvis-ia-quq6.onrender.com) ;
+- site statique Flutter Web (https://jarvis-ia-web.onrender.com, configuré dans le tableau de bord).
+
+Après chaque déploiement (2 minutes) :
+1. Render › API › Events : le commit attendu est « Live ».
+2. `GET /health/ready` → `{"status":"ok","redis":"ok","supabase":"ok"}`.
+3. `POST /api/v1/chat/stream` sans jeton → 401 (authentification active).
+4. Site : `curl -sI …/main.dart.js` → `last-modified` récent ; `Cache-Control: max-age=0` + ETag (le navigateur revalide).
+5. Un message court réel depuis l'appli ; journaux Render : « Durée : préparation du chat … » et « premier fragment … », aucun texte de message.
+
+Régression constatée :
+1. API : Render › `jarvis-api` › Events › déploiement précédent « Live » › **Rollback** (aucun changement de secrets ; le déploiement automatique reprend au push suivant).
+2. Site : Render › site statique › Events › déploiement précédent › **Rollback** (les clients revalident : ancienne version servie au plus 5 min par le CDN).
+3. Code : `git revert <commit>` puis push (jamais de push forcé) ; points de restauration : tags `sauvegarde-avant-session-*`.
+4. Compatibilité : l'appli ignore les événements SSE inconnus et les champs JSON en plus ; ne jamais retirer ou renommer un événement (`meta`, `delta`, `done`, `error`, `propositions`, `preparation`, `outil`, `confirmation`, `references`) ni un champ lu par une version installée.
+5. Migrations Supabase : toujours additives ; un retour arrière du code n'exige aucune migration inverse.

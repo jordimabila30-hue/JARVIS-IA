@@ -446,9 +446,12 @@ class VoiceSession extends ChangeNotifier {
         if (!_valide(jeton)) return;
         partiel = texte;
         if (texte.trim().isNotEmpty) _texteEntendu = true;
+        _impulsionSiPasDeNiveau();
+        // Le moteur répète souvent le même partiel (silences) : l'écran
+        // n'est prévenu que si le texte affiché change.
+        if (texte == transcription && reponse.isEmpty) return;
         transcription = texte;
         reponse = '';
-        _impulsionSiPasDeNiveau();
         notifyListeners();
       },
       surPhrase: (phrase) => _traiter(jeton, phrase),

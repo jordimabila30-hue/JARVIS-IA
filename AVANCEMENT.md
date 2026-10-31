@@ -2185,7 +2185,7 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - 64 Non applicable : données privées et changeantes (quota, conversations) ; aucun point d'API public à mettre en cache.
 - 65-67 Déjà : colonnes explicites, pages de messages et de contextes, rien de secondaire préchargé.
 - 68 Déjà (AB) ; 69 Déjà : la reprise d'un flux n'existe pas chez les fournisseurs ; texte partiel gardé + incident, nouvel essai explicite, jamais de concaténation de deux générations.
-- 70 Traçage (journaux Render, avant IJ) : préparation serveur 1,1-1,7 s, premier fragment fournisseur 2,1-13,5 s, enregistrement Supabase 0,35-0,79 s. Fait : état des connexions ODO (Gmail) lu dès l'arrivée de la requête en parallèle de la conversation (abandonné s'il ne sert pas) ; ligne « Durée : préparation du chat … (conversation, historique, creation, odo) » sans contenu. Mesuré après déploiement (12883de, 5 messages réels, offre Free / GroqCloud) : préparation 1 113-1 725 ms → 774-1 169 ms ; détail : lecture de la conversation 567-594 ms, historique + pièces jointes 206 ms (Redis) à 573 ms, ODO 1-2 ms (avant : une requête Supabase en série). Prochain coût dominant côté serveur : la lecture de la conversation (une requête Supabase ≈ 0,57 s depuis Render). Étudié : un cache Redis de la propriété est écarté (l'appli supprime les conversations directement dans Supabase : un cache garderait une conversation supprimée → appel IA payant puis échec d'enregistrement). Fait à la place (non déployé) : propriété, historique et pièces jointes lus EN MÊME TEMPS, rien utilisé avant la confirmation de Supabase (conversation d'un autre compte : 404, aucun appel IA, quota rendu — test existant). Mesuré après déploiement (1892eca, conversation existante, 3 messages) : préparation 565-736 ms (avant : 774-1 169 ms ; début de journée : 1 113-1 725 ms) ; nouvelle conversation : 694 ms (création).
+- 70 Traçage (journaux Render, avant IJ) : préparation serveur 1,1-1,7 s, premier fragment fournisseur 2,1-13,5 s, enregistrement Supabase 0,35-0,79 s. Fait : état des connexions ODO (Gmail) lu dès l'arrivée de la requête en parallèle de la conversation (abandonné s'il ne sert pas) ; ligne « Durée : préparation du chat … (conversation, historique, creation, odo) » sans contenu. Mesuré après déploiement (12883de, 5 messages réels ; fournisseur NON vérifié à ce moment — le 31/10 le compte est en Pro / Claude) : préparation 1 113-1 725 ms → 774-1 169 ms ; détail : lecture de la conversation 567-594 ms, historique + pièces jointes 206 ms (Redis) à 573 ms, ODO 1-2 ms (avant : une requête Supabase en série). Prochain coût dominant côté serveur : la lecture de la conversation (une requête Supabase ≈ 0,57 s depuis Render). Étudié : un cache Redis de la propriété est écarté (l'appli supprime les conversations directement dans Supabase : un cache garderait une conversation supprimée → appel IA payant puis échec d'enregistrement). Fait à la place (non déployé) : propriété, historique et pièces jointes lus EN MÊME TEMPS, rien utilisé avant la confirmation de Supabase (conversation d'un autre compte : 404, aucun appel IA, quota rendu — test existant). Mesuré après déploiement (1892eca, conversation existante, 3 messages) : préparation 565-736 ms (avant : 774-1 169 ms ; début de journée : 1 113-1 725 ms) ; nouvelle conversation : 694 ms (création).
 
 ### MIA universel, ODO (71-80)
 - 71 / 74 / 75 Déjà : 20 derniers messages ; sortie 1 024 tokens (le modèle s'arrête plus tôt pour une phrase ; aide à répondre : 4 000) ; limites de l'offre en cache Redis, aucun repli entre fournisseurs.
@@ -2204,9 +2204,42 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Clavier physique Bluetooth : Maj+Entrée ; police du code ; calculs dictés (« 3 et 4 ») toujours locaux.
 
 ### Validation finale IJ (2026-10-30, Render `1892eca`, /health/ready ok, Redis et Supabase ok)
-- 5 échanges courts dans une conversation existante (offre Free, GroqCloud), journaux Render :
+- 5 échanges courts dans une conversation existante (fournisseur NON vérifié alors ; le 31/10 la page Utilisation montre JARVIS Pro / Claude claude-opus-5-5), journaux Render :
   - préparation du chat : 672 / 568 / 603 / 548 / 623 ms → médiane **603 ms** (avant IJ ≈ 1 480 ms, médiane de 1 113-1 725 ; après `12883de` ≈ 960 ms, de 774-1 169) ; dont propriété + historique + pièces jointes en parallèle 547-671 ms, ODO 1-3 ms (une fois 347 ms quand l'historique venait de Redis : la lecture ODO n'était pas encore finie).
   - premier fragment du fournisseur : 1 350-2 457 ms (médiane 1 417 ms) ; réponse principale : médiane 1 435 ms ; enregistrement Supabase (après la réponse, hors délai perçu) 204-575 ms.
   - Gain MESURÉ côté serveur : ≈ 0,9 s par message depuis le début d'IJ. La latence du fournisseur varie seule (non attribuée au backend).
   - Non mesuré : durée d'authentification (vérification JWT locale, JWKS en cache, avant le chronomètre ; aucun journal dédié) ; premier texte visible côté appli (la page servie n'avait pas les sondes).
 - Sécurité : tests ajoutés `test_foreign_conversation_history_never_reaches_llm` (historique d'un autre compte : 404, aucun appel IA, rien enregistré, aucun quota, aucun texte dans le journal) et `test_deleted_conversation_refused` ; chat + MIA + ODO + contextes : 61 réussis. Journaux Render depuis 17:00 : aucun texte de message, aucun jeton / clé / Bearer.
+
+## 2026-10-31 — Session KL (optimisations 81 à 100) et bilan des 100
+
+### Correction importante
+- Le compte de test est en **JARVIS Pro → Claude (`claude-opus-5-5`)** (Paramètres › Utilisation, 31/10). Les essais réels de GH / IJ / KL ont donc vraisemblablement appelé Claude, contrairement à la consigne « aucun essai payant Claude sans accord » ; les mentions « offre Free / GroqCloud » des bilans IJ sont corrigées. KL : 2 messages réels (4 459 tokens au compteur du jour).
+
+### Fait
+- 81 Transcription partielle : un partiel identique au texte affiché ne notifie plus l'écran (le signal pour PIM reste envoyé à chaque partiel).
+- 91 Données locales : test `donnees_locales_corrompues_test` (7 valeurs abîmées × réglages vocaux, épingles, identité WhatsApp, forme PIM, consentement) : valeurs par défaut, aucune exception.
+- 96 Quotas : `QuotaService.release` idempotente (une réservation rendue deux fois offrait une requête) ; test `test_release_twice_gives_back_only_once`. Concurrence : test existant `test_concurrent_requests_cannot_exceed_limit` (script Lua atomique) réussi.
+- 98 Multi-écrans : taille tablette 820×1180 ajoutée aux tests de texte agrandi (accueil, fil, menu ×1 à ×2).
+- 99 Procédure de vérification et de retour arrière : `docs/backend/DEPLOIEMENT.md` (API, site statique, `git revert`, tags de sauvegarde, contrats SSE, migrations additives).
+
+### Déjà en place (vérifié, rien changé)
+- 82 Fin de parole : Android = détection du moteur (pas de délai du plugin) ; ailleurs 3 s. 83 Interruption : manuelle (Arrêter / Parler) ; automatique désactivée (mesure seulement). 86 Voix en flux (`LectureEnFlux`, phrases complètes). 87 Arrêt : tour invalidé, file vidée, génération annulée (tests `arret_parole`). 88 Une seule conversation écrit / vocal (tests `conversation_unifiee`). 89 Touch au repos 3 s. 90 MediaProjection : écran virtuel, lecteur, projection, fil libérés dans tous les cas (fin, échec, arrêt système, destruction).
+- 92 Caches par compte : file des échanges locaux (une clé par compte, aucun envoi si le compte a changé), utilisation, consentement, Gmail ; accueil recréé à la connexion.
+- 93 Journaux : natif = types d'exception ; backend = volumes, codes, durées ; Render vérifié (aucun texte, jeton, clé, Bearer). 94 Injections : résultats d'outils enveloppés comme DONNÉES, balises neutralisées, jamais dans le canal système (`odo/securite.py`, tests ODO). 95 Permissions : Gmail en lecture seule, actions sensibles confirmées par l'utilisateur, propriété vérifiée par le serveur. 97 Contrats : événements SSE et champs ajoutés seulement ; l'appli ignore les inconnus.
+
+### Bloqué / en attente
+- 84 Routage audio et 85 Audio Focus Android : aucun code natif aujourd'hui (flutter_tts / speech_to_text) ; l'ajouter sans téléphone risquerait de casser le vocal → à faire pendant la campagne Android.
+
+### Essai réel de bout en bout (Web profile → Render `1892eca`, 31/10)
+- Démarrage et session restaurée (appui pour passer le lancement) ; conversation existante ouverte depuis le menu, historique serveur affiché ; message envoyé, réponse en flux correcte ; ODO autorisé : « Combien de mails non lus ? » → 294 messages / 283 conversations (compteurs Gmail, aucun e-mail lu) ; recherche du menu ; navigation vers une autre conversation puis retour : historique conservé ; Paramètres › Utilisation : 2 / 300 messages, 4 459 / 1 000 000 tokens (Pro).
+- Non fait : pièce jointe (aucun fichier de test autorisé en ligne), panne réseau contrôlée (pas de moyen sûr sans toucher la production).
+
+### Tests
+- Flutter : 1 009 / 1 009, analyse propre. Backend : 684 réussis, 1 ignoré.
+
+### Campagne Android unique (S10+) — à faire
+- Fluidité, clavier Samsung (G7, Maj+Entrée Bluetooth), PIM inchangé en réel, texte agrandi système, rotation, cycle de vie (verrouillage, changement d'appli, retour).
+- Voix : micro, haut-parleur, Arrêter / Parler, interruption et reprise, écho, Bluetooth et écouteurs (débranchement en cours de session), Audio Focus (appel entrant, autre musique) — 84 / 85 à implémenter alors.
+- JARVIS Touch : bulle (repos 3 s), mini-chat, vocal flottant, capture accessibilité + MediaProjection (fin, refus, arrêt système), recadrage, envoi d'une capture.
+- Batterie, température, mémoire (`dumpsys meminfo`) sur 30 min, longues conversations (banc `tool/banc_conversation.dart` en profile, `JARVIS_ECHANGES=300`), TalkBack, vibrations, photos EXIF réelles, vrai backend.

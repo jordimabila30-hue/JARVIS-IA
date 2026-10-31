@@ -606,6 +606,7 @@ void main() {
 
     for (final (nom, taille) in [
       ('390x844', const Size(390, 844)),
+      ('820x1180', const Size(820, 1180)),
       ('1366x768', const Size(1366, 768)),
     ]) {
       for (final echelle in [1.0, 1.3, 1.6, 2.0]) {
