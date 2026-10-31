@@ -2243,3 +2243,27 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Voix : micro, haut-parleur, Arrêter / Parler, interruption et reprise, écho, Bluetooth et écouteurs (débranchement en cours de session), Audio Focus (appel entrant, autre musique) — 84 / 85 à implémenter alors.
 - JARVIS Touch : bulle (repos 3 s), mini-chat, vocal flottant, capture accessibilité + MediaProjection (fin, refus, arrêt système), recadrage, envoi d'une capture.
 - Batterie, température, mémoire (`dumpsys meminfo`) sur 30 min, longues conversations (banc `tool/banc_conversation.dart` en profile, `JARVIS_ECHANGES=300`), TalkBack, vibrations, photos EXIF réelles, vrai backend.
+
+## 2026-10-31 — Versions officielles, optimisations 72 et 73, validation de production
+
+### Versions
+- Version actuelle : `1.0.0+1` (pubspec, inchangée). Proposition pour la prochaine livraison : **1.1.0+2** (fonctions compatibles ajoutées : messages enrichis, Maj+Entrée, affichage de version, résumé des longues conversations ; aucune incompatibilité). Numéro à fixer par ChatGPT.
+- `VersionJarvis` lit la version de la build (`appBuildName` / `appBuildNumber`) : Paramètres › Général « 1.0.0 (build 1) », lancement « v1.0.0 » (vérifié sur le Web) ; plus aucune version écrite à la main. Android (Gradle), Windows (`Runner.rc`) et Web (`version.json`) lisent déjà le pubspec. Serveur : `GET /health` → `commit` (non déployé). Politique : `docs/VERSIONING.md` ; historique : `CHANGELOG.md`.
+
+### 72 Résumé des longues conversations (non déployé)
+- `backend/app/resume.py` : au-delà des 20 messages envoyés à l'IA, les messages anciens sont résumés par paquets de 10 (faits confirmés, décisions — dernière version —, incertitudes), en arrière-plan après l'enregistrement, jamais si le budget du jour est presque atteint ; Redis par conversation (1 h), lu APRÈS la vérification de propriété ; invalidé si la conversation raccourcit ; résumé vide ou illisible jamais enregistré ; tokens comptés dans le quota de l'utilisateur. Historique original intact.
+- Claude réel (`tests/evaluation_resume_cache.py`, conversation fictive de 40 messages) : résumé fidèle (correction gardée « d'abord mardi 14 h, puis jeudi 10 h », hypothèses en incertitudes, ambiguïté « le dossier » signalée, rien inventé). Rappels anciens : AVEC résumé 3/3 (date corrigée, code 4718, question « dossier Martin ou assurance ? ») ; SANS 0/3 sur les rappels (« aucune trace »). Résumé : 1 292 + 313 tokens, 5,7 s.
+
+### 73 Cache de prompt Claude (non déployé)
+- L'heure (au minute près) sortait du prompt système et invalidait tout préfixe : pour Claude seulement, elle est jointe à la question ; point de cache (5 min) sur le dernier message de l'historique (outils + système + historique). GroqCloud inchangé ; quotas inchangés (tokens en cache comptés en entrée).
+- Mesuré avec Claude : appels 2 et 3 d'une même conversation : 1 053 tokens lus en cache (0,20 $ au lieu de 4 $ / million, − 95 % sur cette part) ; écriture 1 053 tokens (×1,25) au 1er appel. Sous 512 tokens de préfixe : rien n'est mis en cache (aucun surcoût).
+
+### Validation sur le vrai serveur (Render `6ff81b5`, Web)
+- Version affichée conforme. Session restaurée (après reconnexion).
+- Coupure réseau simulée dans le navigateur (requêtes vers le backend en échec, serveur intact) : message d'erreur clair, message gardé dans le fil, aucune requête arrivée au serveur, brouillon gardé pendant la coupure ; réseau revenu : un seul envoi, réponse en flux, aucun doublon.
+- Quota : 2 → 3 messages, 4 459 → 8 241 tokens pour UN échange (le message coupé n'est pas compté) ; correctif de restitution unique déployé.
+- Pièce jointe : NON testée en réel (le panneau navigateur ne peut pas téléverser de fichier, la boîte de dialogue Windows n'est pas pilotable) ; couverte par les tests d'import existants.
+- Appels Claude payants : 8 (7 évaluation + 1 reprise), coût estimé ≈ 0,09 $ (plafond 10 appels / 3 $).
+
+### Tests
+- Flutter 1 010 / 1 010, analyse propre ; backend 691 réussis, 1 ignoré.

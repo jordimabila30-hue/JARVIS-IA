@@ -14,11 +14,14 @@ compatibles, aucune incompatibilité). Numéro à confirmer par ChatGPT.
 - Écran de lancement passable d'un appui.
 - Affichage de la version réellement construite (Paramètres › Général).
 - Gmail : nombre exact / minimum / estimé distingués.
+- Mémoire des longues conversations : les échanges anciens restent connus
+  (résumé contrôlé).
 
 ### Amélioré
 - Performances : question envoyée sans attente, préparation serveur d'un
   message ≈ 1,48 → 0,60 s (médianes), recherche du menu 3,4 × plus rapide,
-  démarrage (chargements parallèles).
+  démarrage (chargements parallèles), cache de prompt Claude (− 95 % sur
+  la part relue).
 - Accessibilité : texte agrandi jusqu'à 200 %, cible du « + » élargie.
 
 ### Corrigé
