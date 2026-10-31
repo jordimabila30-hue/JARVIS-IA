@@ -2277,3 +2277,8 @@ Instance temporaire 8002 (GroqCloud pour tous, ODO actif, Redis base 3), vraie b
 - Campagne payante : 10 appels sur 10 (7 évaluation, 1 reprise réseau, 2 cache), coût estimé ≈ 0,12 $.
 - Tests : Flutter 1 011 / 1 011, analyse propre ; backend 692 réussis, 1 ignoré.
 - Préparation (sans IA) d'une conversation de test de plus de 30 messages : prévue par la route `POST /api/v1/conversations/local-exchanges` (aucune IA, aucun quota), au moment de l'essai.
+
+### Validation de production de 1.1.0+2 (Render `219fec1`, site Web 1.1.0 build 2)
+- Cache Claude (journaux Render, conversation existante) : 1er appel 0 lu / 5 126 écrits / 155 hors cache ; 2e appel **5 126 lus** / 21 écrits / 155 hors cache → entrée ≈ 0,0018 $ au lieu de 0,021 $ (− 92 %).
+- Résumé : conversation de test de 32 messages préparée SANS IA (`local-exchanges` : aucun quota) ; une question sur un fait ancien : le modèle ne le voyait pas (hors des 20 derniers messages) et a cherché « Kivu » dans Gmail par ODO (recherche seulement, aucun e-mail trouvé ni lu) ; puis, en arrière-plan, « Résumé : 14 message(s) anciens couverts, 1151+266 tokens ». La réponse UTILISANT ce résumé n'a pas été demandée en production (plafond atteint) ; fidélité validée hors production avec le vrai Claude (3/3).
+- Campagne payante : 15 requêtes au fournisseur sur 15 autorisées (dont 2 pour une question avec un tour d'outil), coût estimé ≈ 0,21 $.
