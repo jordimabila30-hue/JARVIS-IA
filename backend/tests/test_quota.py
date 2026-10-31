@@ -158,6 +158,19 @@ async def test_release_gives_request_back(redis):
     assert await redis.get(requests_key(USER, today())) == "0"
 
 
+async def test_release_twice_gives_back_only_once(redis):
+    """KL-96 : rendre deux fois la même réservation n'offre pas de requête."""
+    service = make_service(redis, FakeSupabase(FREE))
+    utilisateur = AuthUser(id=USER, email=None, role="authenticated")
+    premiere = QuotaReservation(user=utilisateur, status=await service.reserve(USER))
+    await service.reserve(USER)
+
+    await service.release(premiere)
+    await service.release(premiere)
+
+    assert await redis.get(requests_key(USER, today())) == "1"
+
+
 async def test_limits_are_cached(redis):
     supa = FakeSupabase(FREE)
     service = make_service(redis, supa)

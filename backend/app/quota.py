@@ -316,6 +316,8 @@ class QuotaStatus:
 class QuotaReservation:
     user: AuthUser
     status: QuotaStatus
+    # Rendue au plus une fois (deux restitutions offriraient une requête).
+    _etat: dict = field(default_factory=dict, compare=False, repr=False)
 
 
 _MESSAGES_LIMITE = {
@@ -587,7 +589,11 @@ class QuotaService:
                 logger.warning("Suivi par fournisseur indisponible (user=%s)", user_id, exc_info=True)
 
     async def release(self, reservation: QuotaReservation) -> None:
-        """Rend une requête réservée qui n'a produit aucune réponse (jour et session)."""
+        """Rend une requête réservée qui n'a produit aucune réponse (jour et
+        session). Idempotent : une même réservation n'est rendue qu'une fois."""
+        if reservation._etat.get("rendue"):
+            return
+        reservation._etat["rendue"] = True
         cles = [requests_key(reservation.user.id, reservation.status.day)]
         if reservation.status.session is not None:
             cles.append(session_keys(reservation.user.id, reservation.status.session.id)[0])
